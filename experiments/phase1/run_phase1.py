@@ -25,7 +25,7 @@ from market_sim import acceptance, experiment_log, outputs  # noqa: E402
 from market_sim.config import (  # noqa: E402
     PHASE1_INVENTORY_PRESSURE,
     PHASE1_MAIN,
-    Phase1Config,
+    MarketConfig,
 )
 from market_sim.engine import RunResult, run_seeds  # noqa: E402
 
@@ -89,7 +89,7 @@ def plot_convergence(results: list[RunResult], out_path: Path, title: str) -> No
     plt.close(fig)
 
 
-def summarize(cfg: Phase1Config, results: list[RunResult]) -> dict[str, float]:
+def summarize(cfg: MarketConfig, results: list[RunResult]) -> dict[str, float]:
     return {
         "participation_rate": float(np.mean([r.participation_rate for r in results])),
         "total_revenue": float(np.mean([r.total_revenue for r in results])),
@@ -106,10 +106,10 @@ def summarize(cfg: Phase1Config, results: list[RunResult]) -> dict[str, float]:
     }
 
 
-def report(cfg: Phase1Config, results: list[RunResult]) -> list[acceptance.CriterionResult]:
+def report(cfg: MarketConfig, results: list[RunResult]) -> list[acceptance.CriterionResult]:
     stats = summarize(cfg, results)
     print(f"\n=== {cfg.name} ({len(results)} seeds) ===")
-    print(f"  inventory per seller      : {cfg.seller.inventory}")
+    print(f"  inventory per seller      : {cfg.seller_classes[0].inventory}")
     print(f"  mean participation_rate   : {stats['participation_rate']:.3f}")
     print(f"  mean total_revenue        : {stats['total_revenue']:.1f}")
     print(f"  mean inventory remaining  : {stats['inventory_remaining']:.1f}")
@@ -132,14 +132,16 @@ def main() -> int:
     commit = experiment_log.git_commit(REPO_ROOT)
 
     main_results = run_seeds(PHASE1_MAIN)
-    outputs.write_all(main_results, RESULTS_ROOT / "main")
+    outputs.write_all(PHASE1_MAIN, main_results, RESULTS_ROOT / "main")
     plot_convergence(
         main_results, RESULTS_ROOT / "main" / "convergence.png", PHASE1_MAIN.name
     )
     main_criteria = report(PHASE1_MAIN, main_results)
 
     pressure_results = run_seeds(PHASE1_INVENTORY_PRESSURE)
-    outputs.write_all(pressure_results, RESULTS_ROOT / "inventory_pressure")
+    outputs.write_all(
+        PHASE1_INVENTORY_PRESSURE, pressure_results, RESULTS_ROOT / "inventory_pressure"
+    )
     plot_convergence(
         pressure_results,
         RESULTS_ROOT / "inventory_pressure" / "convergence.png",
@@ -176,7 +178,7 @@ def main() -> int:
                 f"Mean participation {main_stats['participation_rate']:.3f}, mean revenue "
                 f"{main_stats['total_revenue']:.1f}, mean inventory remaining "
                 f"{main_stats['inventory_remaining']:.1f} of "
-                f"{PHASE1_MAIN.n_sellers * PHASE1_MAIN.seller.inventory}. Inventory never "
+                f"{PHASE1_MAIN.n_sellers * PHASE1_MAIN.seller_classes[0].inventory}. Inventory never "
                 f"bound ({main_stats['blocked_by_inventory']} stock-blocked evaluations); "
                 f"budget bound {main_stats['blocked_by_budget']} times."
             ),

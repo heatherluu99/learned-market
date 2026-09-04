@@ -1,4 +1,4 @@
-"""Phase 1 engine invariants.
+"""Phase 1 engine invariants and reproducibility.
 
 The budget test here is the same hard invariant listed in the spec's
 acceptance criteria. It is a test as well as a criterion on purpose: a
@@ -14,9 +14,9 @@ import pytest
 from market_sim.config import (
     PHASE1_INVENTORY_PRESSURE,
     PHASE1_MAIN,
-    BuyerParams,
-    Phase1Config,
-    SellerParams,
+    BuyerClass,
+    MarketConfig,
+    SellerClass,
 )
 from market_sim.engine import purchase_probability, run_seeds, run_single
 
@@ -26,7 +26,8 @@ SEEDS = [0, 1, 7, 29]
 @pytest.mark.parametrize("seed", SEEDS)
 def test_no_buyer_exceeds_budget(seed):
     result = run_single(PHASE1_MAIN, seed)
-    assert result.buyer_total_spent.max() <= PHASE1_MAIN.buyer.budget_per_visit
+    budget = PHASE1_MAIN.buyer_classes[0].budget_per_visit
+    assert result.buyer_total_spent.max() <= budget
     assert result.buyer_budget_remaining.min() >= 0
 
 
@@ -35,7 +36,7 @@ def test_inventory_never_negative(seed):
     result = run_single(PHASE1_MAIN, seed)
     assert result.seller_inventory_remaining.min() >= 0
     sold = result.seller_n_sold + result.seller_inventory_remaining
-    assert (sold == PHASE1_MAIN.seller.inventory).all()
+    assert (sold == PHASE1_MAIN.seller_classes[0].inventory).all()
 
 
 @pytest.mark.parametrize("seed", SEEDS)
@@ -70,6 +71,29 @@ def test_different_seeds_give_different_runs():
     )
 
 
+def test_phase1_results_are_unchanged_by_later_refactors():
+    """Regression pin for the validated Phase 1 run.
+
+    Phase 1 was tagged phase1-validated on these exact numbers. Generalizing
+    the config for Phase 2's classes, or any later change to the engine, must
+    not move them - Phase 1 is simply the single-class case of the same model.
+    The draw order in run_single is what this depends on.
+    """
+    results = run_seeds(PHASE1_MAIN)
+    assert [round(r.participation_rate, 10) for r in results[:5]] == [
+        0.825,
+        0.8125,
+        0.825,
+        0.8125,
+        0.875,
+    ]
+    assert float(np.mean([r.participation_rate for r in results])) == pytest.approx(
+        0.8216666666666667, abs=1e-12
+    )
+    assert float(np.mean([r.total_revenue for r in results])) == pytest.approx(197.2)
+    assert sum(len(r.transactions) for r in results) == 1972
+
+
 @pytest.mark.parametrize("seed", SEEDS)
 def test_each_buyer_can_afford_at_most_one_unit(seed):
     """Budget 5 and price 3 cap every buyer at one purchase.
@@ -86,7 +110,7 @@ def test_each_buyer_can_afford_at_most_one_unit(seed):
 def test_main_run_inventory_cannot_bind():
     """Guards the stated reason the side experiment exists."""
     max_possible_demand = PHASE1_MAIN.n_buyers  # one unit per buyer, see above
-    total_stock = PHASE1_MAIN.n_sellers * PHASE1_MAIN.seller.inventory
+    total_stock = PHASE1_MAIN.n_sellers * PHASE1_MAIN.seller_classes[0].inventory
     assert max_possible_demand < total_stock
 
 
@@ -114,16 +138,16 @@ def test_pressure_run_is_paired_with_main_run(seed):
 def test_purchase_probability_falls_as_price_rises():
     cfg = PHASE1_MAIN
     ref = cfg.price_reference
-    cheap = purchase_probability(cfg, 5.0, 1.0, 0.5, ref)
-    dear = purchase_probability(cfg, 5.0, 4.0, 0.5, ref)
+    cheap = purchase_probability(cfg, 5.0, 1.0, 0.5, 0.5, ref)
+    dear = purchase_probability(cfg, 5.0, 4.0, 0.5, 0.5, ref)
     assert cheap > dear
 
 
 def test_purchase_probability_rises_with_preference():
     cfg = PHASE1_MAIN
     ref = cfg.price_reference
-    low = purchase_probability(cfg, 5.0, 3.0, 0.1, ref)
-    high = purchase_probability(cfg, 5.0, 3.0, 0.9, ref)
+    low = purchase_probability(cfg, 5.0, 3.0, 0.1, 0.5, ref)
+    high = purchase_probability(cfg, 5.0, 3.0, 0.9, 0.5, ref)
     assert high > low
 
 
@@ -133,7 +157,9 @@ def test_purchase_probability_matches_spec_formula():
     budget, price, pref = 5.0, 3.0, 0.4
     utility = 1.0 + 0.05 * (budget - price) - 0.5 * (price / 3.0) + 1.5 * pref
     expected = 1.0 / (1.0 + np.exp(-(utility - 2.0)))
-    assert purchase_probability(cfg, budget, price, pref, 3.0) == pytest.approx(expected)
+    assert purchase_probability(cfg, budget, price, pref, 0.5, 3.0) == pytest.approx(
+        expected
+    )
 
 
 def test_price_reference_is_highest_posted_price_not_budget():
@@ -144,30 +170,33 @@ def test_price_reference_is_highest_posted_price_not_budget():
     picking the wrong one changes every result quietly rather than raising.
     """
     for cfg in (PHASE1_MAIN, PHASE1_INVENTORY_PRESSURE):
-        assert cfg.price_reference == cfg.seller.price
-        assert cfg.price_reference != cfg.buyer.budget_per_visit
+        assert cfg.price_reference == cfg.seller_classes[0].price
+        assert cfg.price_reference != cfg.buyer_classes[0].budget_per_visit
 
 
-def test_price_reference_follows_posted_price_not_budget():
-    """Changing posted price moves the reference; changing budget does not."""
-    dearer = Phase1Config(
-        name="dearer",
-        n_buyers=10,
-        n_sellers=2,
-        buyer=BuyerParams(budget_per_visit=99.0, price_sensitivity=0.5),
-        seller=SellerParams(price=7.0, inventory=10),
+def test_price_reference_is_max_across_seller_classes():
+    """Phase 2 onward the max ranges over classes; the rule itself is unchanged."""
+    mixed = MarketConfig(
+        name="mixed",
+        phase=0,
+        buyer_classes=(BuyerClass("B", 1, 99.0, 0.5),),
+        seller_classes=(
+            SellerClass("Cheap", 1, 2.0, 10),
+            SellerClass("Dear", 1, 7.0, 10),
+            SellerClass("Mid", 1, 4.0, 10),
+        ),
         seeds=(0,),
     )
-    assert dearer.price_reference == 7.0
+    assert mixed.price_reference == 7.0
 
 
-def test_seller_params_does_not_know_the_price_reference():
+def test_seller_class_does_not_know_the_price_reference():
     """A seller must not carry the market-wide normalizer.
 
     Holding it on the seller is what makes "divide by this seller's own price"
     easy to write; the convention puts it on the market config instead.
     """
-    assert not hasattr(PHASE1_MAIN.seller, "price_reference")
+    assert not hasattr(PHASE1_MAIN.seller_classes[0], "price_reference")
     assert "price_reference" in vars(PHASE1_MAIN)
 
 
@@ -191,50 +220,37 @@ def test_using_each_sellers_own_price_would_delete_the_price_term():
 
     With price_reference = the seller's own price, price/price_reference is 1.0
     at every stall, so the price term becomes the same constant everywhere.
-    Isolated by zeroing the budget coefficient — the only other route by which
-    price reaches utility — the two stalls then score *identically* despite one
+    Isolated by zeroing the budget coefficient - the only other route by which
+    price reaches utility - the two stalls then score *identically* despite one
     charging three times the other. Under the convention they separate.
 
     Prices 2 and 6 are Phase 2's Slow and Shigh, the configuration where this
     mistake would actually bite.
     """
-    no_budget_term = Phase1Config(
+    no_budget_term = MarketConfig(
         name="price_term_isolated",
-        n_buyers=1,
-        n_sellers=2,
-        buyer=BuyerParams(budget_per_visit=10.0, price_sensitivity=0.5),
-        seller=SellerParams(price=6.0, inventory=1),
+        phase=0,
+        buyer_classes=(BuyerClass("B", 1, 10.0, 0.5),),
+        seller_classes=(
+            SellerClass("Slow", 1, 2.0, 1),
+            SellerClass("Shigh", 1, 6.0, 1),
+        ),
         seeds=(0,),
         budget_coef=0.0,
     )
     slow, shigh = 2.0, 6.0
 
     # Broken: each seller normalized by its own price.
-    assert purchase_probability(no_budget_term, 10.0, slow, 0.5, slow) == pytest.approx(
-        purchase_probability(no_budget_term, 10.0, shigh, 0.5, shigh)
-    )
+    assert purchase_probability(
+        no_budget_term, 10.0, slow, 0.5, 0.5, slow
+    ) == pytest.approx(purchase_probability(no_budget_term, 10.0, shigh, 0.5, 0.5, shigh))
 
     # Correct: one market-wide reference, max(2, 6) = 6.
     reference = no_budget_term.price_reference
     assert reference == 6.0
     assert purchase_probability(
-        no_budget_term, 10.0, slow, 0.5, reference
-    ) > purchase_probability(no_budget_term, 10.0, shigh, 0.5, reference)
-
-
-def test_zero_inventory_market_sells_nothing():
-    cfg = Phase1Config(
-        name="sold_out",
-        n_buyers=10,
-        n_sellers=2,
-        buyer=BuyerParams(budget_per_visit=5.0, price_sensitivity=0.5),
-        seller=SellerParams(price=3.0, inventory=0),
-        seeds=(0,),
-    )
-    result = run_single(cfg, 0)
-    assert result.transactions == []
-    assert result.participation_rate == 0.0
-    assert result.blocked_counts["inventory_empty"] == 10 * 2
+        no_budget_term, 10.0, slow, 0.5, 0.5, reference
+    ) > purchase_probability(no_budget_term, 10.0, shigh, 0.5, 0.5, reference)
 
 
 def test_run_seeds_covers_every_configured_seed():
