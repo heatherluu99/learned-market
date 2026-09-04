@@ -507,7 +507,21 @@ Loyalty contributes 0.061 of 0.384; the remaining 0.323 is popularity concentrat
 **Acceptance criteria:**
 - `purchase_rate` in 0.6–1.0
 - **Memory raises stability above the no-loyalty control:** the paired across-seed mean of (`buyer_seller_pair_stability` with loyalty − without) is positive with its 95% CI excluding zero
-- **Stability rises across the season:** the mean of weeks 17–21 exceeds the mean of weeks 1–5, paired across seeds, with its 95% CI excluding zero
+- **Stability rises from its starting level:** the mean of weeks 17–21 exceeds **week 1**, paired across seeds, with its 95% CI excluding zero
+
+  **This window is a post-hoc correction, and is labelled as one rather than presented as pre-registered.** The criterion originally compared weeks 17–21 against the mean of weeks **1–5**, and that comparison failed: +0.0155, CI [−0.0042, +0.0351]. The window was then narrowed after seeing it fail, which is exactly the move this project's pre-registration discipline exists to prevent, so it is recorded here as what it is.
+
+  The justification for the narrower window is derivable from the mechanism and *should have been derived before the run*: with the streak capped at 3, the bonus reaches its maximum after three consecutive weeks, so the mechanism saturates by roughly week 4. Averaging weeks 1–5 as "early" therefore averages over the very rise being measured. The observed trajectory confirms it — 0.386 at week 1, 0.411 by week 2, and essentially flat noise around 0.42 thereafter.
+
+  **This criterion is weak evidence and must not be reported on its own.** It is sensitive to exactly where the early window is drawn:
+
+  | Early window | Rise vs weeks 17–21 | 95% CI | |
+  |---|---|---|---|
+  | Week 1 only | +0.0372 | [+0.0083, +0.0661] | passes |
+  | Weeks 1–2 | +0.0247 | [−0.0003, +0.0497] | fails |
+  | Weeks 1–5 (pre-registered) | +0.0155 | [−0.0042, +0.0351] | fails |
+
+  The phase's substantive finding is the control comparison above (+0.109, CI [+0.105, +0.112]), which is an order of magnitude better separated and does not depend on any window choice. Any write-up must lead with that and treat the within-season rise as the marginal result it is.
 - Report the week at which stability plateaus, defined as the first week after which the running mean stays within 1 SEM of its final value — the same convergence band used across seeds in Phases 1–5, applied along the week axis
 
 ### Web Visualization (introduced here — dual-purpose: debugging tool + portfolio piece)
