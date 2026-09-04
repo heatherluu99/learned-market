@@ -6,7 +6,9 @@
       "Bash(git ls-remote *)",
       "Bash(git -C /Users/luxier/difussion_model_music rev-parse --is-inside-work-tree)",
       "Bash(./.venv/bin/pip freeze *)",
-      "Bash(./.venv/bin/python -c ' *)"
+      "Bash(./.venv/bin/python -c ' *)",
+      "Bash(git tag *)",
+      "Bash(./.venv/bin/python -m pytest tests/ -q)"
     ]
   }
 }

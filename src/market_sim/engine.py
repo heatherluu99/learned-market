@@ -77,8 +77,11 @@ def purchase_probability(
     """P(purchase) for one buyer facing one seller.
 
     utility = 1.0 + 0.05*(budget_remaining - price)
-              - alpha*(price/5) + 1.5*preference
+              - alpha*(price/price_normalizer) + 1.5*preference
     P       = sigmoid(utility - 2.0)
+
+    price_normalizer is the highest posted price in the phase's configuration
+    (3 in Phase 1), not budget_per_visit.
     """
     utility = (
         cfg.intercept

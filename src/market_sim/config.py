@@ -47,13 +47,25 @@ class Phase1Config:
     preference_coef: float = 1.5
     sigmoid_offset: float = 2.0
 
-    # NOTE: the spec writes `price/5` for Phase 1 and `price/6` for Phase 2.
-    # In Phase 1, 5 is also budget_per_visit; in Phase 2, 6 is also the highest
-    # seller price. Those two readings disagree about what this denominator
-    # means, and the spec never says. It is pinned as an explicit Phase 1
-    # constant here rather than derived from either quantity, so that Phase 2
-    # has to make the choice deliberately instead of inheriting a guess.
-    price_normalizer: float = 5.0
+    @property
+    def price_normalizer(self) -> float:
+        """Highest posted price in this phase's initial configuration.
+
+        Derived, never hand-written, so it cannot drift out of sync with the
+        prices it normalizes. Deliberately not `budget_per_visit`: the utility
+        function already has a budget term, and from Phase 2 on budget is
+        class-specific, so a budget denominator would give each class a second
+        price-scaling tangled with `price_sensitivity` itself. See
+        docs/phase_specifications.md, "Utility Price Normalizer - Design Basis".
+
+        Phase 1 is homogeneous, so the highest posted price is the only posted
+        price. Phase 2 onward takes the max across seller classes.
+
+        Reading it off the frozen config is also what locks it: from Phase 7 on,
+        sellers adjust prices weekly, but those prices live in run state, not
+        here, so a learned price can never move this denominator.
+        """
+        return self.seller.price
 
 
 #: The Phase 1 experiment exactly as specified.

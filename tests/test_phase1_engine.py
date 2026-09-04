@@ -129,9 +129,35 @@ def test_purchase_probability_matches_spec_formula():
     """Recompute the spec's formula by hand and compare."""
     cfg = PHASE1_MAIN
     budget, price, pref = 5.0, 3.0, 0.4
-    utility = 1.0 + 0.05 * (budget - price) - 0.5 * (price / 5.0) + 1.5 * pref
+    utility = 1.0 + 0.05 * (budget - price) - 0.5 * (price / 3.0) + 1.5 * pref
     expected = 1.0 / (1.0 + np.exp(-(utility - 2.0)))
     assert purchase_probability(cfg, budget, price, pref) == pytest.approx(expected)
+
+
+def test_price_normalizer_is_highest_posted_price_not_budget():
+    """The rule from "Utility Price Normalizer - Design Basis".
+
+    Guarding this in a test because the two candidate values are both plausible
+    small numbers sitting right next to each other in the same config (price 3,
+    budget 5), and picking the wrong one changes every result quietly rather
+    than raising anything.
+    """
+    for cfg in (PHASE1_MAIN, PHASE1_INVENTORY_PRESSURE):
+        assert cfg.price_normalizer == cfg.seller.price
+        assert cfg.price_normalizer != cfg.buyer.budget_per_visit
+
+
+def test_price_normalizer_follows_the_config_it_is_read_from():
+    """Changing posted price moves the normalizer; changing budget does not."""
+    dearer = Phase1Config(
+        name="dearer",
+        n_buyers=10,
+        n_sellers=2,
+        buyer=BuyerParams(budget_per_visit=99.0, price_sensitivity=0.5),
+        seller=SellerParams(price=7.0, inventory=10),
+        seeds=(0,),
+    )
+    assert dearer.price_normalizer == 7.0
 
 
 def test_zero_inventory_market_sells_nothing():
