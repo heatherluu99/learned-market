@@ -77,13 +77,42 @@ def evaluate(cfg: Phase1Config, results: list[RunResult]) -> list[CriterionResul
     return criteria
 
 
+def convergence_band(values: np.ndarray) -> float:
+    """Convergence tolerance for a metric: one standard error of its mean.
+
+    The answer to "by which seed has the running mean settled" is entirely
+    determined by this band, and on Phase 1's main run it ranges from seed 1 to
+    seed 29 across defensible-looking choices:
+
+        0.05 SD -> 29    0.10 SD -> 21    0.25 SD -> 11
+        0.5 SEM -> 21    1 SEM   -> 11    2 SEM   -> 1
+
+    So the band cannot be picked by eye, and it especially cannot be picked
+    after seeing which value lands on the spec's "roughly seed 15" - that is
+    the post-hoc rationalization this project's pre-registration discipline
+    exists to prevent.
+
+    One SEM is used because it is the natural scale of uncertainty in the
+    quantity actually being watched: the running mean is an estimate of the
+    mean, and SEM is that estimate's own noise level. Asking it to sit inside
+    its own standard error is a statement about the estimator, not a threshold
+    tuned to a target. An absolute hand-picked band is worse than useless -
+    make it wider than the running mean's whole excursion, as an earlier
+    version of this code did, and every metric "converges at seed 1", which
+    says nothing about the data and everything about the band.
+    """
+    return float(np.std(values, ddof=1) / np.sqrt(len(values)))
+
+
 def convergence_seed(values: np.ndarray, tolerance: float) -> int | None:
-    """First seed index after which the running mean stays within `tolerance`
+    """First seed count after which the running mean stays within `tolerance`
     of the final running mean. Returns None if it never settles.
 
     This operationalizes the spec's "confirm convergence (curve flattens) by
     roughly seed 15" — the spec asks for a visual check, and this is the
-    numeric companion to the plot, not a replacement for it.
+    numeric companion to the plot, not a replacement for it. Pass
+    `convergence_band(values)` as the tolerance unless there is a specific
+    reason to use an absolute one.
     """
     running = np.cumsum(values) / np.arange(1, len(values) + 1)
     final = running[-1]

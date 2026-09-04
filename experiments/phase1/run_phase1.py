@@ -38,40 +38,50 @@ RESEARCH_QUESTION = (
     "no heterogeneity, environment, or context to confound the answer?"
 )
 
-# Convergence tolerance per metric, in that metric's own units. These are
-# readability bands for "the running mean has flattened", not acceptance
-# thresholds - the acceptance criteria are in acceptance.py.
-CONVERGENCE_TOLERANCE = {
-    "participation_rate": 0.01,
-    "avg_purchases_per_buyer": 0.01,
-    "total_revenue": 5.0,
-    "total_inventory_remaining": 5.0,
-}
+
+def metric_series(results: list[RunResult]) -> dict[str, np.ndarray]:
+    return {
+        "participation_rate": np.array([r.participation_rate for r in results]),
+        "avg_purchases_per_buyer": np.array(
+            [r.avg_purchases_per_buyer for r in results]
+        ),
+        "total_revenue": np.array([r.total_revenue for r in results], dtype=float),
+        "total_inventory_remaining": np.array(
+            [r.total_inventory_remaining for r in results], dtype=float
+        ),
+    }
 
 
 def plot_convergence(results: list[RunResult], out_path: Path, title: str) -> None:
-    """Running mean of each run_summary metric against seed count."""
-    metrics = {
-        "participation_rate": [r.participation_rate for r in results],
-        "avg_purchases_per_buyer": [r.avg_purchases_per_buyer for r in results],
-        "total_revenue": [r.total_revenue for r in results],
-        "total_inventory_remaining": [r.total_inventory_remaining for r in results],
-    }
+    """Running mean of each run_summary metric against seed count.
+
+    The shaded band is the convergence tolerance, drawn rather than merely
+    asserted so a reader can see whether "settled" means the curve flattened or
+    just that the band is wide.
+    """
     fig, axes = plt.subplots(2, 2, figsize=(11, 7))
-    for ax, (name, values) in zip(axes.flat, metrics.items()):
-        values = np.asarray(values, dtype=float)
+    for ax, (name, values) in zip(axes.flat, metric_series(results).items()):
         seeds = np.arange(1, len(values) + 1)
         running = np.cumsum(values) / seeds
+        band = acceptance.convergence_band(values)
+        ax.axhspan(
+            running[-1] - band,
+            running[-1] + band,
+            color="tab:blue",
+            alpha=0.12,
+            label=f"±{band:.3g} (1 SEM)",
+        )
         ax.plot(seeds, running, marker="o", markersize=3, linewidth=1.5)
         ax.axhline(running[-1], linestyle="--", linewidth=1, color="grey")
         ax.axvline(15, linestyle=":", linewidth=1, color="firebrick")
-        settled = acceptance.convergence_seed(values, CONVERGENCE_TOLERANCE[name])
+        settled = acceptance.convergence_seed(values, band)
         ax.set_title(
             f"{name}\nsettles at seed {settled}" if settled else f"{name}\nnot settled",
             fontsize=10,
         )
         ax.set_xlabel("seeds included")
         ax.set_ylabel("running mean")
+        ax.legend(fontsize=7, loc="best")
     fig.suptitle(f"{title} - across-seed convergence (dotted red = seed 15)")
     fig.tight_layout()
     out_path.parent.mkdir(parents=True, exist_ok=True)

@@ -263,7 +263,25 @@ def phase1_slide() -> PhaseSlide:
     pressure_results = run_seeds(PHASE1_INVENTORY_PRESSURE)
 
     participation = main["participation_rate"].mean()
-    settles = acceptance.convergence_seed(main["participation_rate"].values, 0.01)
+
+    # Report the slowest metric, not the fastest: a slide that quotes whichever
+    # of the four settled first would flatter the run.
+    settle_points = {}
+    for column in (
+        "participation_rate",
+        "avg_purchases_per_buyer",
+        "total_revenue",
+        "total_inventory_remaining",
+    ):
+        values = main[column].to_numpy(dtype=float)
+        settle_points[column] = acceptance.convergence_seed(
+            values, acceptance.convergence_band(values)
+        )
+    settles = (
+        None
+        if any(v is None for v in settle_points.values())
+        else max(settle_points.values())
+    )
     total_stock = PHASE1_MAIN.n_sellers * PHASE1_MAIN.seller.inventory
     stock_blocked = int(pressure["n_blocked_by_inventory"].sum())
     budget_violations = 0  # asserted by the invariant criterion below
@@ -328,8 +346,8 @@ def phase1_slide() -> PhaseSlide:
                 "PASS",
             ),
             MetricRow(
-                "Running mean settles by seed 15",
-                f"seed {settles}",
+                "Running means settle by seed 15 (±1 SEM)",
+                f"seed {settles}" if settles else "not settled",
                 "PASS" if settles and settles <= 15 else "FAIL",
             ),
             MetricRow(
@@ -344,8 +362,8 @@ def phase1_slide() -> PhaseSlide:
         ),
         finding=(
             f"Mechanics behave as specified. {participation:.1%} of buyers transact, "
-            f"no buyer ever exceeds budget, and every run-summary metric's running "
-            f"mean flattens well before seed 15."
+            f"no buyer ever exceeds budget, and the slowest of the four run-summary "
+            f"metrics' running means settles within 1 SEM by seed {settles}."
         ),
         caveat=(
             "Inventory cannot bind in the main run — budget 5 against price 3 caps "
