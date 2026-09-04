@@ -72,21 +72,29 @@ def sigmoid(x: float | np.ndarray) -> float | np.ndarray:
 
 
 def purchase_probability(
-    cfg: Phase1Config, budget_remaining: float, price: float, preference: float
+    cfg: Phase1Config,
+    budget_remaining: float,
+    price: float,
+    preference: float,
+    price_reference: float,
 ) -> float:
     """P(purchase) for one buyer facing one seller.
 
     utility = 1.0 + 0.05*(budget_remaining - price)
-              - alpha*(price/price_normalizer) + 1.5*preference
+              - alpha*(price/price_reference) + 1.5*preference
     P       = sigmoid(utility - 2.0)
 
-    price_normalizer is the highest posted price in the phase's configuration
-    (3 in Phase 1), not budget_per_visit.
+    `price_reference` is passed in rather than read from the seller being
+    scored, and the caller is expected to pass the same market-wide value for
+    every seller in the run. It is the max posted price at configuration time
+    (3 in Phase 1) — not budget_per_visit, and emphatically not `price`
+    itself, which would make the ratio 1.0 at every stall and delete the price
+    term. See docs/phase_specifications.md, "Price Normalization Convention".
     """
     utility = (
         cfg.intercept
         + cfg.budget_coef * (budget_remaining - price)
-        - cfg.buyer.price_sensitivity * (price / cfg.price_normalizer)
+        - cfg.buyer.price_sensitivity * (price / price_reference)
         + cfg.preference_coef * preference
     )
     return float(sigmoid(utility - cfg.sigmoid_offset))
@@ -126,12 +134,18 @@ def run_single(cfg: Phase1Config, seed: int) -> RunResult:
     }
     transactions: list[Transaction] = []
     price = cfg.seller.price
+    # Read once, outside both loops: one market-wide value for every seller.
+    price_reference = cfg.price_reference
 
     for buyer_id in range(cfg.n_buyers):
         for visit_order, seller_id in enumerate(visit_orders[buyer_id]):
             seller_id = int(seller_id)
             p_purchase = purchase_probability(
-                cfg, budget[buyer_id], price, preference[buyer_id, seller_id]
+                cfg,
+                budget[buyer_id],
+                price,
+                preference[buyer_id, seller_id],
+                price_reference,
             )
             wants_to_buy = p_purchase > purchase_draw[buyer_id, seller_id]
             can_afford = price <= budget[buyer_id]

@@ -13,7 +13,8 @@
       "Bash(echo \"EXIT=$?\")",
       "Bash(./.venv/bin/python tools/generate_phase_slide.py --phase 1)",
       "Bash(sed -i '' 's/label=f\"±{band:.3g} \\(0.1 SD\\)\"/label=f\"±{band:.3g} \\(1 SEM\\)\"/' experiments/phase1/run_phase1.py)",
-      "Bash(sed -i '' 's/\"Running means settle by seed 15 \\(±0.1 SD\\)\"/\"Running means settle by seed 15 \\(±1 SEM\\)\"/; s/f\"metrics.{chr\\(39\\)} running means settles within 0.1 SD by seed {settles}.\"/X/' tools/generate_phase_slide.py)"
+      "Bash(sed -i '' 's/\"Running means settle by seed 15 \\(±0.1 SD\\)\"/\"Running means settle by seed 15 \\(±1 SEM\\)\"/; s/f\"metrics.{chr\\(39\\)} running means settles within 0.1 SD by seed {settles}.\"/X/' tools/generate_phase_slide.py)",
+      "Bash(git push *)"
     ]
   }
 }

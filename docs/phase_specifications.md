@@ -96,25 +96,33 @@ Different phases need different numbers of seasons from Phase 6 onward, because 
 
 ---
 
-## Utility Price Normalizer — Design Basis (applies from Phase 1 onward)
+## Price Normalization Convention (applies from Phase 1 onward)
 
 Every phase's purchase rule divides price by a normalizer before scaling it by `price_sensitivity`:
 
 ```
-utility = ... - price_sensitivity * (price / price_normalizer) + ...
+utility = ... - price_sensitivity * (price / price_reference) + ...
 ```
 
-**The rule: `price_normalizer` = the highest posted price in that phase's initial configuration.** It is one constant shared by every buyer in the phase, computed once when the phase's configuration is fixed, and never recomputed afterwards.
+**The rule: `price_reference` = the highest posted price in that phase's initial configuration.** It is one constant shared by every buyer in the phase, computed once when the phase's configuration is fixed, and never recomputed afterwards.
 
 **Why not `budget_per_visit`.** The formula already contains a term dedicated to the budget: `0.05 * (budget_remaining - price)`. Dividing by budget as well would route affordability into utility through two channels at once — once linearly, once folded into the `price_sensitivity` scaling. That is double-counting on its own, and it gets worse from Phase 2 on, where budget is class-specific (Poor 3, Middle 5, Rich 10): a per-class denominator would silently give each class its own additional price-sensitivity scaling, tangled with the `price_sensitivity` parameter that is supposed to be the only knob controlling exactly that. Class stratification could then no longer be attributed cleanly to `price_sensitivity` rather than to the denominator — a direct violation of the project's own change-one-dimension-at-a-time discipline.
 
 The highest posted price is a single market-wide constant that does not vary by class, so the scaling stays entirely out of the buyer-side differences and `price_sensitivity` remains the sole knob for how strongly a class reacts to price.
 
-**Why it is locked at configuration time, and not updated by dynamic pricing.** From Phase 7 onward sellers adjust prices weekly. The normalizer does **not** follow them. If it drifted along with the prices that Phase 7's algorithms are actively learning to set, the overall scale of utility would become entangled with the pricing-learning mechanism under test, and the learning effect could no longer be read cleanly. The normalizer is therefore pinned to the phase's starting configuration and held fixed for the whole run, including across the 66–110 weeks of Phases 7–8 and 15.
+**Why not the price of the seller currently being evaluated.** This is the other tempting reading, and it is the worst of the three, because it does not merely distort the price term — it deletes it. If the denominator were each seller's own price, then `price / price_reference` is 1.0 for *every* seller by construction: Phase 2's Slow seller gives 2/2 = 1.0 and its Shigh seller gives 6/6 = 1.0. The whole term collapses to the constant `- price_sensitivity`, identical at every stall, and price stops entering the comparison between stalls at all. A model built to ask whether lower-budget buyers sort toward lower-priced sellers would then contain no mechanism by which price could affect that sorting.
+
+**Why it is locked at configuration time, and not updated by dynamic pricing or by entry/exit.** From Phase 7 onward sellers adjust prices weekly, and from Phase 8 onward sellers enter and leave. The normalizer follows **neither**. If it drifted along with the prices Phase 7's algorithms are actively learning to set, the overall scale of utility would become entangled with the pricing-learning mechanism under test. The same argument applies unchanged to Phase 8: entry and exit *are* the mechanism being measured there, so the scale of utility must not move with them. Concretely — **if a Phase 8 entrant posts a higher price than every incumbent, `price_reference` does not rise to meet it.** It stays at the max computed from that phase's week-0 configuration, and the newcomer simply evaluates at a ratio above 1.0. The normalizer is pinned once and held for the whole run, including across the 66–110 weeks of Phases 7–8 and 15.
+
+**Where it lives (architecture).** The value belongs to the market, not to any seller:
+
+- It is a field on the market/phase configuration object — `MarketConfig.price_reference` — computed **once at initialization** as `max(s.price for s in active_sellers)` and stored, not recomputed on access.
+- It must **not** be a property on the `Seller` object. A seller has no business knowing what the other stalls charge; that is not its responsibility, and putting the value there is what makes the "each seller's own price" mistake above easy to write by accident.
+- The utility function takes `price_reference` as an explicit argument (or reads it once from the config). Every seller in the market is evaluated against the same value, and the value does not vary with which seller is currently being scored.
 
 **Values per phase, as derived by this rule:**
 
-| Phase | Posted prices in initial config | `price_normalizer` |
+| Phase | Posted prices in initial config | `price_reference` |
 |---|---|---|
 | 1 | 3 (single homogeneous seller class) | **3** |
 | 2 | Slow 2, Shigh 6 | **6** |
@@ -222,7 +230,7 @@ utility = 1.0 + 0.05*(budget_remaining - price) - price_sensitivity*(price/3) + 
 P(purchase) = sigmoid(utility - 2.0)
 ```
 
-The denominator 3 is the highest (here, only) posted price in this phase's configuration — see "Utility Price Normalizer — Design Basis" above. It is not `budget_per_visit`, which is 5.
+The denominator is `price_reference` = `max(3)` = **3** — the highest (here, only) posted price in this phase's configuration, per "Price Normalization Convention" above. It is not `budget_per_visit`, which is 5.
 
 Purchase occurs if: `P(purchase) > random(0,1)` AND `price <= budget_remaining` AND `seller.inventory > 0`.
 On purchase: `budget_remaining -= price`; `seller.inventory -= 1`; log transaction.
@@ -287,7 +295,7 @@ utility = 1.0 + 0.05*(budget_remaining - price) - price_sensitivity*(price/6) + 
 P(purchase) = sigmoid(utility - 2.0)
 ```
 
-The denominator 6 is the Shigh price — the highest posted price in this phase's configuration, per "Utility Price Normalizer — Design Basis" above. It is deliberately *not* each class's own `budget_per_visit` (3 / 5 / 10): a per-class denominator would add a second, class-varying price-scaling on top of `price_sensitivity`, and this phase's entire purpose is to attribute stratification to `price_sensitivity` alone.
+The denominator is `price_reference` = `max(2, 6)` = **6** — computed from this phase's posted prices by the rule in "Price Normalization Convention" above, not chosen because it happens to equal the Shigh price. It is deliberately *not* each class's own `budget_per_visit` (3 / 5 / 10): a per-class denominator would add a second, class-varying price-scaling on top of `price_sensitivity`, and this phase's entire purpose is to attribute stratification to `price_sensitivity` alone. It is equally not each seller's own price, which would make both stalls evaluate at 2/2 = 6/6 = 1.0 and remove price from the comparison entirely.
 
 Budget is shared across all 5 sellers within one run (spending at one seller reduces what's left for the next); resets each run. All three classes evaluate all 5 sellers — nothing restricts Poor or Rich buyers from considering the "wrong" tier, the same as before; class only affects the parameters feeding into utility, never the choice set itself.
 
@@ -424,7 +432,7 @@ This is the first phase where "week" is a real mechanism, so it is the natural p
 
 This phase is split into four sub-stages, run in order. **Each sub-stage requires a graduation gate before moving to the next** — added complexity must materially change the outcome metrics (profit, participation, class shares) by more than a pre-agreed threshold (e.g., >5 percentage points), or the project stops at the simpler sub-stage and documents that finding. This directly applies the project's own "does complexity earn its place" principle to the learning-sophistication dimension, not just the behavioral-modeling dimension.
 
-**Price normalizer stays frozen through every sub-stage.** This is the first phase where posted prices move week to week, so it is the first phase where the utility formula's `price_normalizer` could drift. It must not: it is pinned to the highest posted price in the phase's week-0 configuration and held there for all 66 weeks, regardless of how far the learned prices travel from it. A normalizer that tracked the prices being learned would put the scale of utility itself under the control of the mechanism this phase is trying to measure. See "Utility Price Normalizer — Design Basis" above.
+**Price normalizer stays frozen through every sub-stage.** This is the first phase where posted prices move week to week, so it is the first phase where the utility formula's `price_reference` could drift. It must not: it is pinned to the highest posted price in the phase's week-0 configuration and held there for all 66 weeks, regardless of how far the learned prices travel from it. A normalizer that tracked the prices being learned would put the scale of utility itself under the control of the mechanism this phase is trying to measure. See "Price Normalization Convention" above.
 
 ### Phase 7a — Moving-Average Heuristic (baseline)
 
@@ -500,6 +508,8 @@ elif inventory_remaining > 0.5 * starting_inventory:
 **New mechanism:**
 - A seller exits if profit < a fixed cost threshold for 3 consecutive weeks.
 - A new seller enters (class assigned proportionally to observed excess demand) if aggregate unmet demand exceeds a threshold for 2 consecutive weeks.
+
+**`price_reference` is not recomputed on entry or exit.** The active seller set changes every time this mechanism fires, so this is the phase where a normalizer defined as "max over active sellers" would silently start moving. It must not. `price_reference` stays at the value computed from this phase's week-0 configuration for all 66–110 weeks — including when an entrant posts a price above every incumbent, in which case that seller simply evaluates at a ratio above 1.0 rather than resetting the scale. The reason is the same one that freezes it against Phase 7's learned prices: entry and exit are the mechanism under test here, and the scale of utility cannot be allowed to drift with the thing being measured. See "Price Normalization Convention" above.
 
 **Acceptance criteria:**
 - Track number of active sellers per class over weeks; report whether the market converges to a stable seller count/mix or oscillates

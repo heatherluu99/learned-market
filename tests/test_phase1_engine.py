@@ -113,15 +113,17 @@ def test_pressure_run_is_paired_with_main_run(seed):
 
 def test_purchase_probability_falls_as_price_rises():
     cfg = PHASE1_MAIN
-    cheap = purchase_probability(cfg, budget_remaining=5.0, price=1.0, preference=0.5)
-    dear = purchase_probability(cfg, budget_remaining=5.0, price=4.0, preference=0.5)
+    ref = cfg.price_reference
+    cheap = purchase_probability(cfg, 5.0, 1.0, 0.5, ref)
+    dear = purchase_probability(cfg, 5.0, 4.0, 0.5, ref)
     assert cheap > dear
 
 
 def test_purchase_probability_rises_with_preference():
     cfg = PHASE1_MAIN
-    low = purchase_probability(cfg, budget_remaining=5.0, price=3.0, preference=0.1)
-    high = purchase_probability(cfg, budget_remaining=5.0, price=3.0, preference=0.9)
+    ref = cfg.price_reference
+    low = purchase_probability(cfg, 5.0, 3.0, 0.1, ref)
+    high = purchase_probability(cfg, 5.0, 3.0, 0.9, ref)
     assert high > low
 
 
@@ -131,24 +133,23 @@ def test_purchase_probability_matches_spec_formula():
     budget, price, pref = 5.0, 3.0, 0.4
     utility = 1.0 + 0.05 * (budget - price) - 0.5 * (price / 3.0) + 1.5 * pref
     expected = 1.0 / (1.0 + np.exp(-(utility - 2.0)))
-    assert purchase_probability(cfg, budget, price, pref) == pytest.approx(expected)
+    assert purchase_probability(cfg, budget, price, pref, 3.0) == pytest.approx(expected)
 
 
-def test_price_normalizer_is_highest_posted_price_not_budget():
-    """The rule from "Utility Price Normalizer - Design Basis".
+def test_price_reference_is_highest_posted_price_not_budget():
+    """The rule from "Price Normalization Convention".
 
-    Guarding this in a test because the two candidate values are both plausible
-    small numbers sitting right next to each other in the same config (price 3,
-    budget 5), and picking the wrong one changes every result quietly rather
-    than raising anything.
+    Guarded because the two candidate values are both plausible small numbers
+    sitting next to each other in the same config (price 3, budget 5), and
+    picking the wrong one changes every result quietly rather than raising.
     """
     for cfg in (PHASE1_MAIN, PHASE1_INVENTORY_PRESSURE):
-        assert cfg.price_normalizer == cfg.seller.price
-        assert cfg.price_normalizer != cfg.buyer.budget_per_visit
+        assert cfg.price_reference == cfg.seller.price
+        assert cfg.price_reference != cfg.buyer.budget_per_visit
 
 
-def test_price_normalizer_follows_the_config_it_is_read_from():
-    """Changing posted price moves the normalizer; changing budget does not."""
+def test_price_reference_follows_posted_price_not_budget():
+    """Changing posted price moves the reference; changing budget does not."""
     dearer = Phase1Config(
         name="dearer",
         n_buyers=10,
@@ -157,7 +158,68 @@ def test_price_normalizer_follows_the_config_it_is_read_from():
         seller=SellerParams(price=7.0, inventory=10),
         seeds=(0,),
     )
-    assert dearer.price_normalizer == 7.0
+    assert dearer.price_reference == 7.0
+
+
+def test_seller_params_does_not_know_the_price_reference():
+    """A seller must not carry the market-wide normalizer.
+
+    Holding it on the seller is what makes "divide by this seller's own price"
+    easy to write; the convention puts it on the market config instead.
+    """
+    assert not hasattr(PHASE1_MAIN.seller, "price_reference")
+    assert "price_reference" in vars(PHASE1_MAIN)
+
+
+def test_price_reference_is_stored_not_recomputed_from_live_sellers():
+    """Locked at configuration time, per the Phase 7 / Phase 8 requirement.
+
+    Phase 8 can admit an entrant priced above every incumbent. This asserts the
+    value is a plain stored field, so nothing recomputed from a live seller set
+    can move it: run-state prices have no path back into the frozen config.
+    """
+    cfg = PHASE1_MAIN
+    before = cfg.price_reference
+    assert isinstance(vars(cfg)["price_reference"], float)
+    with pytest.raises(Exception):  # frozen dataclass rejects assignment
+        cfg.price_reference = 999.0
+    assert cfg.price_reference == before
+
+
+def test_using_each_sellers_own_price_would_delete_the_price_term():
+    """Documents the failure mode the convention exists to prevent.
+
+    With price_reference = the seller's own price, price/price_reference is 1.0
+    at every stall, so the price term becomes the same constant everywhere.
+    Isolated by zeroing the budget coefficient — the only other route by which
+    price reaches utility — the two stalls then score *identically* despite one
+    charging three times the other. Under the convention they separate.
+
+    Prices 2 and 6 are Phase 2's Slow and Shigh, the configuration where this
+    mistake would actually bite.
+    """
+    no_budget_term = Phase1Config(
+        name="price_term_isolated",
+        n_buyers=1,
+        n_sellers=2,
+        buyer=BuyerParams(budget_per_visit=10.0, price_sensitivity=0.5),
+        seller=SellerParams(price=6.0, inventory=1),
+        seeds=(0,),
+        budget_coef=0.0,
+    )
+    slow, shigh = 2.0, 6.0
+
+    # Broken: each seller normalized by its own price.
+    assert purchase_probability(no_budget_term, 10.0, slow, 0.5, slow) == pytest.approx(
+        purchase_probability(no_budget_term, 10.0, shigh, 0.5, shigh)
+    )
+
+    # Correct: one market-wide reference, max(2, 6) = 6.
+    reference = no_budget_term.price_reference
+    assert reference == 6.0
+    assert purchase_probability(
+        no_budget_term, 10.0, slow, 0.5, reference
+    ) > purchase_probability(no_budget_term, 10.0, shigh, 0.5, reference)
 
 
 def test_zero_inventory_market_sells_nothing():

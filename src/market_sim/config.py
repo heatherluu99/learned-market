@@ -7,7 +7,7 @@ changes first (ROADMAP.md, "Phase design review gate").
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass(frozen=True)
@@ -20,7 +20,14 @@ class BuyerParams:
 
 @dataclass(frozen=True)
 class SellerParams:
-    """Seller parameters. In Phase 1 all sellers share one instance of this."""
+    """Seller parameters. In Phase 1 all sellers share one instance of this.
+
+    Deliberately has no knowledge of `price_reference`: a seller has no
+    business knowing what the other stalls charge. Putting the market-wide
+    normalizer here is what makes it easy to write the "divide by this
+    seller's own price" bug, which collapses the price term to a constant.
+    See docs/phase_specifications.md, "Price Normalization Convention".
+    """
 
     price: float
     inventory: int
@@ -39,7 +46,7 @@ class Phase1Config:
     # the formula in the spec and the formula in the code can be diffed by eye:
     #   utility = intercept
     #           + budget_coef * (budget_remaining - price)
-    #           - price_sensitivity * (price / price_normalizer)
+    #           - price_sensitivity * (price / price_reference)
     #           + preference_coef * preference
     #   P(purchase) = sigmoid(utility - sigmoid_offset)
     intercept: float = 1.0
@@ -47,23 +54,28 @@ class Phase1Config:
     preference_coef: float = 1.5
     sigmoid_offset: float = 2.0
 
-    @property
-    def price_normalizer(self) -> float:
-        """Highest posted price in this phase's initial configuration.
+    #: Market-wide price normalizer: max posted price at configuration time.
+    #: Stored, not computed on access — see __post_init__ and
+    #: docs/phase_specifications.md, "Price Normalization Convention".
+    price_reference: float = field(init=False)
 
-        Derived, never hand-written, so it cannot drift out of sync with the
-        prices it normalizes. Deliberately not `budget_per_visit`: the utility
-        function already has a budget term, and from Phase 2 on budget is
-        class-specific, so a budget denominator would give each class a second
-        price-scaling tangled with `price_sensitivity` itself. See
-        docs/phase_specifications.md, "Utility Price Normalizer - Design Basis".
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "price_reference", self._initial_price_reference())
 
-        Phase 1 is homogeneous, so the highest posted price is the only posted
-        price. Phase 2 onward takes the max across seller classes.
+    def _initial_price_reference(self) -> float:
+        """`max(s.price for s in active_sellers)` at week 0.
 
-        Reading it off the frozen config is also what locks it: from Phase 7 on,
-        sellers adjust prices weekly, but those prices live in run state, not
-        here, so a learned price can never move this denominator.
+        Phase 1's seller population is homogeneous, so that max is over a
+        single posted price. Phase 2 onward, where sellers come in classes,
+        takes the max across those classes; the rule does not change, only the
+        number of prices it ranges over.
+
+        Computed here, once, at configuration time — and never again. That is
+        the whole point: from Phase 7 sellers learn new prices weekly and from
+        Phase 8 they enter and leave, so a normalizer recomputed from the
+        *current* active sellers would drift with exactly the mechanisms those
+        phases exist to measure. Run-state prices live outside this frozen
+        config and have no path back into this value.
         """
         return self.seller.price
 
