@@ -5,6 +5,12 @@ must not be narrowed for Phases 1-8 just because most fields are "N/A" there —
 the whole point is that Phase 1-8 rows and Phase 9+ rows stack into one table
 without a migration.
 
+Reading note: the "N/A" placeholders the schema mandates are written as the
+literal string "N/A", but `pd.read_csv` converts that to NaN by default — which
+silently defeats the reason the spec wants them ("so later filtering/joins work
+cleanly"). Read this file with `pd.read_csv(path, keep_default_na=False)` when
+the placeholder values matter, which they will from Phase 9 on.
+
 Granularity note: the schema names a singular `seed`, but a Phase 1 experiment
 is 30 seeds and the narrative fields (`result_summary`, `decision_implication`,
 `next_experiment`) only mean anything at the experiment level. So one row =
