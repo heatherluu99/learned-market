@@ -411,22 +411,57 @@ Every arm draws the promotion roll and the promotion pick in the same position i
 
 **Research question:** Does adding one nonlinear mechanism (a budget-cliff threshold effect) materially change conclusions vs. the linear model used in Phases 2–4?
 
-**Single changed dimension:** replace the linear budget term with a threshold term; everything else (heterogeneity, environment, context) stays as configured in Phase 4.
+**Single changed dimension:** how remaining budget enters utility; everything else (heterogeneity, environment, context) stays as configured in Phase 4.
 
-**New mechanism:** if `budget_remaining - price < 0.5` (i.e., the purchase would leave the buyer with almost nothing), apply an additional utility penalty:
+**New mechanism:** if `budget_remaining - price < 0.5` (i.e., the purchase would leave the buyer with almost nothing), apply a utility penalty:
 ```
 if (budget_remaining - price) < 0.5:
     utility -= 1.0
 ```
 This represents reluctance to spend down to near-zero, not captured by the smooth linear term.
 
+**Both readings of "replace vs. add" are run, because this document contradicted itself.** The "Single changed dimension" line originally said *replace* the linear budget term; the mechanism paragraph calls the penalty *additional* and justifies it as capturing what "the smooth linear term" misses, which presupposes that term survives. Those are different models and, at the gate, they gave materially different answers, so neither is guessed at:
+
+| Arm | Budget enters utility via | Note |
+|---|---|---|
+| `phase5_linear` | `0.05 * (budget_remaining - price)` only | Phase 4's model, the baseline |
+| `phase5_additive` | linear term **and** the cliff | The mechanism paragraph's reading |
+| `phase5_cliff_only` | the cliff only | The "replace" reading. By this project's own accounting it changes two things at once — it removes the sole smooth channel *and* adds a threshold — so it is reported but is not the phase's primary arm. |
+
+All three run on identical seeds, and the cliff changes no random draws, so the arms are exactly paired.
+
+**The cliff cannot fire on any buyer's first purchase at these parameters.** Every class clears the 0.5 gap on its first affordable stall — Poor 3−2 = 1.0, Middle 7−6 = 1.0, Rich 10−6 = 4.0 — so the penalty only reaches buyers deep in a multi-purchase sequence. Gate-stage measurement put that at 17 of 2677 purchases (0.6%). The mechanism is genuinely testable but nearly inert here, and that is the reason for the size of the result, not evidence that threshold effects are unimportant in general.
+
 **Acceptance criteria:**
-- Compute class-share metrics (`Poor_to_Slow_share`, etc., across all three classes) under linear-only (Phase 4 rerun) vs. linear+threshold (this phase), same seeds
-- Report a distributional distance (e.g., total variation or simple percentage-point difference) between the two — the deliverable is answering "was the added complexity worth it," not just "the nonlinear model also runs"
+- `participation_rate` in 0.6–1.0
+- **The comparison is decisive on every tracked class-share metric** — see the decision rule below. What is graded is that the test *reaches a verdict*, not which verdict it reaches: this phase exists to decide whether the nonlinearity earns its place, and an inconclusive test decides nothing.
+
+### Decision rule: the 5-point materiality test (template, reused at Phases 7b–7d)
+
+For each tracked class-share metric, compute the paired across-seed shift against the baseline arm and its 95% CI, in percentage points, and classify it:
+
+| Verdict | Condition | Meaning |
+|---|---|---|
+| **equivalent** | the whole CI lies inside ±5 pp | A material effect is *ruled out*. The added complexity is not justified; roll back. |
+| **material** | the whole CI lies beyond +5 pp or below −5 pp | The added complexity changes conclusions; keep it. |
+| **inconclusive** | the CI straddles a boundary | Neither claim is available at this sample size. |
+
+**The bar is the confidence interval, not the point estimate.** Comparing only point estimates to 5 pp cannot distinguish "no material effect" from "not enough data to tell", and it would have gone wrong here: at 30 seeds the `phase5_cliff_only` arm had a point estimate of 4.68 pp — under the bar — with a CI of [+3.00, +6.36] that straddled it. Read as a point estimate the arm would have been declared immaterial; read as an interval it was undecided, and at 1000 seeds the estimate settled at 2.73 pp [+2.50, +2.96]. The point estimate moved by nearly two points, which is exactly the error an interval-based rule prevents.
+
+**When an arm comes out inconclusive at 30 seeds, re-run that arm and its baseline at 1000 seeds and decide on that.** The 30-seed result is still reported alongside. This is not a change to the phase's headline sample; it is what to do when the headline sample cannot answer the question the phase exists to ask.
 
 **Literature basis:** Kahneman & Tversky (1979), "Prospect Theory: An Analysis of Decision under Risk" (*Econometrica*) — basis for the reference-point-driven utility penalty near budget exhaustion (loss aversion near a reference point, here the point of near-zero remaining budget).
 
-**Exit condition:** `git tag phase5-validated`. If the nonlinear term changes conclusions by less than a pre-agreed small threshold (e.g., <5 percentage points on all tracked shares), document that finding and default back to the linear model for subsequent phases unless a specific later phase needs the nonlinearity reinstated.
+**Exit condition:** `git tag phase5-validated`. If the test returns **equivalent** on every tracked share, document that finding and default back to the linear model for subsequent phases unless a specific later phase needs the nonlinearity reinstated.
+
+**Result (recorded here because the rollback it triggers governs Phases 6–15).** Both arms came out equivalent, so the project uses the **linear model from Phase 6 onward** — not linear-plus-an-inert-threshold, per ROADMAP.md's threshold-gated accumulation rule.
+
+| Arm | Largest class-share shift vs linear | Verdict |
+|---|---|---|
+| `phase5_additive` (30 seeds) | 0.172 pp, CI [−1.29, +0.94] | equivalent |
+| `phase5_cliff_only` (1000 seeds, after being inconclusive at 30) | 2.734 pp, CI [+2.50, +2.96] | equivalent |
+
+Under the additive reading, `Poor_*` and `Middle_*` shares are unchanged to the last decimal place: Poor's sequences never reach the cliff and neither do Middle's, so only Rich moves at all, and not detectably.
 
 ---
 

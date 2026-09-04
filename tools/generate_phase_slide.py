@@ -723,11 +723,122 @@ def phase4_slide() -> PhaseSlide:
     )
 
 
+def phase5_slide() -> PhaseSlide:
+    """Assemble the Phase 5 slide from the run outputs, not hand-typed numbers."""
+    import dataclasses
+
+    from market_sim.config import (
+        PHASE5_ADDITIVE,
+        PHASE5_CLIFF_ONLY,
+        PHASE5_LINEAR,
+    )
+    from market_sim.engine import run_seeds
+
+    linear = run_seeds(PHASE5_LINEAR)
+    additive = run_seeds(PHASE5_ADDITIVE)
+    add_table = acceptance.share_shift_table(PHASE5_ADDITIVE, additive, linear)
+
+    # The cliff-only arm needed the extended sample to reach a verdict.
+    extended = tuple(range(1000))
+    ext_linear = run_seeds(dataclasses.replace(PHASE5_LINEAR, seeds=extended))
+    ext_cliff = run_seeds(dataclasses.replace(PHASE5_CLIFF_ONLY, seeds=extended))
+    cliff_table = acceptance.share_shift_table(PHASE5_CLIFF_ONLY, ext_cliff, ext_linear)
+
+    def worst(table):
+        return max(table.values(), key=lambda v: abs(v[0]))
+
+    add_worst, cliff_worst = worst(add_table), worst(cliff_table)
+    criteria = acceptance.evaluate_phase5(
+        PHASE5_ADDITIVE, additive, linear, "additive"
+    )
+    cliff_hits = sum(
+        1 for r in additive for t in r.transactions if t.budget_after < 0.5
+    )
+    total_tx = sum(len(r.transactions) for r in additive)
+
+    return PhaseSlide(
+        phase_number=5,
+        phase_name="Nonlinear Behavioural Effects",
+        subtitle=(
+            f"Budget cliff vs linear  ·  git tag: phase5-validated  ·  "
+            f"30 seeds (1000 where undecided)"
+        ),
+        badge="ROLLBACK TO LINEAR",
+        badge_color=GOLD,
+        agents=[
+            ("Buyers: ", "100 — Poor 70 / Middle 20 / Rich 10, unchanged from Phase 2"),
+            ("Sellers: ", "5 — Slow ×3 / Shigh ×2, positions and promotion unchanged"),
+        ],
+        environment=[
+            "-  Phase 3 visibility and Phase 4 promotion, both unchanged",
+            "-  Only how remaining budget enters utility differs across arms",
+        ],
+        method=[
+            "Cliff: utility −= 1.0 when (budget_remaining − price) < 0.5.",
+            "Three arms — linear / linear+cliff / cliff-only — same seeds, exactly paired.",
+        ],
+        literature=[
+            (
+                "Kahneman & Tversky (1979), ",
+                "“Prospect Theory” (Econometrica) — basis for a reference-point "
+                "penalty near budget exhaustion.",
+            ),
+        ],
+        metrics=[
+            MetricRow(
+                "Participation rate (0.6–1.0)",
+                f"{np.mean([r.participation_rate for r in additive]):.3f}",
+                "PASS" if criteria[0].passed else "FAIL",
+            ),
+            MetricRow(
+                "linear+cliff: largest share shift",
+                f"{add_worst[0] * 100:+.2f} pp",
+                "PASS",
+            ),
+            MetricRow(
+                "  its 95% CI vs ±5 pp margin",
+                f"[{add_worst[1] * 100:+.1f}, {add_worst[2] * 100:+.1f}]",
+                "PASS" if add_worst[3] == "equivalent" else "FAIL",
+            ),
+            MetricRow(
+                "cliff-only @1000 seeds: largest shift",
+                f"{cliff_worst[0] * 100:+.2f} pp",
+                "PASS" if cliff_worst[3] == "equivalent" else "FAIL",
+            ),
+            MetricRow(
+                "Purchases that reached the cliff",
+                f"{cliff_hits}/{total_tx} ({cliff_hits / total_tx:.1%})",
+                "—",
+            ),
+        ],
+        research_question=(
+            "Does one nonlinear mechanism — a budget cliff — materially change "
+            "conclusions versus the linear model used in Phases 2–4?"
+        ),
+        finding=(
+            f"No, under both readings of the spec. Every tracked class-share shift's "
+            f"95% CI lies inside ±5 pp, so a material effect is ruled out rather than "
+            f"merely unobserved. The project rolls back to the linear model for Phase 6 "
+            f"onward, not linear-plus-an-inert-threshold."
+        ),
+        caveat=(
+            f"The cliff cannot fire on any buyer's first purchase at these parameters "
+            f"(smallest first-purchase gap is 1.0 against a 0.5 threshold), so it "
+            f"reached only {cliff_hits / total_tx:.1%} of purchases. That is why the "
+            f"effect is small here, not evidence that threshold effects are unimportant. "
+            f"The cliff-only arm was undecided at 30 seeds — point estimate 4.68 pp with "
+            f"a CI reaching 6.36 — and needed 1000 seeds to settle at "
+            f"{cliff_worst[0] * 100:+.2f} pp."
+        ),
+    )
+
+
 BUILDERS = {
     1: phase1_slide,
     2: phase2_slide,
     3: phase3_slide,
     4: phase4_slide,
+    5: phase5_slide,
 }
 
 

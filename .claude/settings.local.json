@@ -25,7 +25,8 @@
       "Bash(./.venv/bin/python /private/tmp/claude-501/-Users-luxier-difussion-model-music/142c6595-f300-40d8-be44-8905c6d9482b/scratchpad/phase3_gate_probe.py)",
       "Bash(./.venv/bin/python experiments/phase3/run_phase3.py)",
       "Bash(./.venv/bin/python /private/tmp/claude-501/-Users-luxier-difussion-model-music/142c6595-f300-40d8-be44-8905c6d9482b/scratchpad/phase4_gate_probe.py)",
-      "Bash(./.venv/bin/python experiments/phase4/run_phase4.py)"
+      "Bash(./.venv/bin/python experiments/phase4/run_phase4.py)",
+      "Bash(./.venv/bin/python /private/tmp/claude-501/-Users-luxier-difussion-model-music/142c6595-f300-40d8-be44-8905c6d9482b/scratchpad/phase5_gate_probe.py)"
     ]
   }
 }

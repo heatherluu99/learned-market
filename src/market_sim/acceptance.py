@@ -357,6 +357,90 @@ def evaluate_phase4(
     return criteria
 
 
+#: The project's standing materiality margin, in percentage points. Introduced
+#: at Phase 5 and reused verbatim at Phases 7b-7d (ROADMAP.md, "Methodology:
+#: not cumulative - a toolbox, used selectively, with two deliberate reuses").
+MATERIALITY_PP = 5.0
+
+
+def equivalence_verdict(
+    lo: float, hi: float, margin_pp: float = MATERIALITY_PP
+) -> str:
+    """Classify a share-shift CI (in shares, not points) against ±margin.
+
+    Three outcomes, and the third one matters: a comparison can fail to show a
+    material effect *and* fail to rule one out. Reporting that as "no effect"
+    would be claiming a conclusion the data does not support.
+
+    - "equivalent"    - the whole CI lies inside ±margin: a material effect is
+                        ruled out, so the added complexity is not justified.
+    - "material"      - the whole CI lies beyond +margin or below -margin.
+    - "inconclusive"  - the CI straddles a boundary. Neither claim is available
+                        at this sample size.
+    """
+    lo_pp, hi_pp = lo * 100, hi * 100
+    if -margin_pp <= lo_pp and hi_pp <= margin_pp:
+        return "equivalent"
+    if lo_pp > margin_pp or hi_pp < -margin_pp:
+        return "material"
+    return "inconclusive"
+
+
+def share_shift_table(
+    cfg: MarketConfig, variant: list[RunResult], baseline: list[RunResult]
+) -> dict[str, tuple[float, float, float, str]]:
+    """Per tracked class-share metric: (mean shift, CI low, CI high, verdict)."""
+    out = {}
+    for bc in cfg.buyer_classes:
+        for sc in cfg.seller_tier_names():
+            a = np.array([r.tier_share(bc.name, sc) for r in variant])
+            b = np.array([r.tier_share(bc.name, sc) for r in baseline])
+            mean, lo, hi = mean_difference_ci(a, b)
+            out[f"{bc.name}_to_{sc}_share"] = (mean, lo, hi, equivalence_verdict(lo, hi))
+    return out
+
+
+def evaluate_phase5(
+    cfg: MarketConfig, variant: list[RunResult], baseline: list[RunResult], arm: str
+) -> list[CriterionResult]:
+    """Phase 5 acceptance criteria for one nonlinear arm against the linear one.
+
+    The graded requirement is that the comparison be *decisive*, not that it
+    come out either way: this phase exists to decide whether the nonlinearity
+    earns its place, and an inconclusive test decides nothing. Which way a
+    decisive result points - keep the nonlinearity, or roll back to linear -
+    is the finding, not the criterion.
+    """
+    criteria = [_participation_criterion(variant)]
+    table = share_shift_table(cfg, variant, baseline)
+
+    inconclusive = [k for k, v in table.items() if v[3] == "inconclusive"]
+    material = [k for k, v in table.items() if v[3] == "material"]
+    worst = max(table.items(), key=lambda kv: max(abs(kv[1][1]), abs(kv[1][2])))
+    criteria.append(
+        CriterionResult(
+            name=f"{arm}: linear-vs-nonlinear comparison is decisive on every tracked share",
+            passed=not inconclusive,
+            measured=(
+                f"{len(table) - len(inconclusive)}/{len(table)} decisive; widest CI is "
+                f"{worst[0]} at [{worst[1][1] * 100:+.2f}, {worst[1][2] * 100:+.2f}] pp"
+            ),
+            threshold=f"every CI wholly inside or wholly outside ±{MATERIALITY_PP:g} pp",
+            note=(
+                f"inconclusive: {', '.join(inconclusive)}"
+                if inconclusive
+                else (
+                    f"material on {', '.join(material)}"
+                    if material
+                    else "equivalent on every tracked share - the nonlinearity is "
+                    "not justified and the project rolls back to the linear model"
+                )
+            ),
+        )
+    )
+    return criteria
+
+
 def convergence_band(values: np.ndarray) -> float:
     """Convergence tolerance for a metric: one standard error of its mean.
 

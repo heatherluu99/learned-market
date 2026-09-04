@@ -150,10 +150,16 @@ def purchase_probability(
     """
     utility = (
         cfg.intercept
-        + cfg.budget_coef * (budget_remaining - price)
         - price_sensitivity * (price / price_reference)
         + cfg.preference_coef * preference
     )
+    if cfg.use_linear_budget_term:
+        utility += cfg.budget_coef * (budget_remaining - price)
+    # Phase 5: reluctance to spend down to near-nothing, a reference-point
+    # effect the smooth linear term cannot express (Kahneman & Tversky 1979).
+    if cfg.budget_cliff_gap is not None:
+        if (budget_remaining - price) < cfg.budget_cliff_gap:
+            utility -= cfg.budget_cliff_penalty
     return float(sigmoid(utility - cfg.sigmoid_offset))
 
 

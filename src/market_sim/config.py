@@ -78,6 +78,18 @@ class MarketConfig:
     preference_coef: float = 1.5
     sigmoid_offset: float = 2.0
 
+    #: Phase 5: budget-cliff nonlinearity. None disables it entirely (Phases
+    #: 1-4). A float is the gap below which the penalty applies:
+    #: `if (budget_remaining - price) < gap: utility -= penalty`.
+    budget_cliff_gap: float | None = None
+    budget_cliff_penalty: float = 1.0
+    #: Phase 5 "replace" arm. False drops `budget_coef * (budget_remaining -
+    #: price)` from the utility, leaving the cliff as the only channel by which
+    #: remaining budget reaches utility. The spec is self-contradictory about
+    #: whether Phase 5 replaces or augments the linear term, so both readings
+    #: are built and compared rather than one being guessed at.
+    use_linear_budget_term: bool = True
+
     #: Phase 4 onward: probability that some seller is discounted in a run.
     #: 0.0 means no promotion mechanism at all (Phases 1-3).
     promotion_probability: float = 0.0
@@ -146,6 +158,10 @@ class MarketConfig:
     @property
     def has_environment(self) -> bool:
         return any(c.position_score is not None for c in self.seller_classes)
+
+    @property
+    def has_budget_cliff(self) -> bool:
+        return self.budget_cliff_gap is not None
 
     @property
     def has_promotions(self) -> bool:
@@ -345,3 +361,41 @@ PHASE4_FORCED = tuple(
     _phase4(f"phase4_forced_seller{i}", probability=0.0, forced=i)
     for i in range(PHASE3_MAIN.n_sellers)
 )
+
+
+# --------------------------------------------------------------------------
+# Phase 5 — Nonlinear Behavioural Effects
+# --------------------------------------------------------------------------
+
+
+def _phase5(name: str, cliff: float | None, linear_term: bool) -> MarketConfig:
+    """Phase 4's market, varying only how remaining budget enters utility."""
+    return MarketConfig(
+        name=name,
+        phase=5,
+        buyer_classes=PHASE4_MAIN.buyer_classes,
+        seller_classes=PHASE4_MAIN.seller_classes,
+        seeds=PHASE4_MAIN.seeds,
+        promotion_probability=PHASE4_MAIN.promotion_probability,
+        promotion_discount=PHASE4_MAIN.promotion_discount,
+        budget_cliff_gap=cliff,
+        budget_cliff_penalty=1.0,
+        use_linear_budget_term=linear_term,
+    )
+
+
+#: Baseline arm: Phase 4 exactly, no cliff. Named separately from PHASE4_MAIN
+#: so Phase 5's own outputs are self-contained.
+PHASE5_LINEAR = _phase5("phase5_linear", cliff=None, linear_term=True)
+
+#: The additive reading: the smooth linear term stays and the cliff is added
+#: on top. Supported by the mechanism's own rationale - "not captured by the
+#: smooth linear term" presupposes that term still exists.
+PHASE5_ADDITIVE = _phase5("phase5_additive", cliff=0.5, linear_term=True)
+
+#: The replacement reading: the linear budget term is removed and the cliff is
+#: the only route by which remaining budget affects utility. Taken from the
+#: spec's "Single changed dimension" line. Note this changes two things at
+#: once by the project's own accounting, which is part of what the three-way
+#: comparison is meant to expose.
+PHASE5_CLIFF_ONLY = _phase5("phase5_cliff_only", cliff=0.5, linear_term=False)
