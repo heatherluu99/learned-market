@@ -26,7 +26,14 @@
       "Bash(./.venv/bin/python experiments/phase3/run_phase3.py)",
       "Bash(./.venv/bin/python /private/tmp/claude-501/-Users-luxier-difussion-model-music/142c6595-f300-40d8-be44-8905c6d9482b/scratchpad/phase4_gate_probe.py)",
       "Bash(./.venv/bin/python experiments/phase4/run_phase4.py)",
-      "Bash(./.venv/bin/python /private/tmp/claude-501/-Users-luxier-difussion-model-music/142c6595-f300-40d8-be44-8905c6d9482b/scratchpad/phase5_gate_probe.py)"
+      "Bash(./.venv/bin/python /private/tmp/claude-501/-Users-luxier-difussion-model-music/142c6595-f300-40d8-be44-8905c6d9482b/scratchpad/phase5_gate_probe.py)",
+      "Bash(time ./.venv/bin/python /private/tmp/claude-501/-Users-luxier-difussion-model-music/142c6595-f300-40d8-be44-8905c6d9482b/scratchpad/phase6_gate_probe.py)",
+      "Bash(git bundle *)",
+      "Bash(FILTER_BRANCH_SQUELCH_WARNING=1 git filter-branch -f --msg-filter 'sed \"/^Co-Authored-By: Claude/d\" | sed -e :a -e \"/^\\\\n*$/{\\\\$d;N;ba\" -e \"}\"' --tag-name-filter cat -- --all)",
+      "Bash(git stash *)",
+      "Bash(FILTER_BRANCH_SQUELCH_WARNING=1 git filter-branch -f --msg-filter 'sed \"/^Co-Authored-By: Claude/d\"' --tag-name-filter cat -- --all)",
+      "Bash(git add *)",
+      "Bash(git -c 'user.name=Xier Lu' -c user.email=heatherlu99@g.ucla.edu commit -q -m ' *)"
     ]
   }
 }
