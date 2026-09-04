@@ -1,0 +1,14 @@
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Secrets
+.env
+
+# OS
+.DS_Store
+
+# Node (only if a JS toolchain is added later for the Phase 6 visualization)
+node_modules/

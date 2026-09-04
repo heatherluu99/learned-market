@@ -1,0 +1,1081 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>From Choice to Behavior — Synthetic Market Agents</title>
+<style>
+  :root{
+    --bg:#ffffff; --panel:#f6f7f9; --panel-2:#fafafb; --border:#e3e5ea;
+    --text:#1a1d24; --text-2:#5b616e; --text-3:#8b909c;
+    --buyer-low:#3E6FA8; --buyer-high:#B8722E;
+    --stall-low:#1F7A6C; --stall-high:#7A3B69;
+    --agent-accent:#7A5CB8;
+    --keep:#1F7A6C; --reject:#B23A3A;
+    --callout-bg:#EEF0FA; --callout-border:#C9CDEF; --callout-text:#3B3F8C;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    --mono:"SF Mono",SFMono-Regular,Consolas,"Liberation Mono",Menlo,monospace;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0; background:var(--bg); color:var(--text); font-family:var(--sans); font-size:14px;}
+  a{color:inherit;}
+
+  /* ---- header ---- */
+  header{padding:20px 24px 0;}
+  header h1{font-size:26px; font-weight:700; margin:0; letter-spacing:-0.01em;}
+  header .meta{font-family:var(--mono); font-size:12px; color:var(--text-2); background:var(--panel); border:1px solid var(--border); border-radius:6px; padding:5px 12px; white-space:nowrap;}
+  header .top-row{display:flex; align-items:flex-start; justify-content:space-between; gap:16px; flex-wrap:wrap;}
+  header .sub{font-size:14.5px; color:var(--text-2); margin:6px 0 4px; max-width:640px;}
+  header .flow{font-size:12.5px; color:var(--text-3); font-family:var(--mono); margin:0 0 14px;}
+
+  nav.tabs{display:flex; gap:4px; border-bottom:1px solid var(--border); padding:0 24px; flex-wrap:wrap;}
+  nav.tabs button{appearance:none; border:none; background:none; padding:10px 14px; font-size:13px; font-weight:600; color:var(--text-3); cursor:pointer; border-bottom:2px solid transparent; font-family:var(--sans);}
+  nav.tabs button.active{color:var(--text); border-bottom-color:var(--text);}
+  nav.tabs button:hover{color:var(--text);}
+
+  .screen{display:none; padding:20px 24px 40px;}
+  .screen.active{display:block;}
+
+  section.card{background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:14px 16px;}
+  section.card .h{font-size:11.5px; font-weight:700; letter-spacing:0.03em; color:var(--text-2); margin:0 0 8px;}
+  .callout{background:var(--callout-bg); border:1px solid var(--callout-border); border-radius:10px; padding:14px 16px;}
+  .callout .h{font-size:10.5px; font-weight:700; letter-spacing:0.03em; color:var(--callout-text); margin:0 0 6px;}
+  .callout p{margin:0; color:var(--callout-text); font-size:14px; line-height:1.55;}
+
+  /* ---- Screen 1: Simulation ---- */
+  .sim-grid{display:grid; grid-template-columns:1.9fr 1fr; gap:16px; align-items:start;}
+  .sim-left-header{display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; margin-bottom:8px;}
+  .sim-left-header select, .sim-left-header .speedbtns{font-size:12.5px;}
+  .speedbtns{display:flex; gap:2px; background:var(--panel); border:1px solid var(--border); border-radius:6px; overflow:hidden;}
+  .speedbtns button{border:none; background:none; padding:5px 9px; font-size:11.5px; font-family:var(--mono); cursor:pointer; color:var(--text-2);}
+  .speedbtns button.active{background:var(--text); color:#fff;}
+  .legend-strip{display:flex; flex-wrap:wrap; gap:14px; align-items:center; padding:6px 2px 10px; font-size:11.5px; color:var(--text-2);}
+  .legend-dot{display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:4px; vertical-align:-1px;}
+  .legend-sq{display:inline-block; width:8px; height:8px; border-radius:2px; margin-right:4px; vertical-align:-1px;}
+  .canvas-wrap{position:relative; background:var(--panel-2); border:1px solid var(--border); border-radius:10px; width:100%; aspect-ratio:1400/760; overflow:hidden;}
+  #market-canvas{width:100%; height:100%; display:block; cursor:pointer;}
+  .timeline-wrap{margin-top:10px;}
+  .timeline-row{display:flex; align-items:center; gap:10px;}
+  .timeline-row button{width:30px; height:30px; border-radius:50%; border:1px solid var(--border); background:#fff; cursor:pointer;}
+  .week-label{font-family:var(--mono); font-size:13px; font-weight:600; white-space:nowrap;}
+  #week-range{flex:1;}
+  .timeline-ticks{position:relative; height:16px; margin:2px 2px 0; font-size:10px; color:var(--text-3); font-family:var(--mono);}
+  .timeline-ticks span{position:absolute; transform:translateX(-50%);}
+  .timeline-events{position:relative; height:14px; margin:0 2px;}
+  .timeline-events .evt{position:absolute; transform:translateX(-50%); font-size:9.5px; color:var(--reject); white-space:nowrap;}
+  .timeline-events .evt.enter{color:var(--keep);}
+
+  .lens-row{margin-bottom:10px;}
+  .lens-row select{width:100%; font-size:12.5px; padding:6px 8px; border-radius:6px; border:1px solid var(--border); font-family:var(--sans); background:#fff;}
+  .rq-title{font-size:15px; font-weight:700; margin:0 0 6px;}
+  .rq-body{font-size:12.5px; line-height:1.5; margin:0 0 8px;}
+  .rq-tag{font-family:var(--mono); font-size:11px; color:var(--callout-text); opacity:0.85;}
+
+  #inspector-body{font-size:12.5px; color:var(--text-2); line-height:1.5;}
+  #inspector-body .name{color:var(--text); font-weight:700; font-size:13.5px;}
+  #inspector-body .sub{color:var(--text-3); font-size:11.5px; margin-bottom:8px; display:block;}
+  #inspector-body .grp-h{font-size:10px; font-weight:700; letter-spacing:0.04em; color:var(--text-3); margin:10px 0 4px;}
+  #inspector-body table{width:100%; border-collapse:collapse; font-size:12px;}
+  #inspector-body td{padding:2px 0; color:var(--text-2);}
+  #inspector-body td.v{text-align:right; color:var(--text); font-family:var(--mono); font-weight:600;}
+  #inspector-body .factor.pos{color:var(--keep);}
+  #inspector-body .factor.neg{color:var(--reject);}
+  #inspector-body .memline{font-family:var(--mono); font-size:11px; color:var(--text-2);}
+  #inspector-body .traj{font-family:var(--mono); font-size:11.5px; color:var(--text); background:var(--panel); border-radius:6px; padding:6px 8px; margin-top:8px;}
+  #inspector-body .agent-quote{font-style:italic; font-size:12.5px; color:#4A3F63; background:#F4F1FA; border-left:3px solid #7A5CB8; border-radius:0 6px 6px 0; padding:8px 10px; margin-top:2px;}
+
+  .agg-row{display:flex; flex-direction:column; gap:6px; margin-top:4px;}
+  .agg-item{display:flex; align-items:baseline; justify-content:space-between;}
+  .agg-item .lbl{font-size:12.5px; color:var(--text-2);}
+  .agg-item .val{font-family:var(--mono); font-size:18px; font-weight:700;}
+
+  /* ---- Screen 2: Model Evolution ---- */
+  .chapter{display:grid; grid-template-columns:110px 1fr; gap:14px; padding:14px 0; border-bottom:1px solid var(--border);}
+  .chapter:last-child{border-bottom:none;}
+  .chapter .num{font-family:var(--mono); font-size:12px; font-weight:700; color:var(--text-3);}
+  .chapter h3{margin:0 0 4px; font-size:15px;}
+  .chapter .rq{font-size:13px; color:var(--text-2); margin:0 0 8px;}
+  .flowchain{font-family:var(--mono); font-size:12px; color:var(--text-2); background:var(--panel); display:inline-block; padding:6px 10px; border-radius:6px;}
+
+  .gate-diagram{text-align:center; padding:24px 10px;}
+  .gate-diagram .tag{font-size:17px; font-weight:700; margin-bottom:14px;}
+  .gate-diagram .row1{font-family:var(--mono); font-size:13px; color:var(--text-2);}
+  .gate-outcomes{display:flex; justify-content:center; gap:60px; margin-top:16px;}
+  .gate-outcomes .box{padding:10px 18px; border-radius:8px; font-family:var(--mono); font-size:12.5px; font-weight:700;}
+  .gate-outcomes .revert{background:#FBEAEA; color:var(--reject); border:1px solid #E9C6C6;}
+  .gate-outcomes .keep{background:#E8F2EF; color:var(--keep); border:1px solid #C4DED6;}
+
+  .ladder{display:flex; flex-direction:column; align-items:center; gap:4px; padding:10px 0;}
+  .ladder .step{font-family:var(--mono); font-size:13px; background:var(--panel); border:1px solid var(--border); border-radius:8px; padding:8px 16px; font-weight:600;}
+  .ladder .q{font-size:11.5px; color:var(--text-3); font-style:italic;}
+
+  /* ---- Screen 3: Experiment Explorer ---- */
+  .phase-nav{display:flex; flex-wrap:wrap; align-items:center; gap:7px; margin-bottom:16px;}
+  .phase-nav button{font-family:var(--sans); font-size:12.5px; font-weight:600; padding:7px 12px; border-radius:7px; border:1px solid var(--border); background:#fff; cursor:pointer; color:var(--text-2); transition:border-color 0.15s ease;}
+  .phase-nav button:hover{border-color:var(--text-3);}
+  .phase-nav button.active{background:var(--text); color:#fff; border-color:var(--text);}
+  .phase-nav-divider{flex-basis:100%; height:0; font-size:10.5px; font-weight:700; letter-spacing:0.05em; color:var(--text-3); margin:10px 0 2px;}
+  .phase-nav-divider:first-child{margin-top:0;}
+  .explorer-detail{display:grid; grid-template-columns:1fr 1fr; gap:14px;}
+  .explorer-detail .field{margin-bottom:10px;}
+  .explorer-detail .field .k{font-size:10.5px; font-weight:700; letter-spacing:0.03em; color:var(--text-3); margin-bottom:2px;}
+  .explorer-detail .field .v{font-size:13px; color:var(--text);}
+  .decision-badge{display:inline-block; font-family:var(--mono); font-size:11px; font-weight:700; padding:4px 10px; border-radius:5px; margin-top:6px;}
+  .decision-badge.keep{background:#E8F2EF; color:var(--keep);}
+  .decision-badge.reject{background:#FBEAEA; color:var(--reject);}
+  .decision-badge.neutral{background:var(--panel); color:var(--text-2);}
+  @media (max-width:760px){.explorer-detail{grid-template-columns:1fr;}}
+
+  /* ---- Screen 4: Human Fidelity ---- */
+  table.fidelity{width:100%; border-collapse:collapse; font-size:13px; margin-top:10px;}
+  table.fidelity th{text-align:left; font-size:11px; letter-spacing:0.03em; color:var(--text-3); border-bottom:1px solid var(--border); padding:6px 8px;}
+  table.fidelity td{padding:8px; border-bottom:1px solid var(--border); font-family:var(--mono);}
+  table.fidelity td:first-child{font-family:var(--sans);}
+  .fidelity-metrics{display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-top:16px;}
+  .fidelity-metrics .m{background:var(--panel); border-radius:8px; padding:12px 14px;}
+  .fidelity-metrics .m .lbl{font-size:11.5px; color:var(--text-2);}
+  .fidelity-metrics .m .val{font-family:var(--mono); font-size:22px; font-weight:700; margin-top:2px;}
+  .drilldown{display:flex; gap:10px; flex-wrap:wrap; margin-top:16px;}
+  .drilldown select{font-size:12px; padding:5px 8px; border-radius:6px; border:1px solid var(--border);}
+  @media (max-width:760px){.fidelity-metrics{grid-template-columns:1fr;}}
+
+  /* ---- Screen 5: Scale ---- */
+  .refcard{display:flex; gap:16px; flex-wrap:wrap; margin-top:10px;}
+  .refcard .yr{background:var(--panel); border-radius:8px; padding:8px 14px; text-align:center;}
+  .refcard .yr .y{font-size:11px; color:var(--text-3);}
+  .refcard .yr .n{font-family:var(--mono); font-size:18px; font-weight:700;}
+  .disclaimer{font-size:11.5px; color:var(--text-3); font-style:italic; margin-top:10px;}
+  .chart-toggle{display:flex; gap:6px; margin-bottom:8px;}
+  .chart-toggle button{font-size:11.5px; padding:4px 10px; border-radius:6px; border:1px solid var(--border); background:#fff; cursor:pointer; color:var(--text-2);}
+  .chart-toggle button.active{background:var(--text); color:#fff;}
+
+  .footnote{font-size:11.5px; color:var(--text-3); margin-top:6px;}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="top-row">
+    <div>
+      <h1>From Choice to Behavior</h1>
+      <p class="sub">Millbrook Market &mdash; a year-round indoor public market in a fictional mid-size American town. Building and validating synthetic agents through progressively richer market simulations.</p>
+      <p class="flow">Linear Utility &rarr; Context &rarr; Memory &rarr; Policy Learning &rarr; Human Validation</p>
+    </div>
+    <span class="meta">700 Buyers &middot; 25 Stalls &middot; 66 Weeks</span>
+  </div>
+</header>
+
+<nav class="tabs">
+  <button class="tab-btn active" data-screen="simulation">Simulation</button>
+  <button class="tab-btn" data-screen="evolution">Model Evolution</button>
+  <button class="tab-btn" data-screen="explorer">Experiment Explorer</button>
+  <button class="tab-btn" data-screen="fidelity">Human Fidelity</button>
+  <button class="tab-btn" data-screen="scale">Scale &amp; Limitations</button>
+</nav>
+
+<!-- ============ SCREEN 1: SIMULATION ============ -->
+<section class="screen active" id="screen-simulation">
+  <div class="sim-grid">
+    <div>
+      <div class="sim-left-header">
+        <strong style="font-size:14px;">Market Simulation</strong>
+        <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+          <select id="view-by">
+            <option value="class">View by: Buyer Class</option>
+            <option value="tier">View by: Seller Tier</option>
+            <option value="loyalty">View by: Loyalty</option>
+            <option value="mechanism">View by: Decision Mechanism</option>
+          </select>
+          <div class="speedbtns">
+            <button data-speed="0.5">0.5&times;</button>
+            <button data-speed="1" class="active">1&times;</button>
+            <button data-speed="2">2&times;</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="legend-strip" id="legend-strip"></div>
+
+      <div class="canvas-wrap">
+        <canvas id="market-canvas"></canvas>
+      </div>
+
+      <div class="timeline-wrap">
+        <div class="timeline-row">
+          <button id="play-btn" aria-label="Play">&#9654;</button>
+          <button id="prev-btn" aria-label="Previous week">&#9664;</button>
+          <span class="week-label">WEEK <span id="week-num">1</span> / 66</span>
+          <input type="range" id="week-range" min="1" max="66" value="1" step="1">
+          <button id="next-btn" aria-label="Next week">&#9654;</button>
+        </div>
+        <div class="timeline-events" id="timeline-events"></div>
+        <div class="timeline-ticks" id="timeline-ticks"></div>
+      </div>
+    </div>
+
+    <div>
+      <div class="lens-row">
+        <select id="lens-select"></select>
+      </div>
+
+      <section class="callout" style="margin-bottom:14px;">
+        <p class="h">CURRENT RESEARCH QUESTION</p>
+        <p class="rq-title" id="rq-title"></p>
+        <p class="rq-body" id="rq-body"></p>
+        <p class="rq-tag" id="rq-tag"></p>
+      </section>
+
+      <section class="card" style="margin-bottom:14px; background:#fff;">
+        <p class="h">DECISION MECHANISM AT THIS STAGE</p>
+        <p id="mech-note" style="font-size:12.5px; color:var(--text-2); line-height:1.5; margin:0;"></p>
+      </section>
+
+      <section class="card" style="margin-bottom:14px;">
+        <p class="h">AGENT INSPECTOR <span style="font-weight:400; color:var(--text-3); text-transform:none; letter-spacing:0;">(click a buyer or seller)</span></p>
+        <div id="inspector-body">Click any dot (buyer) or square (stall) in the market view to inspect its current state.</div>
+      </section>
+
+      <section class="card">
+        <p class="h">AGGREGATE EVIDENCE</p>
+        <div class="agg-row" id="agg-row"></div>
+      </section>
+    </div>
+  </div>
+</section>
+
+<!-- ============ SCREEN 2: MODEL EVOLUTION ============ -->
+<section class="screen" id="screen-evolution">
+  <section class="callout" style="margin-bottom:20px;">
+    <p class="h">METHODOLOGY</p>
+    <p>The simulation was built as a sequence of falsifiable modeling decisions: each phase introduces one additional mechanism, measures what changes, and retains the added complexity only when the evidence justifies it.</p>
+  </section>
+
+  <section class="card" style="margin-bottom:24px;">
+    <div class="chapter">
+      <div class="num">01</div>
+      <div><h3>Behavior</h3><p class="rq">Can simple preferences reproduce market segmentation?</p><span class="flowchain">Rules &rarr; Linear Utility &rarr; Environment &rarr; Context &rarr; Nonlinearity</span></div>
+    </div>
+    <div class="chapter">
+      <div class="num">02</div>
+      <div><h3>Interaction</h3><p class="rq">What changes when agents remember?</p><span class="flowchain">Memory &rarr; Loyalty &rarr; Entry / Exit &rarr; Emergence</span></div>
+    </div>
+    <div class="chapter">
+      <div class="num">03</div>
+      <div><h3>Learning</h3><p class="rq">How much adaptive policy does the market need?</p><span class="flowchain">Heuristic &rarr; Bandit &rarr; Contextual Bandit &rarr; RL</span></div>
+    </div>
+    <div class="chapter">
+      <div class="num">04</div>
+      <div><h3>Validation</h3><p class="rq">Do synthetic decisions resemble human decisions?</p><span class="flowchain">LLM Agents &rarr; Human Benchmark &rarr; Bias &rarr; Robustness &rarr; Failure</span></div>
+    </div>
+  </section>
+
+  <section class="card" style="margin-bottom:24px;">
+    <p class="h">COMPLEXITY GATE</p>
+    <div class="gate-diagram">
+      <div class="tag">Complexity must earn its place.</div>
+      <div class="row1">Simpler Model &nbsp;&larr;&nbsp; matched comparison &nbsp;&rarr;&nbsp; Richer Model</div>
+      <div class="row1" style="margin-top:6px;">&darr;</div>
+      <div class="row1">Behavioral &Delta;</div>
+      <div class="gate-outcomes">
+        <div class="box revert">not material &rarr; REVERT</div>
+        <div class="box keep">material &rarr; KEEP</div>
+      </div>
+    </div>
+    <p class="footnote">Reused verbatim at Phase 5 and at 7b&rarr;7c&rarr;7d. The specific 5-percentage-point threshold is an engineering decision rule, documented in the Experiment Explorer — it is not presented here as a theoretical claim.</p>
+  </section>
+
+  <section class="card">
+    <p class="h">PHASE 7 — THE LEARNING LADDER</p>
+    <div class="ladder">
+      <div class="step">Fixed Rule</div>
+      <div class="q">&darr;</div>
+      <div class="step">Heuristic Pricing</div>
+      <div class="q">&darr; Does adaptive learning matter?</div>
+      <div class="step">Multi-Armed Bandit</div>
+      <div class="q">&darr; Does context matter?</div>
+      <div class="step">Contextual Bandit</div>
+      <div class="q">&darr; Does long-horizon reward matter?</div>
+      <div class="step">Reinforcement Learning</div>
+    </div>
+    <p class="footnote">Each rung exists because the previous experiment raised the question above it — not because the technique is fashionable.</p>
+  </section>
+</section>
+
+<!-- ============ SCREEN 3: EXPERIMENT EXPLORER ============ -->
+<section class="screen" id="screen-explorer">
+  <div class="phase-nav" id="phase-nav"></div>
+  <section class="card">
+    <div class="explorer-detail" id="explorer-detail"></div>
+  </section>
+</section>
+
+<!-- ============ SCREEN 4: HUMAN FIDELITY ============ -->
+<section class="screen" id="screen-fidelity">
+  <section class="callout" style="margin-bottom:20px;">
+    <p class="h">MANIFESTO</p>
+    <p>A synthetic user should not merely sound human. It should reproduce measurable patterns of human decisions across contexts and time.</p>
+  </section>
+
+  <section class="card">
+    <p class="h">HUMAN VS. AGENT — ILLUSTRATIVE COMPARISON</p>
+    <table class="fidelity">
+      <tr><th>Scenario</th><th>Human</th><th>Agent</th></tr>
+      <tr><td>Choose premium seller</td><td>63%</td><td>59%</td></tr>
+      <tr><td>Enter market</td><td>41%</td><td>47%</td></tr>
+      <tr><td>Respond to promotion</td><td>72%</td><td>69%</td></tr>
+    </table>
+    <p class="footnote">Illustrative example values — Phase 10 has not been run against real human data yet; see Experiment Explorer &middot; Phase 10.</p>
+
+    <div class="fidelity-metrics">
+      <div class="m"><div class="lbl">Jensen&ndash;Shannon Divergence</div><div class="val" id="m-jsd">0.08</div></div>
+      <div class="m"><div class="lbl">Directional Agreement</div><div class="val" id="m-dir">89%</div></div>
+      <div class="m"><div class="lbl">Held-out Error</div><div class="val" id="m-err">6.4%</div></div>
+    </div>
+
+    <div class="drilldown">
+      <select id="dd-model"><option>Model: GPT family</option><option>Model: Claude family</option></select>
+      <select id="dd-demo"><option>Demographic: Poor</option><option>Demographic: Middle</option><option>Demographic: Rich</option></select>
+    </div>
+    <p class="footnote">Drill-downs recompute the three metrics above from a small illustrative lookup table — see Phase 11 (Bias Calibration), Phase 12 (Variance Decomposition), and Phase 13 (Prompt Sensitivity) in the Experiment Explorer for the underlying methodology.</p>
+  </section>
+</section>
+
+<!-- ============ SCREEN 5: SCALE & LIMITATIONS ============ -->
+<section class="screen" id="screen-scale">
+  <section class="callout" style="margin-bottom:20px;">
+    <p class="h">RESEARCH QUESTION</p>
+    <p>Do the learned dynamics persist at realistic scale? The final run scales the same mechanisms to approximately 700 buyers and 25 stalls without introducing new behavioral rules.</p>
+  </section>
+
+  <section class="card" style="margin-bottom:20px;">
+    <p class="h">SIMULATION TRAJECTORY (WEEK 1 &rarr; 66)</p>
+    <div class="chart-toggle" id="scale-toggle">
+      <button data-series="stalls" class="active">Active Stalls</button>
+      <button data-series="participation">Participation Rate</button>
+      <button data-series="stability">Pair Stability</button>
+    </div>
+    <svg id="scale-chart" viewBox="0 0 900 220" width="100%" height="220"></svg>
+  </section>
+
+  <section class="card">
+    <p class="h">EXTERNAL REFERENCE — RI DEM REAL FARMERS-MARKET VENDOR COUNTS</p>
+    <div class="refcard">
+      <div class="yr"><div class="y">2019</div><div class="n">24</div></div>
+      <div class="yr"><div class="y">2020</div><div class="n">31</div></div>
+      <div class="yr"><div class="y">2021</div><div class="n">25</div></div>
+      <div class="yr"><div class="y">2022</div><div class="n">24</div></div>
+      <div class="yr"><div class="y">2023</div><div class="n">26</div></div>
+    </div>
+    <p class="disclaimer">External plausibility check &mdash; not a year-by-year prediction and not a formal hypothesis test.</p>
+  </section>
+</section>
+
+<script>
+/* ============================================================
+   DATA MODEL — stalls, buyers, weekly assignments, seller economics
+   ============================================================ */
+function mulberry32(a){
+  return function(){
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+const rng = mulberry32(7);
+
+const TOTAL_WEEKS = 66;
+const SEASON_LEN = 22;
+const CANVAS_W = 1400, CANVAS_H = 760;
+
+const STALLS = [];
+function addStall(id, cls, enter, exit){ STALLS.push({id, cls, enter, exit, x:0, y:0}); }
+for (let i = 1; i <= 15; i++) addStall("S" + i, "low", 1, i === 7 ? 40 : null);
+addStall("S16", "low", 23, null);
+for (let i = 1; i <= 10; i++) addStall("H" + i, "high", 1, i === 5 ? 20 : null);
+addStall("H11", "high", 45, null);
+STALLS.forEach(function(s){ s.x = 70 + rng() * (CANVAS_W - 140); s.y = 70 + rng() * (CANVAS_H - 140); });
+
+function stallById(id){ return STALLS.find(function(s){ return s.id === id; }); }
+function activeStallsAt(week){ return STALLS.filter(function(s){ return week >= s.enter && (s.exit === null || week < s.exit); }).map(function(s){ return s.id; }); }
+function classStallsAt(cls, activeIds){ return STALLS.filter(function(s){ return s.cls === cls && activeIds.indexOf(s.id) !== -1; }).map(function(s){ return s.id; }); }
+
+function stallsForBuyerClass(cls, activeIds){
+  if (cls === "poor") return classStallsAt("low", activeIds);
+  if (cls === "rich") return classStallsAt("high", activeIds);
+  return activeIds.slice(); // middle class: not restricted to one tier
+}
+
+const N_POOR = 490, N_MIDDLE = 140, N_RICH = 70; // 7:2:1 ratio at 700-buyer scale
+const CLASS_LABEL = {poor:"Poor buyer", middle:"Middle-class buyer", rich:"Rich buyer"};
+const buyers = [];
+function pickPreferences(cls, r){
+  const levels = ["Low","Medium","High"];
+  function weighted(arr){ const x = r(); let acc=0; for (let i=0;i<arr.length;i++){ acc+=arr[i]; if (x<acc) return levels[i]; } return levels[levels.length-1]; }
+  const priceSensBias = cls === "poor" ? [0.1,0.2,0.7] : cls === "rich" ? [0.6,0.3,0.1] : [0.3,0.4,0.3];
+  const premiumBias = cls === "poor" ? [0.65,0.25,0.1] : cls === "rich" ? [0.1,0.25,0.65] : [0.3,0.4,0.3];
+  return {
+    priceSensitivity: weighted(priceSensBias),
+    premiumPreference: weighted(premiumBias),
+    distanceSensitivity: levels[Math.floor(r()*3)],
+    promotionResponse: levels[Math.floor(r()*3)]
+  };
+}
+function entrantForClass(cls){
+  if (cls === "poor") return "S16";
+  if (cls === "rich") return "H11";
+  return rng() < 0.5 ? "S16" : "H11";
+}
+function makeBuyer(idPrefix, i, cls, participationRate, budgetBase, budgetRange){
+  const opts = cls === "poor" ? STALLS.filter(function(s){return s.cls==="low" && s.enter===1;}).map(function(s){return s.id;})
+             : cls === "rich" ? STALLS.filter(function(s){return s.cls==="high" && s.enter===1;}).map(function(s){return s.id;})
+             : STALLS.filter(function(s){return s.enter===1;}).map(function(s){return s.id;});
+  return {
+    id: idPrefix+(i+1), cls: cls,
+    pref: opts[Math.floor(rng()*opts.length)],
+    fallback: opts[Math.floor(rng()*opts.length)],
+    entrantPref: entrantForClass(cls),
+    prefersNewEntrant: rng()<0.4,
+    participationRate: participationRate,
+    mech: rng()<0.3 ? "agent" : "rule",
+    budget: budgetBase + Math.floor(rng()*budgetRange),
+    prefs: pickPreferences(cls, rng)
+  };
+}
+for (let i = 0; i < N_POOR; i++) buyers.push(makeBuyer("P", i, "poor", 0.85, 15, 15));
+for (let i = 0; i < N_MIDDLE; i++) buyers.push(makeBuyer("M", i, "middle", 0.84, 35, 25));
+for (let i = 0; i < N_RICH; i++) buyers.push(makeBuyer("R", i, "rich", 0.82, 70, 50));
+
+const assignments = [];
+for (let w = 1; w <= TOTAL_WEEKS; w++){
+  const active = activeStallsAt(w);
+  const seasonWeek = ((w-1) % SEASON_LEN) + 1;
+  const loyalty = Math.min(0.92, 0.35 + (seasonWeek-1)*0.03);
+  const map = {};
+  buyers.forEach(function(b){
+    if (rng() > b.participationRate){ map[b.id] = null; return; }
+    const classActive = stallsForBuyerClass(b.cls, active);
+    let preferred = b.pref;
+    if (b.prefersNewEntrant && classActive.indexOf(b.entrantPref) !== -1) preferred = b.entrantPref;
+    if (classActive.indexOf(preferred) === -1) preferred = b.fallback;
+    if (classActive.indexOf(preferred) === -1) preferred = classActive[Math.floor(rng()*classActive.length)];
+    let chosen;
+    if (w === 1) chosen = classActive[Math.floor(rng()*classActive.length)];
+    else if (rng() < loyalty) chosen = preferred;
+    else chosen = classActive[Math.floor(rng()*classActive.length)];
+    map[b.id] = chosen;
+  });
+  assignments.push(map);
+}
+
+function streakAt(buyerId, weekIdx){
+  const cur = assignments[weekIdx][buyerId];
+  if (cur === null) return 0;
+  let s = 1;
+  for (let i = weekIdx-1; i>=0; i--){ const v = assignments[i][buyerId]; if (v===null) continue; if (v===cur) s++; else break; }
+  return s;
+}
+function trajectoryAt(buyerId, weekIdx, span){
+  const out = [];
+  for (let i = Math.max(0, weekIdx-span+1); i <= weekIdx; i++){ out.push(assignments[i][buyerId]); }
+  return out;
+}
+
+const CAPACITY = {low:28, high:18};
+const UNIT_COST = {low:4.5, high:10};
+const BASE_PRICE = {low:8, high:18};
+const PRICE_BOUNDS = {low:[5,14], high:[12,28]};
+const sellerWeekly = {};
+STALLS.forEach(function(s){ sellerWeekly[s.id] = []; });
+for (let idx = 0; idx < TOTAL_WEEKS; idx++){
+  const w = idx+1;
+  const active = activeStallsAt(w);
+  const demandCount = {}, mixPoor = {}, mixMiddle = {}, mixRich = {};
+  active.forEach(function(id){ demandCount[id]=0; mixPoor[id]=0; mixMiddle[id]=0; mixRich[id]=0; });
+  let totalParticipating = 0;
+  buyers.forEach(function(b){
+    const s = assignments[idx][b.id];
+    if (s === null) return;
+    totalParticipating++;
+    demandCount[s] = (demandCount[s]||0)+1;
+    if (b.cls==="poor") mixPoor[s]=(mixPoor[s]||0)+1; else if (b.cls==="rich") mixRich[s]=(mixRich[s]||0)+1; else mixMiddle[s]=(mixMiddle[s]||0)+1;
+  });
+  STALLS.forEach(function(s){
+    if (active.indexOf(s.id) === -1) return;
+    const prev = sellerWeekly[s.id][sellerWeekly[s.id].length-1];
+    let price = prev ? prev.price : BASE_PRICE[s.cls];
+    if (prev){
+      const cap = CAPACITY[s.cls];
+      if (prev.demand >= cap) price *= 1.05; else if (prev.demand < cap*0.5) price *= 0.95;
+      price = Math.max(PRICE_BOUNDS[s.cls][0], Math.min(PRICE_BOUNDS[s.cls][1], price));
+    }
+    const demand = demandCount[s.id]||0, cap = CAPACITY[s.cls];
+    const unitsSold = Math.min(demand, cap);
+    const revenue = unitsSold*price, cost = unitsSold*UNIT_COST[s.cls]+15, profit = revenue-cost;
+    const mixTotal = (mixPoor[s.id]||0)+(mixMiddle[s.id]||0)+(mixRich[s.id]||0);
+    sellerWeekly[s.id].push({ week:w, price:price, demand:demand, unitsSold:unitsSold, revenue:revenue, cost:cost, profit:profit,
+      inventoryRemaining:cap-unitsSold, capacity:cap, marketShare: totalParticipating?unitsSold/totalParticipating:0,
+      mixPoorPct: mixTotal?mixPoor[s.id]/mixTotal:0, mixMiddlePct: mixTotal?mixMiddle[s.id]/mixTotal:0, mixRichPct: mixTotal?mixRich[s.id]/mixTotal:0 });
+  });
+}
+
+const metricStability=[], metricStalls=[], metricParticipation=[];
+for (let idx=0; idx<TOTAL_WEEKS; idx++){
+  const w = idx+1, active = activeStallsAt(w);
+  const participating = buyers.filter(function(b){return assignments[idx][b.id]!==null;});
+  metricStalls.push(active.length);
+  metricParticipation.push(participating.length/buyers.length);
+  if (idx===0){ metricStability.push(0); continue; }
+  let bothIn=0, same=0;
+  buyers.forEach(function(b){ const cur=assignments[idx][b.id], prv=assignments[idx-1][b.id]; if(cur!==null&&prv!==null){bothIn++; if(cur===prv)same++;} });
+  metricStability.push(bothIn?same/bothIn:0);
+}
+
+const ENTRY_EVENTS = [{week:23, label:"S16 enters"}, {week:45, label:"H11 enters"}];
+const EXIT_EVENTS = [{week:20, label:"H5 exits"}, {week:40, label:"S7 exits"}];
+
+/* ============================================================
+   LENS / RESEARCH QUESTION CONTENT (Screen 1 right column)
+   ============================================================ */
+const LENSES = [
+  {id:"p6", label:"Phase 6 · Memory", title:"Does memory change behavior?",
+   body:"When buyers remember previous purchases, do repeated interactions produce stable buyer\u2013seller relationships that do not emerge from static preferences alone?",
+   baseline:"Static Choice", treatment:"+ Persistent State", metric:"stability",
+   mechNote:"All buyers are rule-based here \u2014 a fixed formula, not a model, decides every purchase. Introducing anything model-driven before the underlying mechanics (heterogeneity, environment, memory) are validated on their own would make it impossible to tell which change caused any given result."},
+  {id:"p7", label:"Phase 7 · Learning", title:"How much adaptive pricing does the market need?",
+   body:"Does seller-side learning (heuristic \u2192 bandit \u2192 contextual bandit \u2192 RL) change profit or participation enough to justify its added complexity?",
+   baseline:"Fixed Price", treatment:"+ Adaptive Pricing", metric:"profit",
+   mechNote:"Buyers stay rule-based here too \u2014 it's the seller's pricing that starts learning in this phase, not the buyer's decision process. The two sides of the market are varied one at a time, same as everywhere else in this project."},
+  {id:"p8", label:"Phase 8 · Emergence", title:"Does structure emerge without being encoded?",
+   body:"With entry/exit rules that never reference buyer class, does the market nonetheless sort into a stable, class-correlated structure?",
+   baseline:"Fixed Seller Set", treatment:"+ Entry / Exit", metric:"stalls",
+   mechNote:"Still entirely rule-based on the buyer side. Emergence is being tested precisely because nothing here \u2014 including how buyers decide \u2014 has any model-based reasoning that could quietly encode the effect being looked for."},
+  {id:"p9", label:"Phase 9 · LLM Agents", title:"What does an LLM agent add over a rule?",
+   body:"For the 30% of buyers whose decisions come from an LLM instead of a formula, does the resulting behavior diverge from the rule-based majority \u2014 and at what cost and latency?",
+   baseline:"Rule-Based Decision", treatment:"+ LLM Agent Decision", metric:"participation",
+   mechNote:"LLM agents are introduced here \u2014 deliberately for only 30% of buyers, not all of them. The other 70% stay rule-based on purpose, so both mechanisms run side by side in the exact same market and can be compared directly, rather than replacing the baseline entirely and losing any point of comparison."}
+];
+let currentLens = LENSES[0];
+
+/* ============================================================
+   EXPERIMENT EXPLORER CONTENT (Screen 3)
+   ============================================================ */
+const PHASES = [
+  {id:"01", nav:"Phase 1 — Rules", rq:"Do buyers purchase, do sellers sell, and does inventory constrain sales?",
+   iv:"None \u2014 seed is the only source of variation", dv:"Participation rate, revenue, inventory remaining",
+   baseline:"\u2014", treatment:"\u2014", comparison:"30-seed running-mean convergence + hard invariant checks",
+   metric:"Participation rate in 0.6\u20131.0", result:"Participation \u2248 0.78 across seeds (illustrative)", decision:"VALIDATED", tone:"neutral"},
+  {id:"02", nav:"Phase 2 — Linear Utility", rq:"Does buyer heterogeneity alone produce class-based sorting?",
+   iv:"Buyer class (Poor / Middle / Rich, 7:2:1)", dv:"Class-to-stall share",
+   baseline:"Homogeneous buyers (Phase 1)", treatment:"Heterogeneous L/H buyers", comparison:"Phase 1 vs. Phase 2, same seeds",
+   metric:"L\u2192low-price share \u00f7 L\u2192premium share", result:"\u2248 2.6\u00d7 (illustrative)", decision:"KEPT", tone:"keep"},
+  {id:"03", nav:"Phase 3 — Environment", rq:"Does stall visibility change purchase distribution?",
+   iv:"Stall position \u2192 visibility probability (Huff gravity model)", dv:"Per-stall sales volume",
+   baseline:"Phase 2 (no visibility effect)", treatment:"+ position-based visibility", comparison:"Near- vs. far-stall sales, equal price tier",
+   metric:"Sales ratio, near vs. far", result:"\u2248 1.4\u00d7 (illustrative)", decision:"KEPT", tone:"keep"},
+  {id:"04", nav:"Phase 4 — Promotion", rq:"Does a temporary promotion shift demand?",
+   iv:"Promotion active (0/1) \u00d7 buyer class", dv:"Promoted stall's weekly sales",
+   baseline:"No promotion", treatment:"30% discount, 20% of weeks", comparison:"Promotion-on vs. promotion-off weeks",
+   metric:"Percentage-point sales lift", result:"+18pp, stronger for low-budget buyers (illustrative)", decision:"KEPT", tone:"keep"},
+  {id:"05", nav:"Phase 5 — Nonlinearity", rq:"Does nonlinear behavior add explanatory value?",
+   iv:"Linear utility vs. + budget-exhaustion threshold penalty", dv:"Buyer-class \u00d7 seller-tier shopping shares",
+   baseline:"Linear utility", treatment:"+ nonlinear threshold penalty", comparison:"Same-seed matched runs",
+   metric:"Percentage-point difference vs. linear", result:"3.2pp (illustrative) \u2014 below the 5pp bar", decision:"NONLINEARITY REJECTED", tone:"reject"},
+  {id:"06", nav:"Phase 6 — Memory", rq:"Does buyer memory produce stable buyer\u2013seller relationships?",
+   iv:"Week (time) \u00d7 last stall (memory state)", dv:"Buyer\u2013seller pair-stability trajectory",
+   baseline:"Static choice", treatment:"+ persistent state + loyalty bonus", comparison:"Trajectory over 1 season (22 weeks)",
+   metric:"Stability at plateau", result:"Plateaus \u2248 0.85 by week \u224816 (illustrative)", decision:"KEPT", tone:"keep"},
+  {id:"07a", nav:"Phase 7a — Heuristic", rq:"Does simple adaptive pricing beat a fixed price?",
+   iv:"Fixed price vs. moving-average heuristic", dv:"Profit, participation, class shares (3 seasons)",
+   baseline:"Fixed price (Phase 6)", treatment:"Moving-average heuristic", comparison:"3 seasons, same seeds",
+   metric:"Percentage-point difference", result:"Establishes the baseline for the learning ladder", decision:"KEPT (baseline)", tone:"keep"},
+  {id:"07b", nav:"Phase 7b — Bandit", rq:"Does trial-and-error pricing beat the heuristic?",
+   iv:"7a heuristic vs. multi-armed bandit", dv:"Same as 7a", baseline:"7a", treatment:"Multi-armed bandit",
+   comparison:"vs. 7a, same 5pp threshold test", metric:"Percentage-point difference", result:"2.1pp (illustrative) \u2014 below the bar", decision:"REJECTED", tone:"reject"},
+  {id:"07c", nav:"Phase 7c — Contextual Bandit", rq:"Does a learned market-state representation help?",
+   iv:"Learned embedding vs. hand-designed features", dv:"Same as 7a", baseline:"7b", treatment:"Contextual bandit (learned vs. hand-designed context)",
+   comparison:"7b vs. 7c-learned vs. 7c-hand-designed", metric:"Percentage-point difference", result:"Learned representation \u2248 hand-designed (illustrative) \u2014 no clear edge", decision:"REJECTED", tone:"reject"},
+  {id:"07d", nav:"Phase 7d — RL", rq:"Does long-horizon reward change pricing behavior?",
+   iv:"Single-week vs. cumulative multi-week reward", dv:"Same as 7a, plus a loyalty-sacrifice trajectory signature",
+   baseline:"7a", treatment:"Reinforcement learning", comparison:"vs. 7a", metric:"Percentage-point difference + qualitative pattern",
+   result:"1.4pp, no clear sacrifice-then-recover pattern (illustrative)", decision:"REJECTED \u2014 7a heuristic stands", tone:"reject"},
+  {id:"08", nav:"Phase 8 — Emergence", rq:"Does stratification emerge without being encoded anywhere?",
+   iv:"None \u2014 observed evolution across seasons", dv:"Active sellers per class, season to season",
+   baseline:"\u2014", treatment:"\u2014", comparison:"vs. real RI DEM 2019\u20132023 vendor counts",
+   metric:"Season-to-season volatility", result:"Simulated volatility within the real range (illustrative)", decision:"PLAUSIBLE", tone:"keep"},
+  {id:"09", nav:"Phase 9 — LLM", rq:"What does an LLM agent add over the rule-based baseline?",
+   iv:"Decision mechanism (rule vs. agent), 30% subset", dv:"Choice distribution, API cost, latency",
+   baseline:"Rule-based decision", treatment:"LLM agent decision (30% of buyers)", comparison:"Agent subgroup vs. rule subgroup, same run",
+   metric:"Cost/speed ratio vs. human baseline", result:"\u2248 2,000\u00d7 cheaper, \u2248 300\u00d7 faster (illustrative)", decision:"SCAFFOLDING VALIDATED", tone:"keep"},
+  {id:"10", nav:"Phase 10 — Human Benchmark", rq:"Where does synthetic behavior match or diverge from real humans?",
+   iv:"Data source (N=100 agent responses vs. published human benchmark)", dv:"Per-scenario choice distribution",
+   baseline:"Published human data", treatment:"Agent-generated responses", comparison:"Distributional comparison per scenario",
+   metric:"Jensen\u2013Shannon divergence", result:"JS \u2248 0.08 (illustrative)", decision:"ASSET A: FIRST ROW LOGGED", tone:"keep"},
+  {id:"11", nav:"Phase 11 — Bias Calibration", rq:"Is the human\u2013agent gap systematic and correctable?",
+   iv:"Category \u00d7 demographic \u00d7 context \u00d7 model (four-way grid)", dv:"Gap magnitude and direction",
+   baseline:"Uncorrected agent output", treatment:"Bias-corrected output", comparison:"Held-out subset never used to fit the correction",
+   metric:"Held-out error reduction", result:"\u2248 35% error reduction in correctable cells (illustrative)", decision:"CORRECTABLE (SOME CELLS)", tone:"keep"},
+  {id:"12", nav:"Phase 12 — Variance Decomposition", rq:"Do different foundation models disagree?",
+   iv:"Model family, seed, prompt, environment", dv:"Output distribution across repeated scenarios",
+   baseline:"\u2014", treatment:"\u2014", comparison:"ANOVA-style variance decomposition",
+   metric:"% of variance explained per factor", result:"Model family explains the largest share (illustrative)", decision:"MODEL CHOICE MATTERS", tone:"neutral"},
+  {id:"13", nav:"Phase 13 — Prompt Sensitivity", rq:"How much does prompt wording alone change outcomes?",
+   iv:"Wording / ordering variants of the same scenario", dv:"Choice distribution per variant",
+   baseline:"Canonical prompt", treatment:"Reworded / reordered prompt", comparison:"Dispersion across variants",
+   metric:"Context Sensitivity Score", result:"Moderate sensitivity (illustrative)", decision:"FLAGGED FOR MONITORING", tone:"neutral"},
+  {id:"14", nav:"Phase 14 — Failure Probability", rq:"When does model error become large enough to flip a decision?",
+   iv:"Decision type \u00d7 model \u00d7 context", dv:"Major decision error (binary)",
+   baseline:"\u2014", treatment:"\u2014", comparison:"Binomial proportion estimate, n\u2248385 for \u00b15pp at 95% CI",
+   metric:"P(major decision error)", result:"Varies by decision type (illustrative)", decision:"RELIABILITY TABLE PRODUCED", tone:"neutral"},
+  {id:"15", nav:"Phase 15 — Scale", rq:"Do the learned dynamics persist at realistic scale?",
+   iv:"Test scale vs. \u2248700:25 real-market scale", dv:"Seller survival, participation, pair stability",
+   baseline:"Small mechanism-testing population", treatment:"Full reference-scale population", comparison:"vs. real RI DEM figures",
+   metric:"Plausibility of trajectory vs. real range", result:"Falls within a plausible range (illustrative)", decision:"PLAUSIBILITY CHECK PASSED", tone:"keep"}
+];
+let currentPhase = PHASES[5]; // default to 06 Memory to match Screen 1's default lens
+
+/* ============================================================
+   SCREEN NAV
+   ============================================================ */
+document.querySelectorAll(".tab-btn").forEach(function(btn){
+  btn.addEventListener("click", function(){
+    document.querySelectorAll(".tab-btn").forEach(function(b){ b.classList.remove("active"); });
+    document.querySelectorAll(".screen").forEach(function(s){ s.classList.remove("active"); });
+    btn.classList.add("active");
+    document.getElementById("screen-" + btn.getAttribute("data-screen")).classList.add("active");
+  });
+});
+/* ============================================================
+   SCREEN 1 — CANVAS SIMULATION ENGINE
+   ============================================================ */
+const canvas = document.getElementById("market-canvas");
+const ctx = canvas.getContext("2d");
+let currentWeekIdx = 0;
+let selected = null; // {type:'buyer'|'stall', id}
+let viewBy = "class";
+let speedMult = 1;
+let playing = false, playTimer = null;
+
+function resizeCanvas(){
+  const rect = canvas.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = rect.width * dpr;
+  canvas.height = rect.height * dpr;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+window.addEventListener("resize", resizeCanvas);
+
+function toCanvasX(vx){ return (vx / CANVAS_W) * canvas.getBoundingClientRect().width; }
+function toCanvasY(vy){ return (vy / CANVAS_H) * canvas.getBoundingClientRect().height; }
+
+buyers.forEach(function(b){
+  b.px = 80 + Math.random()*(CANVAS_W-160);
+  b.py = 80 + Math.random()*(CANVAS_H-160);
+  b.targetX = b.px; b.targetY = b.py;
+  b.nextRetarget = 0;
+  b.alpha = 0;
+});
+
+function pickTarget(b){
+  const week = currentWeekIdx + 1;
+  const active = activeStallsAt(week);
+  const home = assignments[currentWeekIdx][b.id];
+  const classActive = stallsForBuyerClass(b.cls, active);
+  const r = Math.random();
+  let targetStallId = null;
+  if (home && r < 0.55) targetStallId = home;
+  else if (classActive.length && r < 0.9) targetStallId = classActive[Math.floor(Math.random()*classActive.length)];
+  if (targetStallId){
+    const s = stallById(targetStallId);
+    const j = 30;
+    return {x: s.x + (Math.random()-0.5)*j*2, y: s.y + (Math.random()-0.5)*j*2};
+  }
+  return {x: 60+Math.random()*(CANVAS_W-120), y: 60+Math.random()*(CANVAS_H-120)};
+}
+
+function loyaltyColor(streak){
+  const t = Math.max(0, Math.min(1, streak/15));
+  const hue = 220 - t*190; // 220 (blue) -> 30 (orange)
+  return "hsl(" + hue.toFixed(0) + ",55%,48%)";
+}
+
+function colorForBuyer(b, weekIdx){
+  if (viewBy === "class") return b.cls === "poor" ? "#3E6FA8" : b.cls === "rich" ? "#B8722E" : "#5C8A6B";
+  if (viewBy === "mechanism") return b.mech === "agent" ? "#7A5CB8" : "#9AA0AC";
+  if (viewBy === "loyalty") return loyaltyColor(streakAt(b.id, weekIdx));
+  if (viewBy === "tier"){
+    const s = assignments[weekIdx][b.id];
+    if (!s) return "#c7cbd3";
+    return stallById(s).cls === "low" ? "#1F7A6C" : "#7A3B69";
+  }
+  return "#3E6FA8";
+}
+
+let lastFrame = null;
+function animate(ts){
+  if (lastFrame === null) lastFrame = ts;
+  const dt = Math.min(0.06, (ts-lastFrame)/1000);
+  lastFrame = ts;
+  const speed = 24;
+
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = rect.width / CANVAS_W, scaleY = rect.height / CANVAS_H;
+
+  ctx.clearRect(0,0,rect.width,rect.height);
+
+  // stalls
+  const active = activeStallsAt(currentWeekIdx+1);
+  STALLS.forEach(function(s){
+    const isActive = active.indexOf(s.id) !== -1;
+    if (!s.drawAlpha) s.drawAlpha = 0;
+    s.drawAlpha += ((isActive?1:0) - s.drawAlpha) * 0.08;
+    if (s.drawAlpha < 0.02) return;
+    ctx.globalAlpha = s.drawAlpha;
+    ctx.fillStyle = s.cls === "low" ? "#1F7A6C" : "#7A3B69";
+    const w = 16, h = 16;
+    const cx = s.x*scaleX, cy = s.y*scaleY;
+    ctx.fillRect(cx-w/2, cy-h/2, w, h);
+    if (selected && selected.type==="stall" && selected.id===s.id){
+      ctx.strokeStyle = "#1a1d24"; ctx.lineWidth = 2;
+      ctx.strokeRect(cx-w/2-3, cy-h/2-3, w+6, h+6);
+    }
+    ctx.fillStyle = "#fff"; ctx.font = "8px monospace"; ctx.textAlign = "center"; ctx.textBaseline="middle";
+    ctx.fillText(s.id, cx, cy+0.5);
+  });
+  ctx.globalAlpha = 1;
+
+  // buyers
+  buyers.forEach(function(b){
+    if (ts > b.nextRetarget){
+      const t = pickTarget(b);
+      b.targetX = t.x; b.targetY = t.y;
+      b.nextRetarget = ts + 2500 + Math.random()*4000;
+    }
+    const dx = b.targetX-b.px, dy = b.targetY-b.py;
+    const dist = Math.sqrt(dx*dx+dy*dy) || 1;
+    const step = Math.min(dist, speed*speedMult*dt);
+    b.px += (dx/dist)*step; b.py += (dy/dist)*step;
+
+    const participates = assignments[currentWeekIdx][b.id] !== null;
+    const targetAlpha = participates ? 1 : 0;
+    b.alpha += (targetAlpha - b.alpha) * 0.08;
+    if (b.alpha < 0.03) return;
+
+    ctx.globalAlpha = b.alpha;
+    ctx.fillStyle = colorForBuyer(b, currentWeekIdx);
+    const cx = b.px*scaleX, cy = b.py*scaleY;
+    ctx.beginPath(); ctx.arc(cx, cy, selected && selected.type==="buyer" && selected.id===b.id ? 5.5 : 3.5, 0, Math.PI*2); ctx.fill();
+    if (selected && selected.type==="buyer" && selected.id===b.id){
+      ctx.strokeStyle = "#1a1d24"; ctx.lineWidth = 1.5; ctx.stroke();
+    }
+  });
+  ctx.globalAlpha = 1;
+
+  // trajectory overlay
+  if (selected && selected.type === "buyer"){
+    const traj = trajectoryAt(selected.id, currentWeekIdx, 6).filter(function(s){return s!==null;});
+    if (traj.length > 1){
+      ctx.lineWidth = 1.5;
+      for (let i=1;i<traj.length;i++){
+        const a = stallById(traj[i-1]), c = stallById(traj[i]);
+        ctx.strokeStyle = "rgba(26,29,36," + (0.15 + 0.6*(i/traj.length)).toFixed(2) + ")";
+        ctx.beginPath(); ctx.moveTo(a.x*scaleX, a.y*scaleY); ctx.lineTo(c.x*scaleX, c.y*scaleY); ctx.stroke();
+      }
+    }
+  }
+
+  requestAnimationFrame(animate);
+}
+
+canvas.addEventListener("click", function(e){
+  const rect = canvas.getBoundingClientRect();
+  const vx = (e.clientX-rect.left)/rect.width*CANVAS_W;
+  const vy = (e.clientY-rect.top)/rect.height*CANVAS_H;
+  let hitStall = null;
+  activeStallsAt(currentWeekIdx+1).forEach(function(id){
+    const s = stallById(id);
+    if (Math.abs(s.x-vx) < 14 && Math.abs(s.y-vy) < 14) hitStall = id;
+  });
+  if (hitStall){ selected = {type:"stall", id:hitStall}; renderInspector(); return; }
+  let hitBuyer = null, best = 18;
+  buyers.forEach(function(b){
+    if (b.alpha < 0.3) return;
+    const d = Math.sqrt((b.px-vx)*(b.px-vx)+(b.py-vy)*(b.py-vy));
+    if (d < best){ best = d; hitBuyer = b.id; }
+  });
+  if (hitBuyer){ selected = {type:"buyer", id:hitBuyer}; renderInspector(); }
+});
+
+/* ---- inspector ---- */
+function agentReasoning(b, stallId, streak){
+  if (!stallId) return "Decided not to shop this week \u2014 nothing on offer justified the trip given the budget on hand.";
+  if (streak >= 5) return "I keep coming back to " + stallId + " \u2014 it fits my budget and I already know what to expect, so there's no real reason to look elsewhere.";
+  if (streak >= 2) return "Sticking with " + stallId + " again this week. It worked out last time, and there's no strong reason to spend time comparing other options right now.";
+  if (b.cls === "rich") return "Went with " + stallId + " this time \u2014 the selection was worth it, and price wasn't really the deciding factor.";
+  if (b.cls === "poor") return "Chose " + stallId + " because it kept me comfortably within budget this week.";
+  return "Tried " + stallId + " this time \u2014 wanted to see if it was a better fit than my usual option.";
+}
+
+function renderInspector(){
+  const el = document.getElementById("inspector-body");
+  if (!selected){ el.innerHTML = "Click any dot (buyer) or square (stall) in the market view to inspect its current state."; return; }
+  if (selected.type === "buyer"){
+    const b = buyers.find(function(x){return x.id===selected.id;});
+    const stallId = assignments[currentWeekIdx][b.id];
+    const streak = streakAt(b.id, currentWeekIdx);
+    const traj = trajectoryAt(b.id, currentWeekIdx, 5);
+    const remaining = stallId ? Math.max(0, b.budget - sellerWeekly[stallId][currentWeekIdx].price) : b.budget;
+    let factors = [];
+    if (stallId){
+      factors.push(["+", b.cls==="poor" ? "Low price" : b.cls==="rich" ? "Preferred tier match" : "Reasonable trade-off"]);
+      if (streak > 1) factors.push(["+", "Previous purchase"]);
+      if (streak >= 3) factors.push(["+", "Loyalty bonus"]);
+      if (b.prefs.distanceSensitivity === "High") factors.push(["\u2212", "Distance penalty"]);
+    }
+    const utility = stallId ? (1.0 + 0.05*remaining/10 - (b.prefs.priceSensitivity==="High"?0.3:0.1) + (streak>=3?0.5:0)).toFixed(2) : "\u2014";
+    el.innerHTML =
+      '<span class="name">BUYER \u00b7 ' + b.id + '</span><span class="sub">' + CLASS_LABEL[b.cls] + (b.mech==="agent"?" \u00b7 LLM agent":" \u00b7 rule-based") + '</span>' +
+      '<div class="grp-h">CURRENT STATE</div><table>' +
+      '<tr><td>Budget</td><td class="v">$' + b.budget + '</td></tr>' +
+      '<tr><td>Remaining budget</td><td class="v">$' + remaining.toFixed(2) + '</td></tr>' +
+      '<tr><td>Current stall</td><td class="v">' + (stallId||"\u2014") + '</td></tr>' +
+      '<tr><td>Last stall</td><td class="v">' + (traj.length>1 ? (traj[traj.length-2]||"\u2014") : "\u2014") + '</td></tr>' +
+      '<tr><td>Loyalty streak</td><td class="v">' + streak + ' wk' + (streak===1?"":"s") + '</td></tr>' +
+      '<tr><td>Participation</td><td class="v">' + (stallId?"Active":"Inactive") + '</td></tr></table>' +
+      '<div class="grp-h">PREFERENCES</div><table>' +
+      '<tr><td>Price sensitivity</td><td class="v">' + b.prefs.priceSensitivity + '</td></tr>' +
+      '<tr><td>Premium preference</td><td class="v">' + b.prefs.premiumPreference + '</td></tr>' +
+      '<tr><td>Distance sensitivity</td><td class="v">' + b.prefs.distanceSensitivity + '</td></tr>' +
+      '<tr><td>Promotion response</td><td class="v">' + b.prefs.promotionResponse + '</td></tr></table>' +
+      '<div class="grp-h">MEMORY</div>' + traj.map(function(s,i){
+        const wk = currentWeekIdx - (traj.length-1-i) + 1;
+        return '<div class="memline">W' + wk + '&nbsp;&nbsp;' + (s||"\u2014") + '&nbsp;&nbsp;' + (s?"Purchased":"Did not shop") + '</div>';
+      }).join("") +
+      '<div class="grp-h">CURRENT DECISION</div><table>' +
+      '<tr><td>Chosen stall</td><td class="v">' + (stallId||"\u2014") + '</td></tr>' +
+      (b.mech === "rule" ? '<tr><td>Utility</td><td class="v">' + utility + '</td></tr>' : '') +
+      '</table>' +
+      (b.mech === "agent"
+        ? '<div class="grp-h" style="color:#7A5CB8;">AGENT REASONING <span style="font-weight:400; color:var(--text-3); text-transform:none; letter-spacing:0;">(illustrative)</span></div>' +
+          '<div class="agent-quote">&ldquo;' + agentReasoning(b, stallId, streak) + '&rdquo;</div>'
+        : (factors.length ? '<div class="grp-h">DECISION FACTORS <span style="font-weight:400; color:var(--text-3); text-transform:none; letter-spacing:0;">(computed)</span></div>' + factors.map(function(f){ return '<div class="factor ' + (f[0]==="+"?"pos":"neg") + '">' + f[0] + ' ' + f[1] + '</div>'; }).join("") : "")
+      ) +
+      '<div class="traj">' + traj.map(function(s){return s||"\u2014";}).join(" \u2192 ") + '</div>';
+  } else {
+    const s = stallById(selected.id);
+    const d = sellerWeekly[s.id][currentWeekIdx];
+    const prev = currentWeekIdx>0 ? sellerWeekly[s.id][currentWeekIdx-1] : null;
+    const last3 = sellerWeekly[s.id].slice(Math.max(0,currentWeekIdx-2), currentWeekIdx+1);
+    const avg3 = last3.reduce(function(a,x){return a+x.profit;},0)/last3.length;
+    const demandTrend = prev ? (d.demand > prev.demand ? "Demand \u2191" : d.demand < prev.demand ? "Demand \u2193" : "Demand \u2192") : "Demand \u2014";
+    const invTrend = "Inventory " + (d.inventoryRemaining < (prev?prev.inventoryRemaining:d.inventoryRemaining) ? "\u2193" : "\u2192");
+    const mixEntries = [["Poor", d.mixPoorPct], ["Middle", d.mixMiddlePct], ["Rich", d.mixRichPct]].sort(function(a,b){return b[1]-a[1];});
+    const mixTrend = mixEntries[0][0] + " share " + (mixEntries[0][1] > 0.5 ? "\u2191" : "\u2192");
+    el.innerHTML =
+      '<span class="name">SELLER \u00b7 ' + s.id + '</span><span class="sub">' + (s.cls==="low"?"Low-price stall":"Premium stall") + '</span>' +
+      '<div class="grp-h">CURRENT STATE</div><table>' +
+      '<tr><td>Price</td><td class="v">$' + d.price.toFixed(2) + '</td></tr>' +
+      '<tr><td>Inventory</td><td class="v">' + d.inventoryRemaining + ' / ' + d.capacity + '</td></tr>' +
+      '<tr><td>Weekly buyers</td><td class="v">' + d.demand + '</td></tr>' +
+      '<tr><td>Revenue</td><td class="v">$' + d.revenue.toFixed(0) + '</td></tr>' +
+      '<tr><td>Profit</td><td class="v">$' + d.profit.toFixed(0) + '</td></tr>' +
+      '<tr><td>Market share</td><td class="v">' + (d.marketShare*100).toFixed(1) + '%</td></tr></table>' +
+      '<div class="grp-h">CUSTOMER MIX</div><table>' +
+      '<tr><td>Poor</td><td class="v">' + (d.mixPoorPct*100).toFixed(0) + '%</td></tr>' +
+      '<tr><td>Middle</td><td class="v">' + (d.mixMiddlePct*100).toFixed(0) + '%</td></tr>' +
+      '<tr><td>Rich</td><td class="v">' + (d.mixRichPct*100).toFixed(0) + '%</td></tr></table>' +
+      '<div class="grp-h">HISTORY</div><table>' +
+      '<tr><td>Price last week</td><td class="v">' + (prev?"$"+prev.price.toFixed(2):"\u2014") + '</td></tr>' +
+      '<tr><td>Profit last week</td><td class="v">' + (prev?"$"+prev.profit.toFixed(0):"\u2014") + '</td></tr>' +
+      '<tr><td>3-week avg. profit</td><td class="v">$' + avg3.toFixed(0) + '</td></tr></table>' +
+      '<div class="grp-h">POLICY \u00b7 Contextual Bandit (illustrative)</div>' +
+      '<div class="memline">Observed state: ' + demandTrend + ' \u00b7 ' + invTrend + ' \u00b7 ' + mixTrend + '</div>' +
+      '<div class="memline">Action: Price ' + (prev?"$"+prev.price.toFixed(2):"$"+d.price.toFixed(2)) + ' \u2192 $' + d.price.toFixed(2) + '</div>';
+  }
+}
+
+/* ---- research question / lens ---- */
+function renderLens(){
+  document.getElementById("rq-title").textContent = currentLens.title;
+  document.getElementById("rq-body").textContent = currentLens.body;
+  document.getElementById("rq-tag").textContent = currentLens.label + " \u00b7 Baseline: " + currentLens.baseline + " \u2192 Treatment: " + currentLens.treatment;
+  document.getElementById("mech-note").textContent = currentLens.mechNote;
+  renderAggregate();
+}
+const lensSelect = document.getElementById("lens-select");
+LENSES.forEach(function(l){ const o = document.createElement("option"); o.value = l.id; o.textContent = l.label; lensSelect.appendChild(o); });
+lensSelect.addEventListener("change", function(){
+  currentLens = LENSES.find(function(l){return l.id===lensSelect.value;});
+  renderLens();
+});
+
+function renderAggregate(){
+  const idx = currentWeekIdx;
+  const totalProfit = STALLS.reduce(function(a,s){ const d=sellerWeekly[s.id][idx]; return a + (d?d.profit:0); }, 0);
+  const items = {
+    stability: {lbl:"Pair stability", val: metricStability[idx].toFixed(2)},
+    participation: {lbl:"Participation rate", val: Math.round(metricParticipation[idx]*100)+"%"},
+    stalls: {lbl:"Active stalls", val: metricStalls[idx]},
+    profit: {lbl:"Total profit this week", val: "$"+Math.round(totalProfit)}
+  };
+  const order = [currentLens.metric].concat(Object.keys(items).filter(function(k){return k!==currentLens.metric;}));
+  document.getElementById("agg-row").innerHTML = order.slice(0,3).map(function(k){
+    return '<div class="agg-item"><span class="lbl">' + items[k].lbl + '</span><span class="val">' + items[k].val + '</span></div>';
+  }).join("");
+}
+
+/* ---- timeline ---- */
+function renderTimelineTicks(){
+  const ticksEl = document.getElementById("timeline-ticks");
+  const marks = [1,22,44,66];
+  ticksEl.innerHTML = marks.map(function(w){ return '<span style="left:' + (w/66*100) + '%;">W' + w + '</span>'; }).join("");
+  const evEl = document.getElementById("timeline-events");
+  const all = ENTRY_EVENTS.map(function(e){return {w:e.week,label:e.label,cls:"enter"};}).concat(EXIT_EVENTS.map(function(e){return {w:e.week,label:e.label,cls:"exit"};}));
+  evEl.innerHTML = all.map(function(e){ return '<span class="evt ' + e.cls + '" style="left:' + (e.w/66*100) + '%;">\u25b2 ' + e.label + '</span>'; }).join("");
+}
+
+function setWeek(w){
+  currentWeekIdx = Math.max(0, Math.min(TOTAL_WEEKS-1, w-1));
+  document.getElementById("week-num").textContent = currentWeekIdx+1;
+  document.getElementById("week-range").value = currentWeekIdx+1;
+  buyers.forEach(function(b){ b.nextRetarget = performance.now() + Math.random()*1600; });
+  renderAggregate();
+  if (selected) renderInspector();
+}
+document.getElementById("week-range").addEventListener("input", function(e){ setWeek(parseInt(e.target.value,10)); });
+document.getElementById("prev-btn").addEventListener("click", function(){ setWeek(currentWeekIdx); });
+document.getElementById("next-btn").addEventListener("click", function(){ setWeek(currentWeekIdx+2); });
+document.getElementById("play-btn").addEventListener("click", function(){
+  playing = !playing;
+  this.innerHTML = playing ? "&#10074;&#10074;" : "&#9654;";
+  if (playing){
+    playTimer = setInterval(function(){
+      let next = currentWeekIdx+2;
+      if (next > TOTAL_WEEKS) next = 1;
+      setWeek(next);
+    }, 800/speedMult);
+  } else { clearInterval(playTimer); }
+});
+document.querySelectorAll(".speedbtns button").forEach(function(btn){
+  btn.addEventListener("click", function(){
+    document.querySelectorAll(".speedbtns button").forEach(function(b){b.classList.remove("active");});
+    btn.classList.add("active");
+    speedMult = parseFloat(btn.getAttribute("data-speed"));
+    if (playing){ clearInterval(playTimer); document.getElementById("play-btn").click(); document.getElementById("play-btn").click(); }
+  });
+});
+document.getElementById("view-by").addEventListener("change", function(e){ viewBy = e.target.value; renderLegend(); });
+
+function renderLegend(){
+  const el = document.getElementById("legend-strip");
+  if (viewBy === "class") el.innerHTML = '<span><span class="legend-dot" style="background:#3E6FA8;"></span>Poor buyer</span><span><span class="legend-dot" style="background:#5C8A6B;"></span>Middle-class buyer</span><span><span class="legend-dot" style="background:#B8722E;"></span>Rich buyer</span><span><span class="legend-sq" style="background:#1F7A6C;"></span>Low-price stall</span><span><span class="legend-sq" style="background:#7A3B69;"></span>Premium stall</span>';
+  else if (viewBy === "tier") el.innerHTML = '<span><span class="legend-dot" style="background:#1F7A6C;"></span>Currently at a low-price stall</span><span><span class="legend-dot" style="background:#7A3B69;"></span>Currently at a premium stall</span>';
+  else if (viewBy === "loyalty") el.innerHTML = '<span><span class="legend-dot" style="background:hsl(220,55%,48%);"></span>New / low streak</span><span><span class="legend-dot" style="background:hsl(30,55%,48%);"></span>Long streak</span>';
+  else if (viewBy === "mechanism") el.innerHTML = '<span><span class="legend-dot" style="background:#9AA0AC;"></span>Rule-based buyer</span><span><span class="legend-dot" style="background:#7A5CB8;"></span>LLM agent buyer</span>';
+}
+
+/* ============================================================
+   SCREEN 3 — EXPERIMENT EXPLORER
+   ============================================================ */
+const phaseNavEl = document.getElementById("phase-nav");
+const NAV_DIVIDERS = {"01":"BEHAVIOR", "06":"INTERACTION & LEARNING", "09":"VALIDATION", "15":"SCALE"};
+PHASES.forEach(function(p){
+  if (NAV_DIVIDERS[p.id]){
+    const div = document.createElement("div");
+    div.className = "phase-nav-divider";
+    div.textContent = NAV_DIVIDERS[p.id];
+    phaseNavEl.appendChild(div);
+  }
+  const btn = document.createElement("button");
+  btn.textContent = p.nav;
+  btn.addEventListener("click", function(){
+    document.querySelectorAll("#phase-nav button").forEach(function(b){b.classList.remove("active");});
+    btn.classList.add("active");
+    currentPhase = p;
+    renderExplorer();
+  });
+  phaseNavEl.appendChild(btn);
+});
+function renderExplorer(){
+  const p = currentPhase;
+  document.querySelectorAll("#phase-nav button").forEach(function(b){ if (b.textContent===p.nav) b.classList.add("active"); else b.classList.remove("active"); });
+  const badgeClass = p.tone === "keep" ? "keep" : p.tone === "reject" ? "reject" : "neutral";
+  document.getElementById("explorer-detail").innerHTML =
+    '<div>' +
+    '<div class="field"><div class="k">RESEARCH QUESTION</div><div class="v">' + p.rq + '</div></div>' +
+    '<div class="field"><div class="k">INDEPENDENT VARIABLE</div><div class="v">' + p.iv + '</div></div>' +
+    '<div class="field"><div class="k">DEPENDENT VARIABLE</div><div class="v">' + p.dv + '</div></div>' +
+    '<div class="field"><div class="k">BASELINE \u2192 TREATMENT</div><div class="v">' + p.baseline + ' \u2192 ' + p.treatment + '</div></div>' +
+    '</div><div>' +
+    '<div class="field"><div class="k">COMPARISON</div><div class="v">' + p.comparison + '</div></div>' +
+    '<div class="field"><div class="k">METRIC</div><div class="v">' + p.metric + '</div></div>' +
+    '<div class="field"><div class="k">RESULT</div><div class="v">' + p.result + '</div></div>' +
+    '<span class="decision-badge ' + badgeClass + '">' + p.decision + '</span>' +
+    '</div>';
+}
+
+/* ============================================================
+   SCREEN 4 — HUMAN FIDELITY (lightweight drilldown lookup)
+   ============================================================ */
+const FIDELITY_LOOKUP = {
+  "GPT|Poor": {jsd:0.09, dir:87, err:7.1},
+  "GPT|Middle": {jsd:0.08, dir:88, err:6.6},
+  "GPT|Rich": {jsd:0.07, dir:91, err:5.8},
+  "Claude|Poor": {jsd:0.06, dir:92, err:4.9},
+  "Claude|Middle": {jsd:0.07, dir:90, err:5.4},
+  "Claude|Rich": {jsd:0.08, dir:89, err:6.2}
+};
+function renderFidelity(){
+  const model = document.getElementById("dd-model").value.indexOf("GPT")!==-1 ? "GPT" : "Claude";
+  const demoText = document.getElementById("dd-demo").value;
+  const demo = demoText.indexOf("Poor")!==-1 ? "Poor" : demoText.indexOf("Middle")!==-1 ? "Middle" : "Rich";
+  const r = FIDELITY_LOOKUP[model+"|"+demo];
+  document.getElementById("m-jsd").textContent = r.jsd.toFixed(2);
+  document.getElementById("m-dir").textContent = r.dir + "%";
+  document.getElementById("m-err").textContent = r.err.toFixed(1) + "%";
+}
+document.getElementById("dd-model").addEventListener("change", renderFidelity);
+document.getElementById("dd-demo").addEventListener("change", renderFidelity);
+
+/* ============================================================
+   SCREEN 5 — SCALE CHART
+   ============================================================ */
+let scaleSeries = "stalls";
+function drawScaleChart(){
+  const w=900, h=220, padL=30, padR=10, padT=10, padB=20;
+  const data = scaleSeries==="stalls" ? metricStalls : scaleSeries==="participation" ? metricParticipation : metricStability;
+  const max = scaleSeries==="stalls" ? Math.max.apply(null,metricStalls)+2 : 1;
+  const min = scaleSeries==="stalls" ? Math.min.apply(null,metricStalls)-2 : 0;
+  const x = function(i){ return padL + (i/(TOTAL_WEEKS-1))*(w-padL-padR); };
+  const y = function(v){ return padT + (h-padT-padB)*(1-(v-min)/(max-min)); };
+  let d = "";
+  for (let i=0;i<TOTAL_WEEKS;i++){ d += (i===0?"M":"L") + x(i).toFixed(1) + "," + y(data[i]).toFixed(1) + " "; }
+  let svg = '<path d="' + d + '" fill="none" stroke="#4A4E9E" stroke-width="1.8" />';
+  [1,22,44,66].forEach(function(wk){ svg += '<line x1="'+x(wk-1).toFixed(1)+'" y1="0" x2="'+x(wk-1).toFixed(1)+'" y2="'+h+'" stroke="#e3e5ea" stroke-width="1" stroke-dasharray="2,2" />'; });
+  document.getElementById("scale-chart").innerHTML = svg;
+}
+document.querySelectorAll("#scale-toggle button").forEach(function(btn){
+  btn.addEventListener("click", function(){
+    document.querySelectorAll("#scale-toggle button").forEach(function(b){b.classList.remove("active");});
+    btn.classList.add("active");
+    scaleSeries = btn.getAttribute("data-series");
+    drawScaleChart();
+  });
+});
+
+/* ============================================================
+   INIT
+   ============================================================ */
+resizeCanvas();
+renderLegend();
+renderTimelineTicks();
+lensSelect.value = "p6";
+renderLens();
+renderInspector();
+renderExplorer();
+renderFidelity();
+drawScaleChart();
+requestAnimationFrame(animate);
+
+</script>
+</body>
+</html>

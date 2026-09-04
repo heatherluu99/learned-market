@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ssh -o StrictHostKeyChecking=accept-new -T git@github.com)",
+      "Bash(git config *)",
+      "Bash(git ls-remote *)",
+      "Bash(git -C /Users/luxier/difussion_model_music rev-parse --is-inside-work-tree)",
+      "Bash(./.venv/bin/pip freeze *)"
+    ]
+  }
+}
