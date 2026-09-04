@@ -278,9 +278,13 @@ This side experiment is not part of the main run's acceptance criteria and its n
 | Parameter | Poor | Middle | Rich |
 |---|---|---|---|
 | income | 25 | 55 | 100 |
-| budget_per_visit | 3 | 5 | 10 |
+| budget_per_visit | 3 | **7** | 10 |
 | price_sensitivity (α) | 0.85 | 0.5 | 0.2 |
 | preference | drawn once per buyer per seller, Uniform(0,1), fixed for the run |
+
+**Why Middle's budget is 7 and not 5 (corrected at the Phase 2 design review gate).** At the originally specified 5, Middle could not afford the Shigh price of 6 *at all*, so `Middle_to_Shigh_share` was 0.000 in every run — not approximately, but by arithmetic. That made this phase's explicitly stated second research question ("how does the middle class split its patronage between tiers") unanswerable by construction: the answer was 100/0 before a single seed was drawn. At 7, Middle can afford exactly one Shigh unit (leaving 1), and the measured split becomes a real observation (~0.24 to Shigh, SD 0.09 across 30 seeds).
+
+**Poor's exclusion from Shigh is retained, and is a hard constraint, not a behavioural result.** With budget 3 against a price of 6, `Poor_to_Shigh_share` is identically 0.000. This is kept because pricing low-income buyers out of a premium tier is a real market phenomenon worth having in the model — but it must never be reported as evidence that `price_sensitivity` produces stratification. It is an affordability wall, and it would produce the same 0.000 with α set to 0, or with Poor made the *least* price-sensitive class. Any Phase 2 output describing Poor's tier split must say which of the two mechanisms it is attributing the result to.
 
 **Seller parameters:**
 | Parameter | Slow (×3) | Shigh (×2) |
@@ -297,7 +301,9 @@ P(purchase) = sigmoid(utility - 2.0)
 
 The denominator is `price_reference` = `max(2, 6)` = **6** — computed from this phase's posted prices by the rule in "Price Normalization Convention" above, not chosen because it happens to equal the Shigh price. It is deliberately *not* each class's own `budget_per_visit` (3 / 5 / 10): a per-class denominator would add a second, class-varying price-scaling on top of `price_sensitivity`, and this phase's entire purpose is to attribute stratification to `price_sensitivity` alone. It is equally not each seller's own price, which would make both stalls evaluate at 2/2 = 6/6 = 1.0 and remove price from the comparison entirely.
 
-Budget is shared across all 5 sellers within one run (spending at one seller reduces what's left for the next); resets each run. All three classes evaluate all 5 sellers — nothing restricts Poor or Rich buyers from considering the "wrong" tier, the same as before; class only affects the parameters feeding into utility, never the choice set itself.
+Budget is shared across all 5 sellers within one run (spending at one seller reduces what's left for the next); resets each run. All three classes evaluate all 5 sellers: class affects the parameters feeding into utility, never the choice set itself.
+
+**But the choice set and the affordable set are not the same thing.** An earlier version of this paragraph claimed "nothing restricts Poor or Rich buyers from considering the 'wrong' tier". That is true of the choice set and false of the outcome. The purchase rule requires `price <= budget_remaining`, so a Poor buyer (budget 3) evaluates the Shigh stalls and is then blocked by affordability every single time. Leaving no formal restriction in the choice set does not mean every tier is reachable by every class — and in this configuration it is not.
 
 **Output tables:** same four as Phase 1, plus `run_summary.csv` adds: `Poor_to_Slow_share`, `Poor_to_Shigh_share`, `Middle_to_Slow_share`, `Middle_to_Shigh_share`, `Rich_to_Slow_share`, `Rich_to_Shigh_share`.
 
@@ -305,11 +311,24 @@ Budget is shared across all 5 sellers within one run (spending at one seller red
 
 **Acceptance criteria:**
 - `participation_rate` in 0.6–1.0
-- `Poor_to_Slow_share` at least 2x `Poor_to_Shigh_share`, and `Rich_to_Shigh_share` at least 2x `Rich_to_Slow_share` (confirms the encoded direction is working at both ends — a mechanism check, not a "finding")
+- **Stratification, graded across classes rather than within one:** the across-seed mean of `Rich_to_Shigh_share` − `Middle_to_Shigh_share` is positive, with its 95% confidence interval excluding zero (30 seeds)
 - `Shigh` sellers do not fully sell out (`inventory_remaining` > 0), confirming high-price demand isn't artificially unconstrained
-- **New check, specific to the three-class design:** report `Middle_to_Slow_share` vs. `Middle_to_Shigh_share` without a directional pass/fail bar — unlike Poor and Rich, there is no "correct" direction encoded for Middle, so this is recorded as an open observation, not graded against a threshold
+- **Reported without a pass/fail bar:** `Middle_to_Slow_share` vs. `Middle_to_Shigh_share` (no "correct" direction is encoded for Middle), and `Poor_to_Shigh_share` (identically 0.000 — see the affordability-wall note above, and do not grade it)
+
+**Why the stratification criterion is cross-class (corrected at the Phase 2 design review gate).** The original bars were `Poor_to_Slow_share ≥ 2 × Poor_to_Shigh_share` and `Rich_to_Shigh_share ≥ 2 × Rich_to_Slow_share`. Both were unusable, in opposite directions:
+
+- The Poor bar is **vacuous**. `Poor_to_Shigh_share` is 0.000 by the affordability wall, so the bar reads `1.000 ≥ 0` and passes no matter what the model does — the same defect as Phase 1's original inventory criterion.
+- The Rich bar is **unreachable**. Since a class's two tier-shares sum to 1, demanding `Rich_to_Shigh ≥ 2 × Rich_to_Slow` is demanding a Shigh share ≥ 0.667. The measured value is 0.315, and no parameter choice reaches 0.667, because the utility function contains no term by which an expensive stall becomes *more* attractive: price enters only through `−α·(price/price_reference)` and through spending down `budget_remaining`, and both are negative. Rich buyers are less deterred by price (α = 0.2), never drawn to it. Requiring a class to buy predominantly from the expensive tier is also a stronger claim than stratification needs.
+
+Stratification is a statement *between* classes: richer buyers patronize the premium tier more than poorer buyers do. The replacement criterion states exactly that. It compares Rich against Middle rather than against Poor, because the Poor contrast is the vacuous one.
+
+**Why the bar is "CI excludes zero" and not a percentage-point threshold.** The project's standing 5-percentage-point convention (Phase 5, Phases 7b–7d) is a *materiality* bar — "did added complexity change the result enough to keep it". This criterion asks a different question, existence and direction, so it takes a different bar. It is also what the data will support and no more: at 30 seeds the mean Rich−Middle gap is 0.076 with an across-seed SD of 0.101 — larger than the mean, and negative in 5 of 30 individual seeds. The 95% CI of the mean is roughly [0.04, 0.11], which excludes zero but straddles 0.05, so a 5pp bar could not be cleanly adjudicated and must not be adopted merely because the observed 0.076 happens to clear it. The criterion is therefore graded on the across-seed mean, never per seed.
 
 **Comparison required:** report homogeneous (Phase 1 style) vs. heterogeneous (this phase) participation and class-share metrics side by side, to isolate what heterogeneity alone contributes.
+
+**Attribution diagnostic required (added at the design review gate).** "Person-level heterogeneity" is two things at once in this phase — heterogeneous `budget_per_visit` *and* heterogeneous `price_sensitivity` — and they do not contribute equally. Re-run the same 30 seeds with all three classes' α set to a single common value (0.5), holding budgets at 3 / 7 / 10, and report the Rich−Middle gap under both settings. Gate-stage measurement puts the gap at 0.076 with the specified α's and about 0.050 with α equalized, meaning roughly one third of the stratification comes from price sensitivity and two thirds from budget heterogeneity alone.
+
+This is a reported diagnostic, not a pass/fail bar. It exists because "heterogeneity produces stratification" is true here while the narrower reading "price sensitivity produces stratification" is mostly not, and the phase's own research question is worded loosely enough that the result could be written up either way. Any Phase 2 finding must state which of the two it is claiming.
 
 **Literature basis:** Same random-utility framework as Phase 1 (McFadden, 1974), extended to heterogeneous per-class parameters — a standard discrete-choice modeling practice rather than a distinct citation; see also Train, *Discrete Choice Methods with Simulation*, for heterogeneous-parameter extensions of RUM.
 
