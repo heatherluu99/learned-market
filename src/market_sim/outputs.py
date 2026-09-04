@@ -124,6 +124,18 @@ def run_summary_frame(cfg: MarketConfig, results: list[RunResult]) -> pd.DataFra
             "n_blocked_by_inventory": r.blocked_counts[NO_PURCHASE_INVENTORY],
             "n_not_noticed": r.blocked_counts.get(NO_PURCHASE_UNNOTICED, 0),
         }
+        # Phase 4 onward: which stall, if any, was discounted this run.
+        if cfg.has_promotions:
+            row["promotion_active"] = r.promoted_seller is not None
+            row["promotion_seller_id"] = (
+                r.promoted_seller if r.promoted_seller is not None else -1
+            )
+            row["promotion_seller_class"] = (
+                cfg.seller_class_of()[r.promoted_seller]
+                if r.promoted_seller is not None
+                else "none"
+            )
+            row["promotion_discount"] = cfg.promotion_discount
         # Phase 3 onward: realized visibility per seller, the observed
         # counterpart of the configured position_score.
         if cfg.has_environment:

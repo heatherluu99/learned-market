@@ -78,6 +78,17 @@ class MarketConfig:
     preference_coef: float = 1.5
     sigmoid_offset: float = 2.0
 
+    #: Phase 4 onward: probability that some seller is discounted in a run.
+    #: 0.0 means no promotion mechanism at all (Phases 1-3).
+    promotion_probability: float = 0.0
+    #: Fractional discount applied to the promoted seller's price for that run.
+    promotion_discount: float = 0.3
+    #: Diagnostic override: promote this seller id in every run regardless of
+    #: the lottery. None leaves the lottery in charge. Used to build the paired
+    #: arms the Phase 4 criteria are graded on - see
+    #: docs/phase_specifications.md, Phase 4.
+    forced_promotion_seller: int | None = None
+
     #: Market-wide price normalizer: max posted price at configuration time.
     #: Stored, not computed on access — see __post_init__ and
     #: docs/phase_specifications.md, "Price Normalization Convention".
@@ -135,6 +146,34 @@ class MarketConfig:
     @property
     def has_environment(self) -> bool:
         return any(c.position_score is not None for c in self.seller_classes)
+
+    @property
+    def has_promotions(self) -> bool:
+        return self.promotion_probability > 0 or self.forced_promotion_seller is not None
+
+    def discounted_price(self, price: float) -> float:
+        return price * (1.0 - self.promotion_discount)
+
+    def expected_responder(self, seller_class_name: str) -> str | None:
+        """Class predicted to respond most to a discount at this tier.
+
+        Defined from the parameters alone: the lowest-budget class that can
+        afford the discounted price. A discount matters most to buyers for
+        whom it is the difference between reachable and not, and not at all to
+        buyers who could already afford the stall or still cannot. Deriving it
+        this way keeps Phase 4's interaction criterion a prediction rather than
+        a restatement of an observed result.
+        """
+        price = next(
+            c.price for c in self.seller_classes if c.name == seller_class_name
+        )
+        discounted = self.discounted_price(price)
+        affordable = [
+            c for c in self.buyer_classes if c.budget_per_visit >= discounted
+        ]
+        if not affordable:
+            return None
+        return min(affordable, key=lambda c: c.budget_per_visit).name
 
     def with_common_price_sensitivity(self, alpha: float, name: str) -> "MarketConfig":
         """Same market with every class sharing one alpha.
@@ -265,4 +304,44 @@ PHASE3_MAIN = MarketConfig(
         SellerClass("Shigh", count=1, price=6.0, inventory=70, position_score=0.3),
     ),
     seeds=PHASE2_MAIN.seeds,
+)
+
+
+# --------------------------------------------------------------------------
+# Phase 4 — Person + Environment + Context
+# --------------------------------------------------------------------------
+
+
+def _phase4(name: str, probability: float, forced: int | None = None) -> MarketConfig:
+    """Phase 3's market plus a temporary promotion, varying only how the
+    promotion is decided."""
+    return MarketConfig(
+        name=name,
+        phase=4,
+        buyer_classes=PHASE3_MAIN.buyer_classes,
+        seller_classes=PHASE3_MAIN.seller_classes,
+        seeds=PHASE3_MAIN.seeds,
+        promotion_probability=probability,
+        promotion_discount=0.3,
+        forced_promotion_seller=forced,
+    )
+
+
+#: The market as specified: a 30% discount lands on one random seller in about
+#: one run in five. Reported for its aggregate behaviour, but not what the
+#: criteria are graded on — at 0.2 over 30 seeds it yields roughly one promoted
+#: run per seller, which cannot support a per-seller comparison. See
+#: docs/phase_specifications.md, Phase 4.
+PHASE4_MAIN = _phase4("phase4_main", probability=0.2)
+
+#: Baseline arm: identical market, promotion mechanism switched off.
+PHASE4_NO_PROMOTION = _phase4("phase4_no_promotion", probability=0.0)
+
+#: One arm per seller, that seller discounted in every seed. Paired with
+#: PHASE4_NO_PROMOTION seed by seed — identical preferences, visit orders,
+#: purchase draws and visibility draws — giving 30 paired observations per
+#: seller instead of about one.
+PHASE4_FORCED = tuple(
+    _phase4(f"phase4_forced_seller{i}", probability=0.0, forced=i)
+    for i in range(PHASE3_MAIN.n_sellers)
 )

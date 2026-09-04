@@ -68,6 +68,18 @@ class RunResult:
     #: Phase 3 onward: how many buyers noticed each seller this run. The
     #: realized counterpart of the configured visibility_prob.
     seller_noticed: np.ndarray | None = None
+    #: Phase 4 onward: which seller was discounted this run, if any.
+    promoted_seller: int | None = None
+    #: Posted price actually charged per seller this run, after any discount.
+    effective_prices: np.ndarray | None = None
+
+    def n_sold_by(self, buyer_class: str, seller_id: int) -> int:
+        """Units this class bought from one specific seller."""
+        return sum(
+            1
+            for t in self.transactions
+            if t.buyer_class == buyer_class and t.seller_id == seller_id
+        )
 
     @property
     def participation_rate(self) -> float:
@@ -173,6 +185,13 @@ def run_single(cfg: MarketConfig, seed: int) -> RunResult:
     # against Phase 2 rather than a differently-randomized market.
     visibility_draw = rng.random((n_buyers, n_sellers))
     visibility_prob = np.array(cfg.visibility_prob_of(), dtype=float)
+    # Promotion draws come last, after visibility, for the same reason
+    # visibility came after the purchase draw: every earlier phase keeps the
+    # exact stream it had. They are drawn unconditionally - even by configs
+    # with no promotion mechanism - so that all Phase 4 arms (lottery, forced,
+    # and none) stay paired with each other seed by seed.
+    promotion_roll = rng.random()
+    promotion_pick = int(rng.integers(0, n_sellers))
 
     buyer_class = cfg.buyer_class_of()
     seller_class = cfg.seller_class_of()
@@ -187,6 +206,16 @@ def run_single(cfg: MarketConfig, seed: int) -> RunResult:
     seller_price = np.array(
         [c.price for c in cfg.seller_classes for _ in range(c.count)], dtype=float
     )
+    if cfg.forced_promotion_seller is not None:
+        promoted_seller: int | None = cfg.forced_promotion_seller
+    elif promotion_roll < cfg.promotion_probability:
+        promoted_seller = promotion_pick
+    else:
+        promoted_seller = None
+    if promoted_seller is not None:
+        seller_price[promoted_seller] = cfg.discounted_price(
+            seller_price[promoted_seller]
+        )
     inventory = np.array(
         [c.inventory for c in cfg.seller_classes for _ in range(c.count)], dtype=int
     )
@@ -282,6 +311,8 @@ def run_single(cfg: MarketConfig, seed: int) -> RunResult:
         blocked_counts=blocked,
         blocked_by_budget_pairs=blocked_pairs,
         seller_noticed=noticed,
+        promoted_seller=promoted_seller,
+        effective_prices=seller_price.copy(),
     )
 
 

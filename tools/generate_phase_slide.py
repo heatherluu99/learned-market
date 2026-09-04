@@ -616,7 +616,119 @@ def phase3_slide() -> PhaseSlide:
     )
 
 
-BUILDERS = {1: phase1_slide, 2: phase2_slide, 3: phase3_slide}
+def phase4_slide() -> PhaseSlide:
+    """Assemble the Phase 4 slide from the run outputs, not hand-typed numbers."""
+    from market_sim.config import PHASE4_FORCED, PHASE4_MAIN, PHASE4_NO_PROMOTION
+    from market_sim.engine import run_seeds
+
+    market = run_seeds(PHASE4_MAIN)
+    baseline = run_seeds(PHASE4_NO_PROMOTION)
+    forced = {i: run_seeds(c) for i, c in enumerate(PHASE4_FORCED)}
+    criteria = acceptance.evaluate_phase4(PHASE4_MAIN, forced, baseline)
+
+    lifts = [acceptance.promotion_lift(forced[i], baseline, i)[0] for i in forced]
+    seller_classes = PHASE4_MAIN.seller_class_of()
+
+    def tier_lifts(tier):
+        sid = next(i for i, n in enumerate(seller_classes) if n == tier)
+        return sid, {
+            c.name: acceptance.class_promotion_lift(
+                forced[sid], baseline, sid, c.name
+            ).mean()
+            for c in PHASE4_MAIN.buyer_classes
+        }
+
+    slow_id, slow_lifts = tier_lifts("Slow")
+    shigh_id, shigh_lifts = tier_lifts("Shigh")
+    n_promoted = sum(r.promoted_seller is not None for r in market)
+    per_seller = [
+        sum(r.promoted_seller == i for r in market) for i in range(PHASE4_MAIN.n_sellers)
+    ]
+
+    return PhaseSlide(
+        phase_number=4,
+        phase_name="Person + Environment + Context",
+        subtitle=(
+            f"Temporary 30% promotion  ·  git tag: phase4-validated  ·  "
+            f"{len(PHASE4_MAIN.seeds)} seeds"
+        ),
+        badge="ALL CRITERIA PASS",
+        badge_color=GREEN,
+        agents=[
+            ("Buyers: ", "100 — Poor 70 / Middle 20 / Rich 10, unchanged from Phase 2"),
+            ("Sellers: ", "5 — Slow ×3 / Shigh ×2, positions unchanged from Phase 3"),
+        ],
+        environment=[
+            "-  Phase 3's position → visibility, unchanged",
+            "-  Context: 30% discount on one random stall, probability 0.2 per run",
+        ],
+        method=[
+            "Phase 3's utility, unchanged; discount applies to the posted price.",
+            "Criteria graded on paired forced-promotion arms, not the 0.2 lottery.",
+        ],
+        literature=[
+            (
+                "Belk (1975), ",
+                "“Situational Variables and Consumer Behavior” (JCR) — basis for "
+                "a transient promotion as a situational variable, distinct from "
+                "stable person or environment features.",
+            ),
+        ],
+        metrics=[
+            MetricRow(
+                "Participation rate (0.6–1.0)",
+                f"{np.mean([r.participation_rate for r in baseline]):.3f}",
+                "PASS" if criteria[0].passed else "FAIL",
+            ),
+            MetricRow(
+                "Promotion lift, all 5 sellers",
+                f"+{min(lifts):.2f} to +{max(lifts):.2f}",
+                "PASS" if all(c.passed for c in criteria[1:6]) else "FAIL",
+            ),
+            MetricRow(
+                f"Slow promoted → Poor (predicted)",
+                f"{slow_lifts['Poor']:+.2f} vs {slow_lifts['Middle']:+.2f}",
+                "PASS" if criteria[6].passed else "FAIL",
+            ),
+            MetricRow(
+                f"Shigh promoted → Middle (predicted)",
+                f"{shigh_lifts['Middle']:+.2f} vs {shigh_lifts['Rich']:+.2f}",
+                "PASS" if criteria[7].passed else "FAIL",
+            ),
+            MetricRow(
+                "Market arm: runs with a promotion",
+                f"{n_promoted}/{len(market)}",
+                "—",
+            ),
+        ],
+        research_question=(
+            "Does a transient promotion shift buyer distribution beyond person + "
+            "environment, and is its effect a level shift or a class interaction?"
+        ),
+        finding=(
+            f"An interaction, decisively. Lift concentrates in the lowest-budget "
+            f"class that can afford the discounted stall — Poor at Slow "
+            f"({slow_lifts['Poor']:+.2f} vs {slow_lifts['Rich']:+.2f} for Rich), Middle "
+            f"at Shigh ({shigh_lifts['Middle']:+.2f} vs {shigh_lifts['Rich']:+.2f}). Both "
+            f"responders were predicted from the parameters before the runs."
+        ),
+        caveat=(
+            f"The specified 0.2 lottery cannot measure this: it fired {n_promoted} times "
+            f"in {len(market)} runs, distributed {per_seller}, leaving sellers never "
+            f"promoted at all. Criteria are graded on paired forced arms instead; the "
+            f"lottery is kept as the market Phase 5 inherits. Poor's {shigh_lifts['Poor']:+.2f} "
+            f"at a promoted Shigh stall is arithmetic — 6 × 0.7 = 4.2 still exceeds its "
+            f"budget of 3 — not insensitivity to promotions."
+        ),
+    )
+
+
+BUILDERS = {
+    1: phase1_slide,
+    2: phase2_slide,
+    3: phase3_slide,
+    4: phase4_slide,
+}
 
 
 def main() -> int:

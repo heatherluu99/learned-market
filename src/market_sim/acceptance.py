@@ -262,6 +262,101 @@ def evaluate_phase3(
     return criteria
 
 
+def promotion_lift(
+    forced: list[RunResult], baseline: list[RunResult], seller_id: int
+) -> tuple[float, float, float]:
+    """Paired (mean lift, CI low, CI high) in a seller's n_sold when promoted."""
+    return mean_difference_ci(
+        np.array([r.seller_n_sold[seller_id] for r in forced], dtype=float),
+        np.array([r.seller_n_sold[seller_id] for r in baseline], dtype=float),
+    )
+
+
+def class_promotion_lift(
+    forced: list[RunResult],
+    baseline: list[RunResult],
+    seller_id: int,
+    buyer_class: str,
+) -> np.ndarray:
+    """Per-seed lift in one class's purchases from one promoted seller."""
+    return np.array(
+        [
+            f.n_sold_by(buyer_class, seller_id) - b.n_sold_by(buyer_class, seller_id)
+            for f, b in zip(forced, baseline)
+        ],
+        dtype=float,
+    )
+
+
+def evaluate_phase4(
+    cfg: MarketConfig,
+    forced_by_seller: dict[int, list[RunResult]],
+    baseline: list[RunResult],
+) -> list[CriterionResult]:
+    """Phase 4 acceptance criteria, graded on the paired forced arms.
+
+    The market's own 0.2 promotion lottery cannot support these comparisons —
+    about one promoted run per seller over 30 seeds — so measurement is done
+    on forced arms paired against a promotion-free arm on identical seeds. See
+    docs/phase_specifications.md, Phase 4.
+    """
+    criteria = [_participation_criterion(baseline)]
+    seller_classes = cfg.seller_class_of()
+
+    for seller_id, forced in sorted(forced_by_seller.items()):
+        mean, lo, hi = promotion_lift(forced, baseline, seller_id)
+        criteria.append(
+            CriterionResult(
+                name=f"promotion lift at seller {seller_id} ({seller_classes[seller_id]})",
+                passed=bool(mean > 0 and lo > 0),
+                measured=f"{mean:+.2f} units, 95% CI [{lo:+.2f}, {hi:+.2f}]",
+                threshold="mean > 0 and CI lower bound > 0",
+            )
+        )
+
+    # Class interaction, one check per tier, using the tier's lowest-position
+    # promoted seller as the representative (any seller of the tier would do;
+    # the prediction is about the tier's price, not the stall).
+    for tier in cfg.seller_tier_names():
+        responder = cfg.expected_responder(tier)
+        if responder is None:
+            continue
+        seller_id = next(
+            i for i, name in enumerate(seller_classes)
+            if name == tier and i in forced_by_seller
+        )
+        forced = forced_by_seller[seller_id]
+        responder_lift = class_promotion_lift(forced, baseline, seller_id, responder)
+        others = [c.name for c in cfg.buyer_classes if c.name != responder]
+        worst_name, worst = None, None
+        for other in others:
+            other_lift = class_promotion_lift(forced, baseline, seller_id, other)
+            mean, lo, hi = mean_difference_ci(responder_lift, other_lift)
+            if worst is None or lo < worst[1]:
+                worst_name, worst = other, (mean, lo, hi)
+        mean, lo, hi = worst
+        criteria.append(
+            CriterionResult(
+                name=(
+                    f"class interaction at {tier}: {responder} responds more than "
+                    f"every other class"
+                ),
+                passed=bool(mean > 0 and lo > 0),
+                measured=(
+                    f"{responder} lift {responder_lift.mean():+.2f}; narrowest margin "
+                    f"vs {worst_name}: {mean:+.2f}, 95% CI [{lo:+.2f}, {hi:+.2f}]"
+                ),
+                threshold="every pairwise margin > 0 with CI excluding 0",
+                note=(
+                    f"{responder} is the lowest-budget class that can afford "
+                    f"{tier} at its discounted price - predicted from the "
+                    f"parameters, not chosen after seeing the result."
+                ),
+            )
+        )
+    return criteria
+
+
 def convergence_band(values: np.ndarray) -> float:
     """Convergence tolerance for a metric: one standard error of its mean.
 

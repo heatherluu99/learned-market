@@ -378,11 +378,28 @@ Assign: 2 Slow sellers near entrance (position 0.9), 1 Slow seller far (position
 
 **New mechanism:** each run, with probability 0.2, one randomly chosen seller receives a 30% temporary price discount for that run only (`price_effective = price * 0.7`). This does not persist across runs (no memory yet — that's Phase 6).
 
-**Output:** `run_summary.csv` adds `promotion_active (bool)`, `promotion_seller_id`, and share metrics conditional on promotion status.
+**The stochastic mechanism cannot measure its own effect — a paired diagnostic does that.** At probability 0.2 over 30 seeds only about 6 runs carry a promotion, spread across 5 sellers; a gate-stage draw produced `[4, 0, 0, 1, 1]`, leaving two sellers never promoted at all. A criterion phrased as "the promoted seller's `n_sold` vs. its own baseline" therefore rests on roughly one observation per seller, which is not a sample.
 
-**Acceptance criteria:**
-- Among runs where a promotion is active, the promoted seller's `n_sold` increases measurably vs. its own Phase-3 baseline
-- Report whether the promotion effect size differs across Poor, Middle, and Rich buyers (first place an interaction naturally shows up, before Phase 5 formally introduces interaction terms)
+The 0.2 mechanism is kept exactly as specified, because it is the market environment Phase 5 onward inherits and because an occasional situational factor is what Belk's framework describes. Measurement is separated from it:
+
+- **`phase4_main`** — the market as specified, promotion probability 0.2. Reported for its aggregate behaviour; not the basis of the graded criteria.
+- **`phase4_no_promotion`** — probability 0, otherwise identical. The baseline arm.
+- **`phase4_forced_<seller_id>`** — one run set per seller, that seller promoted in every seed, otherwise identical.
+
+Every arm draws the promotion roll and the promotion pick in the same position in the random stream (after the visibility draw, itself after the purchase draw), so all arms share identical preferences, visit orders, purchase draws and visibility draws on a given seed. The forced arms and the no-promotion arm are therefore paired seed by seed, and the graded criteria below are evaluated on those pairs — 30 paired observations per seller instead of about one. This mirrors Phase 1's inventory-pressure side experiment: the main run stays exactly as pre-registered, and a paired variant supplies the evidence the main run structurally cannot.
+
+**A 30% discount never opens Shigh to Poor.** 6 × 0.7 = 4.2, still above Poor's budget of 3. Poor's response to a promoted Shigh stall is therefore 0.000 by arithmetic, as in Phases 2 and 3, and must not be reported as evidence that low-budget buyers are insensitive to promotions.
+
+**Output:** `run_summary.csv` adds `promotion_active (bool)`, `promotion_seller_id`, `promotion_discount`, and share metrics conditional on promotion status.
+
+**Acceptance criteria** (evaluated on the paired forced-promotion arms against `phase4_no_promotion`, same seeds):
+- `participation_rate` in 0.6–1.0
+- **Promotion lift:** for every seller, the across-seed mean of (`n_sold` promoted − `n_sold` not promoted) is positive with its 95% CI excluding zero. This replaces "increases measurably", which set no bar; the CI form matches Phases 2 and 3.
+- **Class interaction:** for each promoted tier, the *expected responder* class shows a larger lift than every other class, paired by seed, with each difference's 95% CI excluding zero.
+
+  The expected responder is defined **from the parameters, in advance of any result**: it is the lowest-budget class that can afford the discounted price. For a promoted Slow stall (2 → 1.4) that is Poor; for a promoted Shigh stall (6 → 4.2) that is Middle, because Poor's budget of 3 cannot reach 4.2. Naming the class structurally rather than by observed outcome is what keeps this a prediction rather than a description of a result already seen.
+
+  This was originally worded "report whether the promotion effect size differs across Poor, Middle, and Rich buyers" — a reporting line, not a bar. It is promoted to a graded criterion because it is one of the phase's two stated research questions, and because a level-shift and an interaction are exactly what this criterion distinguishes: a level shift would lift all classes alike, an interaction concentrates the lift in the class for which the discount is marginal.
 
 **Literature basis:** Belk (1975), "Situational Variables and Consumer Behavior" (*Journal of Consumer Research*) — basis for modeling a transient promotion as a situational/context variable distinct from stable person or environment features.
 
