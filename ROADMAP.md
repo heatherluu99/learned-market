@@ -143,7 +143,29 @@ A phase is not complete until all of the following are done, in order:
 
 ## Git workflow
 
-- Commit per meaningful change, with a message describing what changed and why
 - Tag phase completion: `phase1-validated`, `phase2-validated`, etc. (only after the completion checklist above)
 - Branch per phase: `phase2-heterogeneous`, `phase3-environment`, etc.
 - Never advance to the next phase's branch until the current phase's acceptance criteria (in `docs/phase_specifications.md`) are met and tagged
+
+### Three commits per phase, in this order
+
+"Commit per meaningful change" was too vague to follow: Phases 3–5 each landed
+as a single commit of 20–40 files, and Phase 4's was 42,000 lines. A spec
+correction, an engine change and seven sets of generated CSVs in one diff means
+the record of *how* a mechanism was built is unreadable even though it is
+technically preserved. Each phase is therefore committed in three parts:
+
+| # | Commit | Contains | Why separate |
+|---|---|---|---|
+| 1 | **Gate** | `docs/phase_specifications.md` (and `ROADMAP.md`) only | The design decisions made at the review gate, as a diff of tens of lines that can actually be read. Lands *before* implementation, which is also the order the gate itself requires. |
+| 2 | **Implementation** | `src/`, `tests/`, `experiments/`, `tools/` | The code, reviewable on its own. Not buried under generated output. |
+| 3 | **Results** | `results/`, `experiment_log.csv`, `project_tracking.pptx` | Entirely generated. Isolating it keeps the code diff in commit 2 legible, and keeps `git log --stat` honest about which changes were authored and which were produced by a run. |
+
+Results stay committed rather than ignored: `experiment_log.csv` binds every
+run to a commit hash, so the outputs are part of the evidence chain, not
+incidental build artifacts.
+
+Extra commits beyond these three are fine and expected when something is
+corrected mid-phase — Phase 1 took four because the price normalizer and the
+convergence band were both fixed after the first run. The three are a floor on
+granularity, not a cap.
