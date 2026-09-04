@@ -473,16 +473,42 @@ Under the additive reading, `Poor_*` and `Middle_*` shares are unchanged to the 
 
 **New mechanism:**
 - Run 1 season = 22 weeks per simulation (not independent reruns — state persists across weeks within one simulation). See "Weeks and Seasons — Design Basis" above for why 22.
-- Each buyer tracks `last_seller_purchased`.
-- Add a loyalty bonus to utility: `+0.5` if evaluating the seller from `last_seller_purchased`.
+- Each buyer tracks `last_seller_purchased` and `loyalty_streak`, the number of consecutive shopped weeks that seller has been their choice.
+- Add a loyalty bonus to utility when evaluating `last_seller_purchased`:
+  ```
+  utility += 0.5 * min(loyalty_streak, 3)
+  ```
 - Seller inventory resets at the start of each week; budget resets each week.
-- Not every buyer participates every week — give each buyer a per-class participation probability (e.g., Poor ≈ 0.85, Middle ≈ 0.84, Rich ≈ 0.82) and skip the purchase decision entirely (log as "did not shop") on weeks they don't participate. This is a real, previously-undocumented part of the mechanism, not a visualization-only flourish — `participation_rate` in `run_summary.csv`/`weekly_summary.csv` should reflect it directly.
+- Not every buyer participates every week — give each buyer a per-class participation probability (Poor 0.85, Middle 0.84, Rich 0.82) and skip the purchase decision entirely (log as "did not shop") on weeks they don't participate.
 
-**Output:** new table `weekly_summary.csv`: week_number, participation_rate, class shares, `buyer_seller_pair_stability` (fraction of buyers, among those who participated in both this week and the prior week, whose seller choice matches).
+**Memory accumulates; a fixed bonus does not (corrected at the design review gate).** This originally read `+0.5` if the seller was `last_seller_purchased`, with no streak. That version cannot produce the trajectory this phase's own acceptance criterion asks for: a constant bonus on a one-week-deep memory is a Markov chain at equilibrium after a single step, so stability is the same in week 1 as in week 21. Gate-stage measurement confirmed it — 0.381 at week 1 against 0.384 at week 21, with a late-minus-early difference of −0.001, CI [−0.019, +0.017]. The streak version rises: +0.037, CI [+0.012, +0.062].
+
+The rest of the spec had already assumed streaks existed — the Phase 6 visualization below specifies a "loyalty streak ≥ N weeks" slider and an agent panel showing "a clicked buyer's ... loyalty streak", neither of which is definable under a one-week memory. The mechanism is corrected to match, rather than the visualization being cut back to match the mechanism.
+
+**Why the streak is capped at 3.** The cap is derived, not tuned to make the test pass. `preference_coef * preference` spans [0, 1.5], so a maximum loyalty bonus of `0.5 * 3 = 1.5` lets habit at most *match* the strongest possible taste difference and never override it — loyalty is a tie-breaker of comparable weight to taste, not a lock-in. Sensitivity at the gate: cap 2 (max +1.0) produces no detectable rise, CI [−0.001, +0.047]; cap 4 and above, and uncapped, let the bonus exceed the preference range and saturate stability near 0.51.
+
+**`last_seller_purchased` when a buyer used several sellers in one week:** take the seller they bought the *most* units from, ties broken by first encountered. This is undefined in about 15% of buyer-weeks and the choice matters — at the gate, "most" gave week-21 stability of 0.401 against 0.360 for "most recent". "Most recent" was rejected because it depends on the buyer's random stall order that week, which injects noise into what is supposed to be a memory state.
+
+**Output:** new table `weekly_summary.csv`: `week_number`, `attendance_rate`, `purchase_rate`, class shares, `buyer_seller_pair_stability` (fraction of buyers, among those who shopped *and bought* in both this week and the prior week, whose chosen seller matches).
+
+**Participation is two different quantities and both are recorded.** `attendance_rate` is the share of buyers who showed up — the direct expression of the per-class participation probability, about 0.834. `purchase_rate` is the share who actually bought something, about 0.680. The Phase 1–5 acceptance band of 0.6–1.0 applies to `purchase_rate`, because that is the quantity `participation_rate` measured in those phases; keeping the names distinct is what stops the longitudinal table from silently comparing two different things.
+
+**A no-loyalty control arm is required, because most of this metric is not memory.** Decomposition of week-21 stability at the gate:
+
+| Source | Cumulative stability |
+|---|---|
+| Uniform random over 5 sellers | 0.200 |
+| + unequal seller popularity (`Σpᵢ²`) | 0.283 |
+| + season-long fixed preference | 0.323 |
+| + loyalty bonus | 0.384 |
+
+Loyalty contributes 0.061 of 0.384; the remaining 0.323 is popularity concentration and fixed taste, neither of which is memory. Reporting the raw level as evidence that "memory produces stable relationships" would be wrong by a factor of five. `phase6_no_loyalty` runs the identical market with the bonus disabled, paired seed by seed.
 
 **Acceptance criteria:**
-- `buyer_seller_pair_stability` should increase over the 22 weeks and plateau (convergence check, same running-mean logic as before, but along the week axis within a run rather than across seeds)
-- Report the week at which stability plateaus
+- `purchase_rate` in 0.6–1.0
+- **Memory raises stability above the no-loyalty control:** the paired across-seed mean of (`buyer_seller_pair_stability` with loyalty − without) is positive with its 95% CI excluding zero
+- **Stability rises across the season:** the mean of weeks 17–21 exceeds the mean of weeks 1–5, paired across seeds, with its 95% CI excluding zero
+- Report the week at which stability plateaus, defined as the first week after which the running mean stays within 1 SEM of its final value — the same convergence band used across seeds in Phases 1–5, applied along the week axis
 
 ### Web Visualization (introduced here — dual-purpose: debugging tool + portfolio piece)
 
