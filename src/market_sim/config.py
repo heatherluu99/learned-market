@@ -43,6 +43,19 @@ class SellerClass:
     count: int
     price: float
     inventory: int
+    #: Phase 3 onward. None means "no environment" — every stall is always
+    #: noticed, which is what Phases 1 and 2 assume. A float in [0, 1] gives
+    #: `visibility_prob = 0.5 + 0.5 * position_score` (1 = by the entrance).
+    #: Sellers of the same class can differ here, so Phase 3 lists one
+    #: SellerClass per position rather than per price tier.
+    position_score: float | None = None
+
+    @property
+    def visibility_prob(self) -> float:
+        """Probability a given buyer notices this stall in a given run."""
+        if self.position_score is None:
+            return 1.0
+        return 0.5 + 0.5 * self.position_score
 
 
 @dataclass(frozen=True)
@@ -101,6 +114,27 @@ class MarketConfig:
 
     def seller_class_of(self) -> list[str]:
         return [c.name for c in self.seller_classes for _ in range(c.count)]
+
+    def seller_tier_names(self) -> list[str]:
+        """Distinct seller tier names, in configuration order.
+
+        From Phase 3 a tier can span several SellerClass entries — same price,
+        different position — so the entry list is no longer one per tier and
+        must be deduplicated before it is used to name output columns.
+        """
+        seen: list[str] = []
+        for c in self.seller_classes:
+            if c.name not in seen:
+                seen.append(c.name)
+        return seen
+
+    def visibility_prob_of(self) -> list[float]:
+        """Visibility probability per seller id. All 1.0 before Phase 3."""
+        return [c.visibility_prob for c in self.seller_classes for _ in range(c.count)]
+
+    @property
+    def has_environment(self) -> bool:
+        return any(c.position_score is not None for c in self.seller_classes)
 
     def with_common_price_sensitivity(self, alpha: float, name: str) -> "MarketConfig":
         """Same market with every class sharing one alpha.
@@ -201,4 +235,34 @@ PHASE2_MAIN = MarketConfig(
 #: budget heterogeneity. Required reporting, not a pass/fail bar.
 PHASE2_COMMON_ALPHA = PHASE2_MAIN.with_common_price_sensitivity(
     0.5, name="phase2_common_alpha"
+)
+
+
+# --------------------------------------------------------------------------
+# Phase 3 — Person + Environment
+# --------------------------------------------------------------------------
+
+#: Phase 2's market plus one environment variable: stall position, which drives
+#: how likely a buyer is to notice a stall at all. Nothing else changes —
+#: buyers, prices, inventories and the utility function are Phase 2's.
+#:
+#: A tier now spans two entries, because same-price stalls sit in different
+#: places. Seller ids come out as 0,1 = Slow near / 2 = Slow far /
+#: 3 = Shigh near / 4 = Shigh far.
+#:
+#: Note the tier-level asymmetry this assignment creates: mean visibility is
+#: 0.850 for Slow against 0.775 for Shigh, because 2 of 3 Slow stalls are near
+#: but only 1 of 2 Shigh stalls is. Any tier-share movement is partly an
+#: artifact of that choice. See docs/phase_specifications.md, Phase 3.
+PHASE3_MAIN = MarketConfig(
+    name="phase3_main",
+    phase=3,
+    buyer_classes=PHASE2_MAIN.buyer_classes,
+    seller_classes=(
+        SellerClass("Slow", count=2, price=2.0, inventory=130, position_score=0.9),
+        SellerClass("Slow", count=1, price=2.0, inventory=130, position_score=0.3),
+        SellerClass("Shigh", count=1, price=6.0, inventory=70, position_score=0.8),
+        SellerClass("Shigh", count=1, price=6.0, inventory=70, position_score=0.3),
+    ),
+    seeds=PHASE2_MAIN.seeds,
 )

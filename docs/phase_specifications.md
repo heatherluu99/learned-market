@@ -348,13 +348,21 @@ visibility_prob = 0.5 + 0.5 * position_score
 ```
 Each buyer "notices" (can consider purchasing from) a given seller in a given run with probability `visibility_prob`, independently sampled per buyer-seller-run. If not noticed, that seller is skipped for that buyer this run — no purchase decision is evaluated.
 
-Assign, e.g.: 2 Slow sellers near entrance (position 0.9), 1 Slow seller far (position 0.3); 1 Shigh near entrance (0.8), 1 Shigh far (0.3).
+Assign: 2 Slow sellers near entrance (position 0.9), 1 Slow seller far (position 0.3); 1 Shigh near entrance (0.8), 1 Shigh far (0.3).
+
+**Position assignment builds in a tier-level visibility difference — note it before reading any share result.** Two of three Slow stalls are near, but only one of two Shigh stalls is, so mean visibility by tier is Slow 0.850 against Shigh 0.775. Any shift in class-to-tier shares under this phase is therefore partly an artifact of *this particular* position assignment, not a general property of "adding an environment variable". The assignment is kept as specified, but a different one would produce a different tier-level effect, and that must not be mistaken for a different finding about environments.
+
+**Implementation requirement — draw visibility last.** The per-buyer-per-seller visibility draw must come *after* the preference, visit-order, and purchase draws in the random stream. Two things depend on it: Phase 1 and Phase 2 results stay bit-for-bit reproducible at their validated tags, and Phase 3 becomes a properly paired comparison against Phase 2 — same seeds, same preferences, same visit orders, same purchase draws, differing only in whether a stall was noticed.
 
 **Output:** same as Phase 2, plus `run_summary.csv` adds `visibility_rate_by_seller`.
 
 **Acceptance criteria:**
-- Far sellers show measurably lower `n_sold` than near sellers of the same price class (isolates the environment effect from the price effect)
-- Compare `Poor_to_Slow_share`, `Middle_to_Slow_share`, and `Rich_to_Slow_share` against the Phase 2 baseline — quantify how much the environment variable shifts these shares (this is the actual deliverable: "person alone" vs "person + environment" explanatory contribution)
+- `participation_rate` in 0.6–1.0
+- **Position effect:** within each price tier, the across-seed mean of (mean `n_sold` at near stalls − `n_sold` at the far stall) is positive with its 95% CI excluding zero. This replaces the original "measurably lower", which set no bar at all; the CI form matches the one adopted for Phase 2's stratification criterion.
+
+**Reported, not graded:**
+- **Class-to-tier share shift vs. the Phase 2 baseline**, paired by seed: `Poor_to_Slow_share`, `Middle_to_Slow_share`, `Rich_to_Slow_share`, each with the 95% CI of its shift. **A shift indistinguishable from zero is an acceptable and informative outcome of this phase, pre-registered as such.** It would mean the environment redistributes sales *between sellers* without disturbing the class-to-tier sorting Phase 2 established — a real finding, not a failure, and this phase must not be re-parameterized to manufacture a shift. `Poor_to_Slow_share` in particular cannot move at all: it is pinned at 1.000 by the same affordability wall documented in Phase 2, so its shift is 0.000 by construction and is reported only for completeness.
+- **Participation shift vs. the Phase 2 baseline**, paired by seed, with its 95% CI. Visibility is the only mechanism that can reduce participation here — a buyer who never notices a stall cannot buy from it — so this is the phase's most direct aggregate consequence and must be stated explicitly rather than left to pass silently inside the 0.6–1.0 band.
 
 **Literature basis:** Huff (1963, 1964), gravity-based retail trade-area model — basis for `visibility_prob` declining with seller position, directly paralleling Huff's $P_{ij} \propto A_j^\alpha / D_{ij}^\beta$.
 

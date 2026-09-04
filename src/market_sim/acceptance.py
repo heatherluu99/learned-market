@@ -202,6 +202,66 @@ def evaluate_phase2(
     return criteria
 
 
+def position_effect_by_tier(
+    cfg: MarketConfig, results: list[RunResult]
+) -> dict[str, tuple[float, float, float, int]]:
+    """Per tier: (mean near-minus-far n_sold, CI low, CI high, seeds positive).
+
+    "Near" and "far" are the highest- and lowest-position entries within a
+    tier, compared as per-seller means so tiers with unequal numbers of near
+    and far stalls are still comparable.
+    """
+    positions = np.array(
+        [
+            c.position_score if c.position_score is not None else 1.0
+            for c in cfg.seller_classes
+            for _ in range(c.count)
+        ]
+    )
+    tiers = np.array(cfg.seller_class_of())
+    sold = np.array([r.seller_n_sold for r in results], dtype=float)
+
+    out = {}
+    for tier in cfg.seller_tier_names():
+        in_tier = tiers == tier
+        tier_positions = positions[in_tier]
+        if tier_positions.max() == tier_positions.min():
+            continue  # no position contrast inside this tier
+        near = in_tier & (positions == tier_positions.max())
+        far = in_tier & (positions == tier_positions.min())
+        diff = sold[:, near].mean(axis=1) - sold[:, far].mean(axis=1)
+        mean, lo, hi = mean_difference_ci(diff, np.zeros_like(diff))
+        out[tier] = (mean, lo, hi, int((diff > 0).sum()))
+    return out
+
+
+def evaluate_phase3(
+    cfg: MarketConfig, results: list[RunResult]
+) -> list[CriterionResult]:
+    """Phase 3 acceptance criteria.
+
+    The position criterion is stated as a paired CI rather than the spec's
+    original "measurably lower", which set no bar at all. The class-share
+    shift and the participation shift are reported here as ungraded; the
+    spec pre-registers a null share shift as an acceptable outcome, so it must
+    not be gradeable.
+    """
+    criteria = [_participation_criterion(results)]
+
+    effects = position_effect_by_tier(cfg, results)
+    for tier, (mean, lo, hi, n_pos) in effects.items():
+        criteria.append(
+            CriterionResult(
+                name=f"position effect in {tier}: near sells more than far",
+                passed=bool(mean > 0 and lo > 0),
+                measured=f"near-far {mean:+.2f} per seller, 95% CI [{lo:+.2f}, {hi:+.2f}]",
+                threshold="mean > 0 and CI lower bound > 0",
+                note=f"positive in {n_pos} of {len(results)} seeds",
+            )
+        )
+    return criteria
+
+
 def convergence_band(values: np.ndarray) -> float:
     """Convergence tolerance for a metric: one standard error of its mean.
 

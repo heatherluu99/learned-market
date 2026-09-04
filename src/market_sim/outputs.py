@@ -11,6 +11,7 @@ from .config import MarketConfig
 from .engine import (
     NO_PURCHASE_BUDGET,
     NO_PURCHASE_INVENTORY,
+    NO_PURCHASE_UNNOTICED,
     NO_PURCHASE_UTILITY,
     RunResult,
 )
@@ -56,23 +57,38 @@ def buyer_summary_frame(results: list[RunResult]) -> pd.DataFrame:
     )
 
 
-def seller_summary_frame(results: list[RunResult]) -> pd.DataFrame:
-    return pd.concat(
-        [
-            pd.DataFrame(
-                {
-                    "seed": r.seed,
-                    "seller_id": range(len(r.seller_n_sold)),
-                    "seller_class": r.seller_classes,
-                    "n_sold": r.seller_n_sold,
-                    "revenue": r.seller_revenue,
-                    "inventory_remaining": r.seller_inventory_remaining,
-                }
-            )
-            for r in results
-        ],
-        ignore_index=True,
-    )
+def seller_summary_frame(
+    results: list[RunResult], cfg: MarketConfig | None = None
+) -> pd.DataFrame:
+    """Per seller, per seed.
+
+    `cfg` adds the Phase 3 environment columns (`position_score`,
+    `visibility_prob`, realized `visibility_rate`). Without it the frame is the
+    Phase 1/2 shape, which is what the seed-only callers want.
+    """
+    position = visibility = None
+    if cfg is not None and cfg.has_environment:
+        position = [
+            c.position_score for c in cfg.seller_classes for _ in range(c.count)
+        ]
+        visibility = cfg.visibility_prob_of()
+
+    frames = []
+    for r in results:
+        data = {
+            "seed": r.seed,
+            "seller_id": range(len(r.seller_n_sold)),
+            "seller_class": r.seller_classes,
+            "n_sold": r.seller_n_sold,
+            "revenue": r.seller_revenue,
+            "inventory_remaining": r.seller_inventory_remaining,
+        }
+        if position is not None:
+            data["position_score"] = position
+            data["visibility_prob"] = visibility
+            data["visibility_rate"] = r.visibility_rate_by_seller(len(r.buyer_classes))
+        frames.append(pd.DataFrame(data))
+    return pd.concat(frames, ignore_index=True)
 
 
 def run_summary_frame(cfg: MarketConfig, results: list[RunResult]) -> pd.DataFrame:
@@ -91,7 +107,9 @@ def run_summary_frame(cfg: MarketConfig, results: list[RunResult]) -> pd.DataFra
     diverge, since Middle and Rich can afford more than one unit.
     """
     buyer_names = [c.name for c in cfg.buyer_classes]
-    seller_names = [c.name for c in cfg.seller_classes]
+    # Deduplicated: from Phase 3 a tier spans several entries (same price,
+    # different position), which would otherwise emit duplicate columns.
+    seller_names = cfg.seller_tier_names()
 
     rows = []
     for r in results:
@@ -104,7 +122,15 @@ def run_summary_frame(cfg: MarketConfig, results: list[RunResult]) -> pd.DataFra
             "n_blocked_by_utility": r.blocked_counts[NO_PURCHASE_UTILITY],
             "n_blocked_by_budget": r.blocked_counts[NO_PURCHASE_BUDGET],
             "n_blocked_by_inventory": r.blocked_counts[NO_PURCHASE_INVENTORY],
+            "n_not_noticed": r.blocked_counts.get(NO_PURCHASE_UNNOTICED, 0),
         }
+        # Phase 3 onward: realized visibility per seller, the observed
+        # counterpart of the configured position_score.
+        if cfg.has_environment:
+            for seller_id, rate in enumerate(
+                r.visibility_rate_by_seller(cfg.n_buyers)
+            ):
+                row[f"visibility_rate_seller_{seller_id}"] = float(rate)
         for bc in buyer_names:
             row[f"{bc}_participation_rate"] = r.participation_rate_of(bc)
             for sc in seller_names:
@@ -118,7 +144,7 @@ def run_summary_frame(cfg: MarketConfig, results: list[RunResult]) -> pd.DataFra
 
 
 def seller_class_summary(results: list[RunResult]) -> pd.DataFrame:
-    """Per seller class, averaged over seeds. Used by the Phase 2 slide."""
+    """Per seller class, averaged over seeds. Used by the phase slides."""
     frame = seller_summary_frame(results)
     per_seed = frame.groupby(["seed", "seller_class"], as_index=False).agg(
         n_sold=("n_sold", "sum"),
@@ -136,7 +162,7 @@ def write_all(
     frames = {
         "transactions": transactions_frame(results),
         "buyer_summary": buyer_summary_frame(results),
-        "seller_summary": seller_summary_frame(results),
+        "seller_summary": seller_summary_frame(results, cfg),
         "run_summary": run_summary_frame(cfg, results),
     }
     paths = {}

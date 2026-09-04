@@ -25,6 +25,10 @@ from .config import MarketConfig
 NO_PURCHASE_UTILITY = "utility_draw"
 NO_PURCHASE_BUDGET = "budget_exhausted"
 NO_PURCHASE_INVENTORY = "inventory_empty"
+#: Phase 3 onward: the stall was never noticed, so no decision was made at all.
+#: Kept distinct from "did not want to buy" - a buyer who never saw a stall has
+#: not expressed a preference about it.
+NO_PURCHASE_UNNOTICED = "not_noticed"
 
 
 @dataclass
@@ -61,6 +65,9 @@ class RunResult:
     #: Phase 2 needs this to show that a class was priced out of a tier rather
     #: than choosing to avoid it.
     blocked_by_budget_pairs: dict[tuple[str, str], int] = field(default_factory=dict)
+    #: Phase 3 onward: how many buyers noticed each seller this run. The
+    #: realized counterpart of the configured visibility_prob.
+    seller_noticed: np.ndarray | None = None
 
     @property
     def participation_rate(self) -> float:
@@ -89,6 +96,12 @@ class RunResult:
         if not own:
             return float("nan")
         return sum(1 for t in own if t.seller_class == seller_class) / len(own)
+
+    def visibility_rate_by_seller(self, n_buyers: int) -> np.ndarray:
+        """Realized share of buyers who noticed each seller."""
+        if self.seller_noticed is None:
+            return np.ones(len(self.seller_n_sold))
+        return self.seller_noticed / n_buyers
 
     def participation_rate_of(self, buyer_class: str) -> float:
         mask = np.array([c == buyer_class for c in self.buyer_classes])
@@ -153,6 +166,13 @@ def run_single(cfg: MarketConfig, seed: int) -> RunResult:
     visit_orders = np.array([rng.permutation(n_sellers) for _ in range(n_buyers)])
     # purchase_draw[b, s]: the uniform compared against P(purchase).
     purchase_draw = rng.random((n_buyers, n_sellers))
+    # visibility_draw[b, s]: Phase 3 onward, whether buyer b notices seller s.
+    # Drawn LAST, deliberately: everything above keeps the exact stream it had
+    # before the environment existed, so Phase 1 and Phase 2 stay reproducible
+    # at their validated tags, and Phase 3 is a properly paired comparison
+    # against Phase 2 rather than a differently-randomized market.
+    visibility_draw = rng.random((n_buyers, n_sellers))
+    visibility_prob = np.array(cfg.visibility_prob_of(), dtype=float)
 
     buyer_class = cfg.buyer_class_of()
     seller_class = cfg.seller_class_of()
@@ -180,7 +200,9 @@ def run_single(cfg: MarketConfig, seed: int) -> RunResult:
         NO_PURCHASE_UTILITY: 0,
         NO_PURCHASE_BUDGET: 0,
         NO_PURCHASE_INVENTORY: 0,
+        NO_PURCHASE_UNNOTICED: 0,
     }
+    noticed = np.zeros(n_sellers, dtype=int)
     blocked_pairs: dict[tuple[str, str], int] = {}
     transactions: list[Transaction] = []
     # Read once, outside both loops: one market-wide value for every seller.
@@ -189,6 +211,13 @@ def run_single(cfg: MarketConfig, seed: int) -> RunResult:
     for buyer_id in range(n_buyers):
         for visit_order, seller_id in enumerate(visit_orders[buyer_id]):
             seller_id = int(seller_id)
+            # Phase 3 environment: an unnoticed stall is skipped entirely — no
+            # purchase decision is evaluated, so it is not a "chose not to buy".
+            if visibility_draw[buyer_id, seller_id] >= visibility_prob[seller_id]:
+                blocked[NO_PURCHASE_UNNOTICED] += 1
+                continue
+            noticed[seller_id] += 1
+
             price = seller_price[seller_id]
             p_purchase = purchase_probability(
                 cfg,
@@ -252,6 +281,7 @@ def run_single(cfg: MarketConfig, seed: int) -> RunResult:
         seller_inventory_remaining=inventory,
         blocked_counts=blocked,
         blocked_by_budget_pairs=blocked_pairs,
+        seller_noticed=noticed,
     )
 
 
