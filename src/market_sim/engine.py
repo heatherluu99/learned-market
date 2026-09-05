@@ -421,8 +421,15 @@ def _choice_of_week(bought: list[int]) -> int:
     return -1
 
 
-def run_season(cfg: MarketConfig, seed: int) -> SeasonResult:
+def run_season(cfg: MarketConfig, seed: int, policy=None) -> SeasonResult:
     """Run one season of `cfg.weeks` weeks with persistent buyer memory.
+
+    `policy` is Phase 7d's hook: a callable taking (seller_id, state) and
+    returning an arm index, used instead of the bandit when price_rule is
+    "policy". It sees only what a seller could observe about itself - its own
+    loyal-buyer count, its last arm, its last profit, and how far into the
+    season it is - because Phase 7c established there is no external market
+    state worth conditioning on.
 
     Budget and inventory reset every week; `last_seller_purchased` and the
     loyalty streak do not - that persistence is the phase's changed dimension.
@@ -493,7 +500,20 @@ def run_season(cfg: MarketConfig, seed: int) -> SeasonResult:
         promotion_roll = rng.random()
         promotion_pick = int(rng.integers(0, n_sellers))
 
-        if cfg.price_rule in ("bandit_eps", "bandit_ucb"):
+        if cfg.price_rule == "policy":
+            if policy is None:
+                raise ValueError('price_rule="policy" needs a policy callable')
+            for si in range(n_sellers):
+                loyal = int(((last_seller == si) & (streak >= 2)).sum())
+                chosen_arm[si] = int(policy(si, {
+                    "loyal_fraction": loyal / n_buyers,
+                    "last_arm": int(chosen_arm[si]),
+                    "last_profit": float(previous_profit[si]) if previous_profit is not None else 0.0,
+                    "season_fraction": _week / max(cfg.weeks - 1, 1),
+                    "n_arms": n_arms,
+                }))
+            posted_price = arm_price[np.arange(n_sellers), chosen_arm]
+        elif cfg.price_rule in ("bandit_eps", "bandit_ucb"):
             for si in range(n_sellers):
                 untried = np.flatnonzero(arm_pulls[si] == 0)
                 if len(untried):
@@ -641,7 +661,9 @@ def run_season(cfg: MarketConfig, seed: int) -> SeasonResult:
         price_hist.append(posted_price.copy())
         profit_hist.append(profit.copy())
 
-        if cfg.price_rule in ("bandit_eps", "bandit_ucb"):
+        if cfg.price_rule == "policy":
+            previous_profit = profit
+        elif cfg.price_rule in ("bandit_eps", "bandit_ucb"):
             for si in range(n_sellers):
                 a = chosen_arm[si]
                 arm_pulls[si, a] += 1

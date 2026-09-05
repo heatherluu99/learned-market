@@ -613,3 +613,19 @@ PHASE7A_HILL = _phase7("phase7a_hill", rule="hill_climb")
 #: and UCB1 beats it. See docs/phase_specifications.md, Phase 7b.
 PHASE7B_EPS = _phase7("phase7b_eps", rule="bandit_eps")
 PHASE7B_UCB = _phase7("phase7b_ucb", rule="bandit_ucb")
+
+
+# --------------------------------------------------------------------------
+# Phase 7d — Reinforcement Learning (multi-week credit assignment)
+# --------------------------------------------------------------------------
+
+#: Same market and same arms as 7b, so the comparison isolates the reward
+#: horizon. price_rule="policy" hands arm selection to a callable; the training
+#: code lives in market_sim.rl and the policy sees only the seller's own state,
+#: since Phase 7c established there is no external state worth conditioning on.
+PHASE7D = _phase7("phase7d_rl", rule="policy")
+
+#: Seeds used to fit the policy. Disjoint from the 0-29 evaluation block every
+#: other phase uses: a policy scored on the seeds it was fitted to measures
+#: memorization. See docs/phase_specifications.md, Phase 7d.
+PHASE7D_TRAIN_SEEDS = tuple(range(1000, 1120))
