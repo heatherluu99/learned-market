@@ -639,14 +639,16 @@ This is deliberately not a fix that lets the quiet stall price "correctly": at t
 
 **Mechanism:** each seller picks a weekly price from the fixed set {price × 0.8, 0.9, 1.0, 1.1, 1.2} on weekly profit as reward. No buyer-class or environment information is used — deliberately context-blind, to isolate what pure trial-and-error contributes before context is added.
 
-**Both algorithms are run, because the choice between them flips the verdict.** The original text offered "e.g., epsilon-greedy or UCB" as though they were interchangeable. Measured over 66 weeks against 7a's 64.3 profit per week:
+**Both algorithms are run, and the thing that actually moves the verdict is neither of them.** The original text offered "e.g., epsilon-greedy or UCB" as though interchangeable, and a first measurement appeared to show that the choice flipped the graduation decision. It does not. Isolating it against 7a's 64.3 profit per week:
 
-| arm set | algorithm | profit/week | vs 7a |
-|---|---|---|---|
-| 0.8–1.2× (specified) | ε-greedy, ε = 0.1 | 55.4 | **−8.9** |
-| 0.8–1.2× (specified) | UCB1 | 69.7 | **+5.4** |
+| initialization | ε-greedy (ε = 0.1) | UCB1 |
+|---|---|---|
+| no initial sweep | 55.4 (**−8.9** vs 7a) | 69.7 (+5.4) |
+| each arm pulled once first | 68.2 (**+3.9** vs 7a) | 69.7 (+5.4) |
 
-The same arms, the same seeds, and opposite graduation decisions. ε-greedy spends a tenth of every week on a uniformly random arm forever, including arms it already knows are bad; UCB1's exploration decays as arms accumulate pulls. Leaving this as "e.g." would mean the phase's conclusion was set by an unstated implementation choice, so `phase7b_eps` and `phase7b_ucb` are both run and graded, and the spread between them is reported as a result in its own right.
+**The sensitivity is to initialization, not to the algorithm.** UCB1 is identical in both rows because pulling every untried arm once is part of its definition; ε-greedy swings by 12.8 profit per week on that one choice alone, because without a sweep it commits early to whichever arm its first pull happened to favour and thereafter only revisits others 10% of the time. Once both are initialized the same way they agree, and neither flips the decision.
+
+The original spec named the algorithm as a free choice and did not mention initialization at all — so the parameter it left open was harmless and the one that mattered was invisible. Both algorithms are run and graded anyway, with an initial sweep in each, and their agreement is reported: two learning rules reaching the same verdict is stronger evidence than one.
 
 **The arm set is deliberately *not* widened, and its ceiling is the finding.** The profit optimum for a Slow seller is 3.00 — which is 1.5× its initial price, outside the specified 1.2× ceiling of 2.40. Widening the arms to reach it would encode the answer into the hypothesis space, which is exactly the post-hoc move this project's gates exist to catch. Measured for completeness only: at 0.8–1.8× arms, UCB1 reaches 2.78 and +26.5 per week against 7a instead of +5.4.
 
