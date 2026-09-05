@@ -468,7 +468,13 @@ Under the additive reading, `Poor_*` and `Middle_*` shares are unchanged to the 
 
 ## Phase 6 — Repeated Interaction (multi-week; history becomes real here)
 
-**Research question:** Does buyer memory (loyalty to a previously-purchased seller) change future behavior and produce stable buyer-seller relationships over time?
+**Research question (strengthened at a second design review gate):** **Does persistent memory create trajectory-level behaviour that cannot be explained by static preferences alone?**
+
+The original — "does memory produce stable buyer-seller relationships" — invites the obvious objection: a loyalty bonus was written into the utility function, and repeat purchasing went up. Demonstrating a mechanism you installed is not a finding. Three things separate a real memory test from that demonstration, and the phase is graded on all three rather than on the level of stability alone.
+
+1. **Ablation.** Memory ON against an otherwise identical memory-OFF arm on matched seeds. *Already built and graded* — this is `phase6_no_loyalty`, and the decomposition below shows how little of the raw stability level is memory at all.
+2. **Path dependence.** Whether two buyers with the same traits can end up in permanently different relationships because of early history. This is the claim that cannot be restated as "you added a bonus", because it is about the dynamics rather than the mechanism.
+3. **Shock recovery** (secondary). Whether a relationship that already exists survives a temporary disruption — persistence and hysteresis rather than steady-state stability.
 
 **Single changed dimension:** add a time axis (multiple weeks in one simulation) and a memory term; single-week mechanics inherited from Phase 5 (or Phase 4, per that phase's outcome) are otherwise unchanged.
 
@@ -505,6 +511,37 @@ The rest of the spec had already assumed streaks existed — the Phase 6 visuali
 
 Loyalty contributes 0.061 of 0.384; the remaining 0.323 is popularity concentration and fixed taste, neither of which is memory. Reporting the raw level as evidence that "memory produces stable relationships" would be wrong by a factor of five. `phase6_no_loyalty` runs the identical market with the bonus disabled, paired seed by seed.
 
+### Path dependence: pre-registered as a null
+
+Measured at the gate with a butterfly test — one buyer is forced to skip week 0 and **every random draw is left untouched**, so under memory OFF the perturbation has nowhere to persist and later weeks must be bit-identical. Under memory ON the streak state differs, and the question is whether that difference survives.
+
+| | weeks 1–5 differ | weeks 17–21 differ | ever diverged |
+|---|---|---|---|
+| memory OFF | 0.000 | 0.000 | 0% |
+| memory ON | 0.018 | **0.000** | 8% |
+
+**It does not survive.** Divergence is rare to begin with and has decayed to nothing by the end of the season. So *early history → persistent future divergence* is **false in this model**, and "same persona ≠ same trajectory" is not a claim Phase 6 can make.
+
+**The cause is a design decision made earlier in this phase, not an accident.** `loyalty_streak_cap = 3` was derived so the maximum bonus equals `preference_coef` — habit can match the strongest taste difference and never override it. That is exactly what prevents lock-in: the bonus stops growing after three weeks and resets to zero on a single switch, making this a short-memory Markov process in which perturbations decay geometrically. **Keeping habit subordinate to taste and producing path dependence are two sides of the same choice, and this phase keeps the first.**
+
+The cap is therefore *not* relaxed to make the effect appear — that would be changing the mechanism after seeing a null. The null is recorded as the finding: a three-week-capped memory raises steady-state persistence without producing trajectory-level path dependence. It also sets up a clean contrast for Phase 7d, which asks whether a seller's multi-week horizon can do what a buyer's bounded memory cannot.
+
+**Note on the matched-persona variant.** Comparing buyers with near-identical preference vectors was also tried and is *not* adopted: preferences are drawn `U(0,1)` per buyer per seller, so near-identical vectors are rare — 6 usable pairs across 20 seeds, far too few to conclude anything. The butterfly test is the version with power, because it compares a buyer against a counterfactual of itself.
+
+### Shock recovery (secondary, reported not graded)
+
+A different question from path dependence: not whether early history shapes long-run trajectories, but whether a relationship that already exists resists an external disturbance. One seller is closed for a single week at week 12 and reopens at week 13; nothing else changes.
+
+Three quantities, for buyers paired with that seller before the shock, memory ON against OFF:
+
+- **return rate** — share who are back with it within the following weeks
+- **recovery time** — weeks until pair stability returns to its pre-shock level
+- **permanent switching rate** — share who never return
+
+**The shock is repeated across every seller and across all seeds**, not run once on one stall: a single outage would confound the memory effect with that particular seller's popularity. It is an exogenous, one-week probe and deliberately not an endogenous entry/exit mechanism — that is Phase 8, and this must not front-run it.
+
+Either outcome is informative. Memory-ON buyers flowing back while the OFF arm redistributes would show that memory creates relationships surviving temporary disruption. Neither arm returning would show that this memory mechanism raises steady-state stability without conferring shock resilience — a boundary worth having, and consistent with the path-dependence null above.
+
 **Acceptance criteria:**
 - `purchase_rate` in 0.6–1.0
 - **Memory raises stability above the no-loyalty control:** the paired across-seed mean of (`buyer_seller_pair_stability` with loyalty − without) is positive with its 95% CI excluding zero
@@ -524,6 +561,8 @@ Loyalty contributes 0.061 of 0.384; the remaining 0.323 is popularity concentrat
 
   The phase's substantive finding is the control comparison above (+0.109, CI [+0.105, +0.112]), which is an order of magnitude better separated and does not depend on any window choice. Any write-up must lead with that and treat the within-season rise as the marginal result it is.
 - Report the week at which stability plateaus, defined as the first week after which the running mean stays within 1 SEM of its final value — the same convergence band used across seeds in Phases 1–5, applied along the week axis
+- **Path dependence:** the memory-ON and memory-OFF arms' late-season perturbation persistence are compared under the ±5pp equivalence test and the comparison is **decisive**. As at Phase 5, what is graded is that a verdict is reached, not which verdict — and the pre-registered expectation here is **equivalent**, i.e. no path dependence
+- Shock recovery is reported, not graded
 
 ### Web Visualization (introduced here — dual-purpose: debugging tool + portfolio piece)
 
