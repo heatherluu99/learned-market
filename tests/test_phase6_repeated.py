@@ -10,7 +10,12 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from market_sim.acceptance import evaluate_phase6, plateau_week
+from market_sim.acceptance import (
+    evaluate_phase6,
+    perturbation_persistence,
+    plateau_week,
+    shock_metrics,
+)
 from market_sim.config import (
     PHASE1_MAIN,
     PHASE4_MAIN,
@@ -176,7 +181,8 @@ def test_all_graded_criteria_pass():
     seasons = run_season_seeds(PHASE6_MAIN)
     control = run_season_seeds(PHASE6_NO_LOYALTY)
     criteria = evaluate_phase6(PHASE6_MAIN, seasons, control)
-    assert len(criteria) == 3
+    # purchase rate, memory-vs-control, path dependence, within-season rise
+    assert len(criteria) == 4
     assert all(c.passed for c in criteria), [
         (c.name, c.measured) for c in criteria if not c.passed
     ]
@@ -187,3 +193,100 @@ def test_plateau_week_is_reported_and_inside_the_season():
     week = plateau_week(seasons)
     assert week is not None
     assert 1 <= week <= PHASE6_MAIN.weeks
+
+
+# --- second gate: path dependence and shock recovery ----------------------
+
+
+def test_perturbation_leaves_the_random_stream_untouched():
+    """The butterfly test is only valid if nothing but the memory state moves.
+
+    The attendance draw is made and then overridden, so under memory OFF the
+    perturbed run must be bit-identical after the perturbed week - a buyer who
+    skipped week 0 has nowhere for that fact to persist.
+    """
+    import dataclasses
+
+    victim = 40
+    base = run_season(PHASE6_NO_LOYALTY, 3)
+    shifted = run_season(
+        dataclasses.replace(PHASE6_NO_LOYALTY, perturb_buyer=victim, perturb_week=0), 3
+    )
+    assert not shifted.attended[0, victim]
+    assert np.array_equal(base.chosen_seller[1:], shifted.chosen_seller[1:])
+
+
+def test_perturbation_can_only_move_the_perturbed_buyer_under_memory():
+    """Memory ON may diverge - but only for the buyer whose history changed."""
+    import dataclasses
+
+    victim = 40
+    base = run_season(PHASE6_MAIN, 3)
+    shifted = run_season(
+        dataclasses.replace(PHASE6_MAIN, perturb_buyer=victim, perturb_week=0), 3
+    )
+    others = [b for b in range(PHASE6_MAIN.n_buyers) if b != victim]
+    assert np.array_equal(
+        base.chosen_seller[1:][:, others], shifted.chosen_seller[1:][:, others]
+    )
+
+
+def test_path_dependence_is_absent_as_pre_registered():
+    """A three-week-capped memory does not produce trajectory lock-in.
+
+    Recorded as a null rather than engineered away: relaxing the cap to make
+    divergence appear would be changing the mechanism after seeing the result,
+    and the cap exists so habit cannot override taste.
+    """
+    victims = (5, 40, 75, 95)
+    on = perturbation_persistence(PHASE6_MAIN, victims)
+    off = perturbation_persistence(PHASE6_NO_LOYALTY, victims)
+    assert off.max() == 0.0           # nowhere for a perturbation to persist
+    assert on.mean() == pytest.approx(0.0, abs=1e-9)  # and it does not persist
+
+
+def test_a_closed_stall_sells_nothing_and_is_counted_separately():
+    """The shock is exogenous and one week long; Phase 8 owns entry and exit."""
+    import dataclasses
+
+    shocked = run_season(
+        dataclasses.replace(PHASE6_MAIN, shock_seller=0, shock_week=12), 0
+    )
+    assert shocked.weeks[12].seller_n_sold[0] == 0
+    assert shocked.weeks[12].blocked_counts["stall_closed"] > 0
+    assert shocked.weeks[11].seller_n_sold[0] > 0
+    assert shocked.weeks[13].seller_n_sold[0] > 0
+    for w, week in enumerate(shocked.weeks):
+        if w != 12:
+            assert week.blocked_counts["stall_closed"] == 0
+
+
+def test_memory_does_not_confer_shock_resilience():
+    """The second null, and consistent with the first.
+
+    Permanent switching is if anything slightly higher with memory on: a buyer
+    pushed off its usual stall starts a fresh streak with the substitute, and
+    the mechanism that built the first relationship then holds it in the new
+    one.
+    """
+    import dataclasses
+
+    seeds = tuple(range(10))
+    on = shock_metrics(dataclasses.replace(PHASE6_MAIN, seeds=seeds), 0, 12)
+    off = shock_metrics(dataclasses.replace(PHASE6_NO_LOYALTY, seeds=seeds), 0, 12)
+    assert abs(on["return_rate_3wk"] - off["return_rate_3wk"]) < 0.10
+    assert on["permanent_switch_rate"] >= off["permanent_switch_rate"] - 0.05
+
+
+def test_recovery_is_measured_against_the_unshocked_counterfactual():
+    """Not against the cohort's own pre-shock level, which is 1.0 by definition.
+
+    The cohort is *defined* as the buyers with that seller the week before, so
+    a recovery bar set against its own pre-shock share is unreachable and
+    returns NaN - which is how the first version of this metric failed.
+    """
+    import dataclasses
+
+    m = shock_metrics(dataclasses.replace(PHASE6_MAIN, seeds=tuple(range(10))), 0, 12)
+    assert not np.isnan(m["recovery_weeks"])
+    assert m["recovery_weeks"] >= 1.0

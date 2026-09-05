@@ -110,6 +110,17 @@ class MarketConfig:
     #: no hyperparameter - one reason both are run.
     bandit_epsilon: float = 0.1
 
+    #: Phase 6 path-dependence probe: force this buyer to skip `perturb_week`.
+    #: The draw is made and then overridden, so the random stream is identical
+    #: to the unperturbed run and any divergence is the memory state's doing.
+    perturb_buyer: int | None = None
+    perturb_week: int = 0
+    #: Phase 6 shock probe: close this seller for exactly one week. Exogenous
+    #: and one-off - endogenous entry and exit is Phase 8 and is not front-run
+    #: here. See docs/phase_specifications.md, Phase 6.
+    shock_seller: int | None = None
+    shock_week: int | None = None
+
     #: Phase 6 onward: weeks in one season. None means a single static
     #: session, which is what Phases 1-5 are.
     weeks: int | None = None

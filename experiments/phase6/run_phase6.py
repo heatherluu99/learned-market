@@ -160,6 +160,34 @@ def main() -> int:
             print(f"           note: {c.note}")
     print(f"\n  plateau week (running mean within 1 SEM of final): {plateau}")
 
+    print("\n=== reported, not graded: shock recovery ===")
+    print("  One seller closed for a single week at week 12, repeated across every")
+    print("  seller and every seed. Measured over the cohort paired with that seller")
+    print("  the week before, against the same seed's unshocked counterfactual.")
+    print(f"\n  {'seller':>7s} {'arm':>4s} {'cohort':>7s} {'return 3wk':>11s} "
+          f"{'permanent':>10s} {'recovery wk':>12s}")
+    shock = {}
+    for cfg, label in ((PHASE6_MAIN, "ON"), (PHASE6_NO_LOYALTY, "OFF")):
+        rows = []
+        for sid in range(cfg.n_sellers):
+            m = acceptance.shock_metrics(cfg, sid, 12)
+            rows.append(m)
+            print(f"  {sid:7d} {label:>4s} {m['cohort_size']:7.1f} "
+                  f"{m['return_rate_3wk']:11.3f} {m['permanent_switch_rate']:10.3f} "
+                  f"{m['recovery_weeks']:12.2f}")
+        shock[label] = rows
+    print()
+    for key, name in (("return_rate_3wk", "return rate (3 wk)"),
+                      ("permanent_switch_rate", "permanent switching"),
+                      ("recovery_weeks", "recovery weeks")):
+        a = float(np.nanmean([m[key] for m in shock["ON"]]))
+        b = float(np.nanmean([m[key] for m in shock["OFF"]]))
+        print(f"  {name:22s} ON {a:6.3f}   OFF {b:6.3f}   diff {a - b:+.3f}")
+    print("  Memory does not confer shock resilience here. Permanent switching is")
+    print("  slightly *higher* with memory on: a buyer pushed off its usual stall")
+    print("  starts a fresh streak with the substitute, and the same mechanism that")
+    print("  built the original relationship then holds it in the new one.")
+
     plot_season(seasons, control, RESULTS_ROOT / "season.png")
 
     stab_loyal = float(np.nanmean([np.nanmean(s.pair_stability()[1:]) for s in seasons]))

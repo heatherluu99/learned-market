@@ -542,6 +542,33 @@ def evaluate_phase6(
     early = np.array([s.pair_stability()[1] for s in seasons])
     late = np.array([np.nanmean(s.pair_stability()[17:22]) for s in seasons])
     rise, rlo, rhi = mean_difference_ci(late, early)
+    # Path dependence, pre-registered as a null: a three-week-capped memory
+    # raises steady-state persistence without producing trajectory-level
+    # lock-in. Graded on the comparison being decisive, as at Phase 5.
+    victims = (5, 40, 75, 95)
+    import dataclasses as _dc
+
+    on = perturbation_persistence(cfg, victims)
+    off = perturbation_persistence(
+        _dc.replace(cfg, name=cfg.name + "_noloy", loyalty_bonus_per_streak=0.0),
+        victims,
+    )
+    pmean, plo, phi = mean_difference_ci(on, off)
+    pverdict = equivalence_verdict(plo, phi)
+    criteria.append(
+        CriterionResult(
+            name="path dependence: perturbation persistence, memory ON vs OFF, is decisive",
+            passed=pverdict != "inconclusive",
+            measured=f"late-week divergence {on.mean():.4f} vs {off.mean():.4f}, "
+            f"difference {pmean:+.4f}, 95% CI [{plo:+.4f}, {phi:+.4f}] -> {pverdict}",
+            threshold=f"CI wholly inside or wholly outside ±{MATERIALITY_PP:g} pp",
+            note="Pre-registered as equivalent. A cap of 3 stops the bonus growing "
+            "and resets it on a single switch, so perturbations decay - keeping "
+            "habit subordinate to taste and producing path dependence are two "
+            "sides of the same choice.",
+        )
+    )
+
     criteria.append(
         CriterionResult(
             name="pair stability rises from week 1 to the end of the season",
@@ -711,3 +738,78 @@ def evaluate_phase7b(
             )
         )
     return criteria
+
+
+def perturbation_persistence(
+    cfg: MarketConfig, victims: tuple[int, ...], late_weeks: int = 5
+) -> np.ndarray:
+    """Per seed: share of late weeks where a perturbed buyer's choice differs.
+
+    The butterfly test. One buyer is forced to skip week 0 with every random
+    draw left untouched, so under memory OFF the run must be bit-identical
+    afterwards and any divergence is the memory state's doing. See
+    docs/phase_specifications.md, Phase 6.
+    """
+    import dataclasses
+
+    from .engine import run_season
+
+    out = []
+    for seed in cfg.seeds:
+        base = run_season(cfg, seed)
+        per_victim = []
+        for victim in victims:
+            shifted = run_season(
+                dataclasses.replace(cfg, perturb_buyer=victim, perturb_week=0), seed
+            )
+            differs = (
+                base.chosen_seller[-late_weeks:, victim]
+                != shifted.chosen_seller[-late_weeks:, victim]
+            )
+            per_victim.append(float(differs.mean()))
+        out.append(float(np.mean(per_victim)))
+    return np.array(out)
+
+
+def shock_metrics(cfg: MarketConfig, seller: int, week: int) -> dict[str, float]:
+    """Return rate, recovery time and permanent switching around a one-week outage.
+
+    Measured over the cohort paired with the shocked seller the week before it
+    closed - the population whose relationship is actually being tested - and
+    always against the *same seed's unshocked counterfactual*, never against
+    the cohort's own pre-shock level. The cohort is defined as being with that
+    seller, so its own pre-shock share is 1.0 by construction and recovery
+    against it is unreachable by definition.
+    """
+    import dataclasses
+
+    from .engine import run_season
+
+    returned, permanent, recovery, cohort = [], [], [], []
+    for seed in cfg.seeds:
+        control = run_season(cfg, seed)
+        shocked = run_season(
+            dataclasses.replace(cfg, shock_seller=seller, shock_week=week), seed
+        )
+        before = np.flatnonzero(control.chosen_seller[week - 1] == seller)
+        if len(before) == 0:
+            continue
+        cohort.append(len(before))
+        after = shocked.chosen_seller[week + 1 :, before] == seller
+        base_after = control.chosen_seller[week + 1 :, before] == seller
+        returned.append(float(after[:3].any(axis=0).mean()))
+        permanent.append(float((~after.any(axis=0)).mean()))
+        # First week the shocked cohort reaches 90% of the counterfactual's
+        # share for the same cohort. NaN when it never does inside the season.
+        share, base_share = after.mean(axis=1), base_after.mean(axis=1)
+        reached = np.flatnonzero(share >= 0.9 * np.maximum(base_share, 1e-9))
+        recovery.append(float(reached[0] + 1) if len(reached) else float("nan"))
+    if not returned:
+        return {k: float("nan") for k in
+                ("return_rate_3wk", "permanent_switch_rate", "recovery_weeks", "cohort_size")}
+    return {
+        "return_rate_3wk": float(np.mean(returned)),
+        "permanent_switch_rate": float(np.mean(permanent)),
+        "recovery_weeks": float(np.nanmean(recovery)),
+        "cohort_size": float(np.mean(cohort)),
+    }

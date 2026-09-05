@@ -32,6 +32,9 @@ NO_PURCHASE_UNNOTICED = "not_noticed"
 #: Phase 6 onward: the buyer did not shop that week at all. Distinct from
 #: shopping and buying nothing - no decision was made either way.
 NO_PURCHASE_ABSENT = "did_not_shop"
+#: Phase 6 shock probe: the stall was shut that week. Distinct from unnoticed -
+#: the buyer would have seen it, and there was nothing there.
+NO_PURCHASE_CLOSED = "stall_closed"
 
 
 @dataclass
@@ -480,6 +483,15 @@ def run_season(cfg: MarketConfig, seed: int) -> SeasonResult:
 
     for _week in range(cfg.weeks):
         attends = rng.random(n_buyers) < attendance_prob
+        if cfg.perturb_buyer is not None and _week == cfg.perturb_week:
+            # Overridden after the draw, never instead of it: the stream stays
+            # identical so a divergence can only come from the memory state.
+            attends[cfg.perturb_buyer] = False
+        closed = (
+            cfg.shock_seller
+            if cfg.shock_week is not None and _week == cfg.shock_week
+            else None
+        )
         visit_orders = np.array([rng.permutation(n_sellers) for _ in range(n_buyers)])
         purchase_draw = rng.random((n_buyers, n_sellers))
         visibility_draw = rng.random((n_buyers, n_sellers))
@@ -525,6 +537,7 @@ def run_season(cfg: MarketConfig, seed: int) -> SeasonResult:
             NO_PURCHASE_INVENTORY: 0,
             NO_PURCHASE_UNNOTICED: 0,
             NO_PURCHASE_ABSENT: 0,
+            NO_PURCHASE_CLOSED: 0,
         }
         blocked_pairs: dict[tuple[str, str], int] = {}
         transactions: list[Transaction] = []
@@ -536,6 +549,9 @@ def run_season(cfg: MarketConfig, seed: int) -> SeasonResult:
                 continue
             for visit_order, seller_id in enumerate(visit_orders[buyer_id]):
                 seller_id = int(seller_id)
+                if seller_id == closed:
+                    blocked[NO_PURCHASE_CLOSED] += 1
+                    continue
                 if visibility_draw[buyer_id, seller_id] >= visibility_prob[seller_id]:
                     blocked[NO_PURCHASE_UNNOTICED] += 1
                     continue
