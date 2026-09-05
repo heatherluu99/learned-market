@@ -359,6 +359,10 @@ class SeasonResult:
     posted_prices: np.ndarray | None = None
     #: (week, seller) profit. None before a cost model exists.
     profits: np.ndarray | None = None
+    #: (week, buyer, seller) loyalty bonus in force during that week, float32.
+    #: Only populated when `record_loyalty_bonus` is set - Phase 7e's gate 1
+    #: is the only thing that reads a distribution rather than a summary.
+    loyalty_bonus: np.ndarray | None = None
 
     @property
     def n_weeks(self) -> int:
@@ -421,6 +425,23 @@ def _choice_of_week(bought: list[int]) -> int:
     return -1
 
 
+def _streak_bonus_matrix(cfg, last_seller, streak, n_sellers) -> np.ndarray:
+    """The streak model's bonus in the same (buyer, seller) shape as the stock.
+
+    Only ever built for Phase 7e's reference cell. It is nonzero in exactly
+    one column per row - which is the shape of the finding, not an
+    inefficiency: a counter is a relationship with one seller at a time.
+    """
+    out = np.zeros((len(last_seller), n_sellers))
+    if not cfg.has_loyalty:
+        return out
+    held = np.flatnonzero(last_seller >= 0)
+    out[held, last_seller[held]] = cfg.loyalty_bonus_per_streak * np.minimum(
+        streak[held], cfg.loyalty_streak_cap
+    )
+    return out
+
+
 def run_season(cfg: MarketConfig, seed: int, policy=None) -> SeasonResult:
     """Run one season of `cfg.weeks` weeks with persistent buyer memory.
 
@@ -462,6 +483,13 @@ def run_season(cfg: MarketConfig, seed: int, policy=None) -> SeasonResult:
     unit_cost = np.array(cfg.unit_cost_of(), dtype=float)
     last_seller = np.full(n_buyers, -1, dtype=int)
     streak = np.zeros(n_buyers, dtype=int)
+    # Phase 7e: a stock per buyer-seller pair, updated deterministically from
+    # the week's purchases. It draws no randomness, so enabling it moves no
+    # existing stream and Phases 1-7d stay bit-identical.
+    loyalty_stock = (
+        np.zeros((n_buyers, n_sellers)) if cfg.has_loyalty_stock else None
+    )
+    bonus_hist: list[np.ndarray] = []
     # Phase 7: the posted price persists across weeks - that persistence is
     # what makes pricing adaptive. Budget and inventory still reset weekly.
     posted_price = price0.copy()
@@ -529,6 +557,20 @@ def run_season(cfg: MarketConfig, seed: int, policy=None) -> SeasonResult:
                     chosen_arm[si] = int(np.argmax(arm_value[si] + bonus))
             posted_price = arm_price[np.arange(n_sellers), chosen_arm]
 
+        # Frozen before any purchase, so a buyer's own buying this week cannot
+        # move the bonus they are shopping under. The stock is a weekly state.
+        stock_bonus = (
+            cfg.loyalty_max_bonus * np.tanh(loyalty_stock / cfg.loyalty_saturation)
+            if loyalty_stock is not None
+            else None
+        )
+        if cfg.record_loyalty_bonus:
+            bonus_hist.append(
+                (stock_bonus if stock_bonus is not None else _streak_bonus_matrix(
+                    cfg, last_seller, streak, n_sellers
+                )).astype(np.float32)
+            )
+
         price = posted_price.copy()
         if cfg.forced_promotion_seller is not None:
             promoted: int | None = cfg.forced_promotion_seller
@@ -574,7 +616,9 @@ def run_season(cfg: MarketConfig, seed: int, policy=None) -> SeasonResult:
 
                 p = price[seller_id]
                 bonus = 0.0
-                if cfg.has_loyalty and seller_id == last_seller[buyer_id]:
+                if stock_bonus is not None:
+                    bonus = float(stock_bonus[buyer_id, seller_id])
+                elif cfg.has_loyalty and seller_id == last_seller[buyer_id]:
                     bonus = cfg.loyalty_bonus_per_streak * min(
                         streak[buyer_id], cfg.loyalty_streak_cap
                     )
@@ -624,6 +668,26 @@ def run_season(cfg: MarketConfig, seed: int, policy=None) -> SeasonResult:
                         seller_inventory_after=int(inventory[seller_id]),
                     )
                 )
+
+        if loyalty_stock is not None:
+            # Accrual is per purchase, not per "choice of the week": the stock
+            # is a per-pair quantity and a buyer who bought at two stalls has
+            # a relationship with both. A stall is visited at most once a
+            # week, so this is 0/1 per pair.
+            bought = np.zeros((n_buyers, n_sellers))
+            for b, stalls in enumerate(bought_this_week):
+                for s in stalls:
+                    bought[b, s] = 1.0
+            # `price` is what was actually paid, `price0` the stall's list
+            # price, so a promotion counts as the deal it is.
+            accrual = cfg.loyalty_increment * np.maximum(
+                0.0,
+                1.0
+                + cfg.loyalty_deal_sensitivity
+                * (1.0 - price / price0)
+                / cfg.arm_half_range,
+            )
+            loyalty_stock = loyalty_stock * cfg.loyalty_retention + bought * accrual
 
         chosen = np.array([_choice_of_week(b) for b in bought_this_week])
         for b in range(n_buyers):
@@ -714,6 +778,7 @@ def run_season(cfg: MarketConfig, seed: int, policy=None) -> SeasonResult:
         streaks=np.array(streak_hist),
         posted_prices=np.array(price_hist),
         profits=np.array(profit_hist) if cfg.has_costs else None,
+        loyalty_bonus=np.array(bonus_hist) if bonus_hist else None,
     )
 
 

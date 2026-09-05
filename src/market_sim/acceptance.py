@@ -813,3 +813,175 @@ def shock_metrics(cfg: MarketConfig, seller: int, week: int) -> dict[str, float]
         "recovery_weeks": float(np.nanmean(recovery)),
         "cohort_size": float(np.mean(cohort)),
     }
+
+
+# --------------------------------------------------------------------------
+# Phase 7e — mechanism sufficiency, gate 1
+# --------------------------------------------------------------------------
+
+#: A bonus within this fraction of L_max counts as pinned at the ceiling.
+SATURATION_TOLERANCE = 0.05
+#: Gate 1a: at most this share of attached buyers may be pinned there. A state
+#: variable at its maximum for most of the population it describes carries no
+#: information - the condition that killed 7c.
+GATE1_MAX_SATURATED_SHARE = 0.50
+#: Gate 1b: the stock's permanent switching rate must beat the counter's by at
+#: least the project's standard materiality unit.
+GATE1_MIN_SWITCH_ADVANTAGE_PP = MATERIALITY_PP
+
+
+def attachment_bonus(seasons: list) -> np.ndarray:
+    """Final-week loyalty bonus of every *attached* buyer, pooled over seeds.
+
+    Attached means the buyer bought from their season-modal seller in the last
+    week - the population a seller would actually be pricing to when it prices
+    to its regulars. Buyers who bought nothing, or bought outside their modal
+    stall, hold no current relationship to measure.
+    """
+    out: list[float] = []
+    for s in seasons:
+        if s.loyalty_bonus is None:
+            raise ValueError(f"{s.config_name} was run without record_loyalty_bonus")
+        chosen = s.chosen_seller
+        n_buyers = chosen.shape[1]
+        for b in range(n_buyers):
+            picks = chosen[:, b]
+            picks = picks[picks >= 0]
+            if len(picks) == 0 or chosen[-1, b] < 0:
+                continue
+            modal = int(np.bincount(picks).argmax())
+            if chosen[-1, b] != modal:
+                continue
+            out.append(float(s.loyalty_bonus[-1, b, modal]))
+    return np.array(out)
+
+
+def saturation_share(cfg: MarketConfig, seasons: list) -> dict[str, float]:
+    """Gate 1a: how much of the attached population sits at the ceiling."""
+    bonus = attachment_bonus(seasons)
+    ceiling = cfg.max_loyalty_bonus()
+    if len(bonus) == 0:
+        return {k: float("nan") for k in ("saturated_share", "iqr", "mean", "n")}
+    q1, q3 = np.percentile(bonus, [25, 75])
+    return {
+        "saturated_share": float((bonus >= ceiling * (1 - SATURATION_TOLERANCE)).mean()),
+        "iqr": float(q3 - q1),
+        "mean": float(bonus.mean()),
+        "n": float(len(bonus)),
+    }
+
+
+def permanent_switch_rate(cfg: MarketConfig, week: int) -> float:
+    """Gate 1b: mean permanent switching after a one-week closure.
+
+    Averaged over every seller rather than a hand-picked one, for the reason
+    Phase 6 gives: a single stall's outage is one draw from a distribution of
+    outages, and which stall it is matters more than the shock does.
+    """
+    rates = [
+        shock_metrics(cfg, sid, week)["permanent_switch_rate"]
+        for sid in range(cfg.n_sellers)
+    ]
+    return float(np.nanmean(rates))
+
+
+def evaluate_phase7e1(
+    cfg: MarketConfig,
+    seasons: list,
+    counter_stats: dict[str, float],
+    switch_rate: float,
+) -> list[CriterionResult]:
+    """Gate 1 for one calibration cell, against the counter's own numbers.
+
+    Both checks are comparative by construction. What is graded is that each
+    returns a verdict for the cell, as at Phase 5 - not that the cell passes.
+    A cell failing gate 1 is a finding about that corner of the parameter
+    grid, and it simply does not proceed to gate 2.
+    """
+    stats = saturation_share(cfg, seasons)
+    advantage_pp = (counter_stats["permanent_switch_rate"] - switch_rate) * 100
+    return [
+        CriterionResult(
+            name="gate 1a: the state is not pinned at its ceiling",
+            passed=stats["saturated_share"] <= GATE1_MAX_SATURATED_SHARE,
+            measured=f"{stats['saturated_share']:.1%} of {int(stats['n'])} attached "
+            f"buyer-seasons within {SATURATION_TOLERANCE:.0%} of "
+            f"L_max={cfg.max_loyalty_bonus():.2f} "
+            f"(counter {counter_stats['saturated_share']:.1%}); "
+            f"IQR {stats['iqr']:.3f} vs counter {counter_stats['iqr']:.3f}",
+            threshold=f"saturated share ≤ {GATE1_MAX_SATURATED_SHARE:.0%}",
+            note="Licenses a contextual policy. This is the quantity whose "
+            "absence made 7c unrunnable.",
+        ),
+        CriterionResult(
+            name="gate 1b: one interruption does not end the relationship",
+            passed=advantage_pp >= GATE1_MIN_SWITCH_ADVANTAGE_PP,
+            measured=f"permanent switching {switch_rate:.1%} vs counter "
+            f"{counter_stats['permanent_switch_rate']:.1%} "
+            f"({advantage_pp:+.1f} pp)",
+            threshold=f"at least {GATE1_MIN_SWITCH_ADVANTAGE_PP:g} pp below the counter",
+            note="Behavioural rather than definitional: the stock's decay rate "
+            "is rho by construction, but whether a buyer comes back is not.",
+        ),
+    ]
+
+
+def split_target_config(cfg: MarketConfig, price: float, name: str = "sweep"):
+    """Give one near-Slow stall its own standing price, its tier-mates unchanged.
+
+    The same construction Phase 7c's diagnostic used, so the swept stall is a
+    single seller competing against an otherwise untouched market rather than
+    a market-wide repricing. `n_sellers` is unchanged, so the random draws keep
+    their shape and every price in the sweep stays paired on a seed.
+
+    The swept value becomes the stall's *list* price, which is deliberate: over
+    66 weeks a permanently repriced stall is one its buyers have adapted to, so
+    the loyalty stock's reference point moves with it. A temporary deviation
+    from the standing price is a different thing and is what gate 2's schedules
+    do - see docs/phase_specifications.md, Phase 7e.
+    """
+    import dataclasses
+
+    classes = list(cfg.seller_classes)
+    # The unit cost is pinned to what this stall's cost was before the sweep.
+    # Left derived, it would scale with the swept price and hold the margin at
+    # a constant fraction, so the sweep would trace a moving cost structure
+    # rather than the demand curve it is meant to trace.
+    held_cost = classes[0].price * (cfg.unit_cost_fraction or 0.0)
+    classes[0] = dataclasses.replace(
+        classes[0], count=1, price=price, unit_cost=held_cost
+    )
+    classes.insert(1, dataclasses.replace(cfg.seller_classes[0], count=1))
+    return dataclasses.replace(
+        cfg, name=f"{cfg.name}_{name}", seller_classes=tuple(classes),
+        record_loyalty_bonus=False,
+    )
+
+
+def oracle_flat_price(
+    cfg: MarketConfig, prices, seeds, target: int = 0
+) -> dict[str, object]:
+    """Exhaustive sweep of one stall's standing price. The oracle, not a learner.
+
+    Gate 2 needs a baseline that is genuinely the best a myopic seller could
+    do in *this* cell, and no learner can supply that - 7b's arms cannot even
+    reach the base environment's optimum. Whether the mechanism moved that
+    optimum is itself a result.
+    """
+    from .engine import run_season
+
+    mean_profit = []
+    for price in prices:
+        sub = split_target_config(cfg, float(price))
+        per_seed = [
+            float(run_season(sub, seed).profits[:, target].mean()) for seed in seeds
+        ]
+        mean_profit.append(float(np.mean(per_seed)))
+    mean_profit = np.array(mean_profit)
+    best = int(np.argmax(mean_profit))
+    return {
+        "prices": np.asarray(prices, dtype=float),
+        "profit": mean_profit,
+        "best_price": float(prices[best]),
+        "best_profit": float(mean_profit[best]),
+    }

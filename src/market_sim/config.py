@@ -62,6 +62,12 @@ class SellerClass:
     #: Sellers of the same class can differ here, so Phase 3 lists one
     #: SellerClass per position rather than per price tier.
     position_score: float | None = None
+    #: Phase 7e: pin this stall's unit cost instead of deriving it from `price`.
+    #: Needed because the oracle sweep varies a stall's standing price, and a
+    #: cost derived from that price makes the margin a constant fraction - the
+    #: sweep would then measure a moving cost structure rather than demand.
+    #: None keeps the derived cost, which is every phase through 7d.
+    unit_cost: float | None = None
 
     @property
     def visibility_prob(self) -> float:
@@ -140,6 +146,36 @@ class MarketConfig:
     #: docs/phase_specifications.md, Phase 6.
     loyalty_streak_cap: int = 3
 
+    #: Phase 7e: which loyalty mechanism is active. "streak" is the bounded
+    #: counter of Phases 6-7d. "stock" is the mechanism-enabled environment's
+    #: per-pair stock, which decays instead of resetting and accrues more from
+    #: a cheaper purchase - the property that makes a discount buy something
+    #: outlasting the week. See docs/phase_specifications.md, Phase 7e.
+    loyalty_model: str = "streak"
+    #: Weekly retention (rho). 0.80 gives a stock half-life of 3.1 weeks and
+    #: costs a defector 20% of the stock rather than all of it.
+    loyalty_retention: float = 0.80
+    #: Accrual per purchase (beta) before the price adjustment.
+    loyalty_increment: float = 0.25
+    #: Sensitivity of accrual to the price paid (delta), denominated in one
+    #: full arm move: a purchase at the cheapest arm accrues (1 + delta) times
+    #: the base increment, the dearest (1 - delta) times, clamped at zero.
+    #: delta = 0 is the control - a purchase is a purchase, and the mechanism
+    #: has no investment channel at all.
+    loyalty_deal_sensitivity: float = 0.0
+    #: Saturation scale (L*) of the tanh, the stock level at which the bonus
+    #: reaches 0.762 * L_max. Where the typical loyal buyer sits relative to
+    #: this knee decides whether further investment still pays.
+    loyalty_saturation: float = 1.25
+    #: Ceiling on the stock bonus (L_max). Pinned at Phase 6's maximum streak
+    #: bonus (0.5 * 3) so the two mechanisms share a ceiling and only the path
+    #: to it differs - a 7e result cannot come from stronger habit.
+    loyalty_max_bonus: float = 1.5
+    #: Keep the per-week (buyer, seller) bonus matrix on the SeasonResult.
+    #: Off by default: only Phase 7e's calibration reads it, and it is the one
+    #: run-state array whose size scales with buyers x sellers x weeks.
+    record_loyalty_bonus: bool = False
+
     #: Phase 5: budget-cliff nonlinearity. None disables it entirely (Phases
     #: 1-4). A float is the gap below which the penalty applies:
     #: `if (budget_remaining - price) < gap: utility -= penalty`.
@@ -171,6 +207,8 @@ class MarketConfig:
     def __post_init__(self) -> None:
         if not self.seller_classes:
             raise ValueError("a market needs at least one seller class")
+        if self.loyalty_model not in ("streak", "stock"):
+            raise ValueError(f"unknown loyalty_model {self.loyalty_model!r}")
         object.__setattr__(self, "price_reference", self._initial_price_reference())
 
     def _initial_price_reference(self) -> float:
@@ -230,7 +268,7 @@ class MarketConfig:
         if self.unit_cost_fraction is None:
             return [0.0] * self.n_sellers
         return [
-            c.price * self.unit_cost_fraction
+            c.unit_cost if c.unit_cost is not None else c.price * self.unit_cost_fraction
             for c in self.seller_classes
             for _ in range(c.count)
         ]
@@ -245,7 +283,21 @@ class MarketConfig:
 
     @property
     def has_loyalty(self) -> bool:
-        return self.loyalty_bonus_per_streak > 0
+        return self.has_loyalty_stock or self.loyalty_bonus_per_streak > 0
+
+    @property
+    def has_loyalty_stock(self) -> bool:
+        return self.loyalty_model == "stock"
+
+    @property
+    def arm_half_range(self) -> float:
+        """The widest single price move available, used to denominate delta.
+
+        Reading it off the arms rather than hard-coding 0.2 keeps delta
+        meaning the same thing if the arm set is ever changed - which Phase
+        7b's ceiling finding makes a live possibility.
+        """
+        return max(abs(m - 1.0) for m in self.price_arms)
 
     @property
     def has_budget_dispersion(self) -> bool:
@@ -286,6 +338,8 @@ class MarketConfig:
         ]
 
     def max_loyalty_bonus(self) -> float:
+        if self.has_loyalty_stock:
+            return self.loyalty_max_bonus
         return self.loyalty_bonus_per_streak * self.loyalty_streak_cap
 
     @property
@@ -629,3 +683,64 @@ PHASE7D = _phase7("phase7d_rl", rule="policy")
 #: other phase uses: a policy scored on the seeds it was fitted to measures
 #: memorization. See docs/phase_specifications.md, Phase 7d.
 PHASE7D_TRAIN_SEEDS = tuple(range(1000, 1120))
+
+
+# --------------------------------------------------------------------------
+# Phase 7e — Mechanism Sufficiency (a separate, mechanism-enabled environment)
+# --------------------------------------------------------------------------
+
+#: Fixed across the whole 7e family. rho and beta were chosen at the design
+#: gate; L_max is pinned at Phase 6's maximum streak bonus (0.5 * 3) so both
+#: mechanisms share a ceiling and a 7e result cannot come from stronger habit.
+PHASE7E_RHO = 0.80
+PHASE7E_BETA = 0.25
+PHASE7E_LMAX = 1.5
+
+#: The calibration grid. delta = 0 is the control - the stock form with no
+#: investment channel, where a purchase is a purchase whatever it cost. The
+#: two saturation points straddle the tanh knee: at 1.00 the typical loyal
+#: buyer is past it and the mechanism behaves like the old cap, at 1.25 they
+#: sit on it and marginal investment still pays. See
+#: docs/phase_specifications.md, Phase 7e-1.
+PHASE7E_DELTAS = (0.0, 0.25, 0.5, 1.0)
+PHASE7E_SATURATIONS = (1.00, 1.25)
+
+#: The week a stall is closed for the gate-1 persistence probe. Phase 6 used
+#: week 12 of 22; at 66 weeks the equivalent point is well past the stock's
+#: 3.1-week half-life, so the shock lands on a converged state rather than on
+#: one still filling up.
+PHASE7E_SHOCK_WEEK = 40
+
+
+def phase7e_cell(delta: float, saturation: float) -> MarketConfig:
+    """One calibration cell: Phase 7a's flat-price market, stock loyalty.
+
+    Everything outside the loyalty mechanism is 7a's baseline arm, so the
+    contrast against the base environment is the mechanism and nothing else.
+    """
+    return dataclasses.replace(
+        PHASE7A_FIXED,
+        name=f"phase7e_d{int(delta * 100):03d}_s{int(saturation * 100):03d}",
+        loyalty_model="stock",
+        # Zeroed rather than left at 0.5: the streak bonus is unreachable once
+        # the stock model is on, and a config should not carry a number that
+        # does nothing.
+        loyalty_bonus_per_streak=0.0,
+        loyalty_retention=PHASE7E_RHO,
+        loyalty_increment=PHASE7E_BETA,
+        loyalty_deal_sensitivity=delta,
+        loyalty_saturation=saturation,
+        loyalty_max_bonus=PHASE7E_LMAX,
+        record_loyalty_bonus=True,
+    )
+
+
+#: The reference cell: Phases 6-7d's bounded counter, unchanged, with the bonus
+#: matrix recorded so both mechanisms are read through identical code.
+PHASE7E_COUNTER = dataclasses.replace(
+    PHASE7A_FIXED, name="phase7e_counter", record_loyalty_bonus=True
+)
+
+PHASE7E_CELLS = tuple(
+    phase7e_cell(d, s) for s in PHASE7E_SATURATIONS for d in PHASE7E_DELTAS
+)
