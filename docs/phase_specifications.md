@@ -637,9 +637,33 @@ This is deliberately not a fix that lets the quiet stall price "correctly": at t
 
 **Research question:** Does treating price choice as a bandit problem (exploring a small set of price points, exploiting the best-performing one) outperform the fixed heuristic in 7a, without yet using any market context?
 
-**Mechanism:** each seller picks weekly price from a fixed discrete set (e.g., {price × 0.8, price × 0.9, price × 1.0, price × 1.1, price × 1.2}) using a standard bandit algorithm (e.g., epsilon-greedy or UCB) on weekly profit as reward. No buyer-class or environment information is used — this is deliberately context-blind, to isolate what pure trial-and-error optimization contributes before context is added.
+**Mechanism:** each seller picks a weekly price from the fixed set {price × 0.8, 0.9, 1.0, 1.1, 1.2} on weekly profit as reward. No buyer-class or environment information is used — deliberately context-blind, to isolate what pure trial-and-error contributes before context is added.
 
-**Acceptance criteria:** compare profit/participation/class-shares against 7a over the same 3 seasons (66 weeks), same seeds. Graduate to 7c only if the improvement clears the pre-agreed threshold.
+**Both algorithms are run, because the choice between them flips the verdict.** The original text offered "e.g., epsilon-greedy or UCB" as though they were interchangeable. Measured over 66 weeks against 7a's 64.3 profit per week:
+
+| arm set | algorithm | profit/week | vs 7a |
+|---|---|---|---|
+| 0.8–1.2× (specified) | ε-greedy, ε = 0.1 | 55.4 | **−8.9** |
+| 0.8–1.2× (specified) | UCB1 | 69.7 | **+5.4** |
+
+The same arms, the same seeds, and opposite graduation decisions. ε-greedy spends a tenth of every week on a uniformly random arm forever, including arms it already knows are bad; UCB1's exploration decays as arms accumulate pulls. Leaving this as "e.g." would mean the phase's conclusion was set by an unstated implementation choice, so `phase7b_eps` and `phase7b_ucb` are both run and graded, and the spread between them is reported as a result in its own right.
+
+**The arm set is deliberately *not* widened, and its ceiling is the finding.** The profit optimum for a Slow seller is 3.00 — which is 1.5× its initial price, outside the specified 1.2× ceiling of 2.40. Widening the arms to reach it would encode the answer into the hypothesis space, which is exactly the post-hoc move this project's gates exist to catch. Measured for completeness only: at 0.8–1.8× arms, UCB1 reaches 2.78 and +26.5 per week against 7a instead of +5.4.
+
+So a context-blind bandit is capped by where its arms were placed, while 7a's multiplicative walk has no ceiling and climbed to 2.47. **The bandit's limitation here is not its learning rule but its fixed, local hypothesis space** — and that is precisely the gap Phase 7's research question asks whether a stateful learner can close.
+
+### Graduation threshold, stated in the right units
+
+The original text asked for changes "by more than a pre-agreed threshold (e.g., >5 percentage points)" across "profit, participation, class shares". Profit is not measured in percentage points, so the Phase 5 materiality test does not apply to it unchanged. Both forms are the same three-verdict equivalence test (**equivalent** / **material** / **inconclusive**), graded on the confidence interval and never on the point estimate:
+
+| quantity | margin |
+|---|---|
+| class shares, participation | ±5 percentage points, as at Phase 5 |
+| profit | ±5% of the comparison arm's own mean |
+
+Graduation to 7c requires a **material** verdict on at least one quantity. An **equivalent** verdict on all of them stops the ladder at 7a and records that finding, exactly as Phase 5's rollback did.
+
+**Acceptance criteria:** the comparison against 7a is decisive — no quantity returns **inconclusive** — over the same 3 seasons and seeds. As at Phase 5, what is graded is that the test reaches a verdict, not which verdict it reaches.
 
 **Literature basis:** Robbins (1952), "Some Aspects of the Sequential Design of Experiments" (*Bulletin of the AMS*) — origin of the multi-armed bandit problem.
 
