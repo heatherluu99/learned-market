@@ -1253,6 +1253,100 @@ def phase7d_slide() -> PhaseSlide:
     )
 
 
+def phase7e1_slide() -> PhaseSlide:
+    """Assemble the Phase 7e-1 slide from the run outputs, not hand-typed numbers."""
+    import pandas as pd
+
+    from market_sim.config import PHASE7E_COUNTER, PHASE7E_RHO
+    from market_sim.engine import run_season_seeds
+
+    rows = pd.read_csv(REPO_ROOT / "results/phase7e1/gate1.csv")
+    horizon = pd.read_csv(REPO_ROOT / "results/phase7e1/memory_horizon.csv")
+    oracle = pd.read_csv(REPO_ROOT / "results/phase7e1/oracle_sweep.csv")
+    carried = rows[rows["rho"] == PHASE7E_RHO].iloc[0]
+
+    counter_seasons = run_season_seeds(PHASE7E_COUNTER)
+    counter_contrast = acceptance.lockin_contrast(counter_seasons)
+    counter_stability = float(
+        np.nanmean([s.pair_stability()[30:] for s in counter_seasons])
+    )
+    ctr_lag8 = float(
+        horizon[(horizon["cell"].str.contains("counter")) & (horizon["lag"] == 8)][
+            "excess_repeat_rate"
+        ].iloc[0]
+    )
+    best = oracle.loc[oracle.groupby("cell")["profit"].idxmax()].set_index("cell")
+
+    return PhaseSlide(
+        phase_number=7,
+        phase_name="Mechanism Sufficiency — 7e-1 Calibration",
+        subtitle=(
+            "A second environment where loyalty is a stock  ·  git tag: "
+            "phase7e1-calibrated  ·  30 seeds x 66 weeks"
+        ),
+        badge="GATE 1 PASSED",
+        badge_color=GREEN,
+        agents=[
+            ("Buyers: ", "100 — Poor 70 / Middle 20 / Rich 10, dispersed budgets"),
+            ("Sellers: ", "5 — flat prices, so this measures the mechanism not a learner"),
+        ],
+        environment=[
+            "-  Loyalty is a per-pair stock: decays at rho, saturates through tanh,",
+            "   and accrues more from a cheaper purchase. It never resets to zero.",
+            "-  The base environment's counter runs alongside as the reference cell.",
+        ],
+        method=[
+            "L_max is solved per cell so incumbency advantage matches the counter's,",
+            "then rho is swept with beta holding the steady-state stock fixed.",
+            "Gate: excess repeat rate at lag 8 vs the memory-OFF twin, same seeds.",
+        ],
+        literature=[
+            (
+                "Guadagni & Little (1983), ",
+                "“A Logit Model of Brand Choice Calibrated on Scanner Data” "
+                "(Marketing Science) — exponentially smoothed loyalty in a logit "
+                "choice model, which is the stock used here.",
+            ),
+        ],
+        metrics=[
+            MetricRow("Counter, lag-8 memory", f"{ctr_lag8:+.3f}", "—"),
+            MetricRow(f"Stock rho={PHASE7E_RHO:g}, lag-8",
+                      f"{carried['horizon_lag8']:+.3f}", "—"),
+            MetricRow("  as a multiple", f"{carried['horizon_ratio']:.2f}x", "PASS"),
+            MetricRow("Lock-in, stock vs counter",
+                      f"{carried['contrast']:.2f} vs {counter_contrast:.2f}", "PASS"),
+            MetricRow("Pair stability",
+                      f"{carried['pair_stability']:.3f} vs {counter_stability:.3f}", "—"),
+            MetricRow("Oracle optimum",
+                      f"{best.loc[f'rho={PHASE7E_RHO:g}', 'price']:.2f} vs "
+                      f"{best[best.index.str.contains('counter')]['price'].iloc[0]:.2f}",
+                      "—"),
+        ],
+        research_question=(
+            "With lock-in strength held equal to the base environment's, does a "
+            "persistent loyalty stock reach further back in time than a three-week "
+            "counter?"
+        ),
+        finding=(
+            f"Yes — {carried['horizon_ratio']:.1f}x the counter's memory at a lag of "
+            f"8 weeks, in all four horizons tested. The counter starts stronger "
+            f"({ctr_lag8:+.3f} at lag 8 against a lag-1 advantage) and collapses at "
+            f"exactly its 3-week cap; the stock is weaker at lag 1 and still "
+            f"measurable at lag 16. A state now exists for a contextual or "
+            f"multi-week policy to condition on."
+        ),
+        caveat=(
+            f"The first grid ran with L_max pinned at Phase 6's ceiling and failed, "
+            f"for a reason worth keeping: a nominal ceiling is not strength. The "
+            f"stock bound about a third as hard as the counter (0.25 vs 0.81) and "
+            f"was the *weaker* mechanism. Its gate 1b threshold was also unreachable "
+            f"— 5 pp below a 4.0% baseline. Both are recorded in the spec. Profit "
+            f"levels are not comparable across the two environments: this one sells "
+            f"more (0.81 vs 0.69), so only within-environment comparisons are drawn."
+        ),
+    )
+
+
 BUILDERS = {
     "1": phase1_slide,
     "2": phase2_slide,
@@ -1263,6 +1357,7 @@ BUILDERS = {
     "7a": phase7a_slide,
     "7b": phase7b_slide,
     "7d": phase7d_slide,
+    "7e1": phase7e1_slide,
 }
 
 

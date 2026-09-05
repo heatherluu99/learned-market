@@ -86,8 +86,9 @@ visualization** gets, and when. Specifically:
 
 ## Current phase
 
-**Phase 7e in progress (7e-1, mechanism calibration).** Phases 1–6 and
-7a, 7b, 7d are tagged validated; 7c is tagged `phase7c-skipped`.
+**Phase 7e-1 complete; next is 7e-2.** Phases 1–6 and 7a, 7b, 7d are
+tagged validated; 7c is tagged `phase7c-skipped`; 7e-1 is tagged
+`phase7e1-calibrated`.
 
 Phase 7 answered its headline question in the negative, twice over. A
 context-blind bandit beats the heuristic on profit (+10.3%) while leaving
@@ -110,6 +111,16 @@ the finding and the mechanism parameters are not tuned further. The base
 environment's results stand unchanged alongside it; the point is the
 contrast, not a replacement.
 
+**Gate 1 passed at 7e-1.** With lock-in strength calibrated to match the
+counter's, the stock's memory reaches 2.8× as far at a lag of eight weeks,
+and the counter's advantage collapses at exactly its three-week cap. So a
+state now exists for a contextual or multi-week policy to condition on,
+which is the thing the base environment never had. Getting there cost two
+corrections that are recorded in the spec rather than quietly fixed: the
+first gate's threshold was arithmetically unreachable, and pinning the
+stock's ceiling at Phase 6's made it bind a third as hard as the counter —
+the *weaker* mechanism, dressed as the richer one.
+
 Full specification: see `docs/phase_specifications.md`.
 
 ## Full phase list (summary)
@@ -123,7 +134,7 @@ Full specification: see `docs/phase_specifications.md`.
 | 5 | Nonlinear Behavior | Do nonlinear/interaction effects change conclusions vs. linear baseline? | Infrastructure only |
 | 6 | Repeated Interaction | Does history/memory change future behavior? ("weeks" become real here) | Infrastructure only — **web viz introduced** |
 | 7 (a, b, d) | Seller Learning | Does stateful policy learning produce market structures that myopic bandit optimization cannot? **No, in the base environment.** 7b beats the heuristic on profit but moves no class share; 7d's multi-week horizon adds nothing (equivalent). **7c skipped**: the profit-maximizing price is invariant to observable market state. | Infrastructure only |
-| 7e | Mechanism Sufficiency | Under what market structure does each level of policy complexity become *necessary*? A separate environment with persistent, price-sensitive, bounded loyalty, run as three gates: state exists → intertemporal trade-off exists → complexity pays. | Infrastructure only — gives context conditioning and stateful learning an existence condition |
+| 7e | Mechanism Sufficiency | Under what market structure does each level of policy complexity become *necessary*? A separate environment with persistent, price-sensitive, bounded loyalty, run as three gates: state exists → intertemporal trade-off exists → complexity pays. **Gate 1 passed** — memory reaches 2.8× further than the counter's at lag 8, with lock-in strength held equal. | Infrastructure only — gives context conditioning and stateful learning an existence condition |
 | 8 | Endogenous Market Structure | Does repeated local interaction produce macro-level structure? | Infrastructure only — **web viz: entry/exit panels** |
 | 9a | Learned Buyer Policy | How does a buyer policy trained to maximize realized surplus differ from the hand-written rule, and how far from optimal was that rule? | Infrastructure only — closes the buyer-side learning ladder |
 | 9b | Synthetic Agent Users | What does an LLM Agent add over a *trained* buyer policy? | First scaffolding for A — **web viz: Agent Inspector; cost/speed KPI begins** |
