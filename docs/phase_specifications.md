@@ -1056,6 +1056,129 @@ every cell — that the mechanism's presence or absence is established, not that
 any particular cell passes. As at Phase 5, what is graded is that a verdict is
 reached.
 
+### What the registered 7e-1 grid returned, and the four corrections it forced
+
+The grid as registered — `delta` ∈ {0, 0.25, 0.5, 1.0} × `L*` ∈ {1.00, 1.25},
+`rho = 0.80`, `beta = 0.25`, `L_max = 1.5` — was run at 30 seeds and 66 weeks.
+Its headline number: **gate 1a passed in every cell and gate 1b failed in every
+cell**, and neither outcome meant what the gate said it meant.
+
+**1. Gate 1b's threshold was arithmetically unreachable.** It required
+permanent switching at least 5 pp below the counter's. The counter's is
+**4.0%**, so the largest advantage the metric can express is 4.0 pp and the
+gate cannot be passed by any mechanism whatsoever. This is the same error as
+Phase 6's first recovery metric, which compared a cohort against its own
+pre-shock share of 1.0 and so set a bar nothing could clear. The lesson that
+did not transfer the first time: **an absolute threshold on a quantity whose
+range has not been measured is not a pre-registration, it is a guess wearing
+one.** Thresholds on bounded rates are stated relatively from here on.
+
+The metric was also close to inert. Permanent switching after a one-week
+closure is 3.4–4.5% in *every* environment tested, because what brings a buyer
+back is fixed preference — drawn once per season with a coefficient of 1.5 —
+and not memory. It was measuring the population, not the mechanism.
+
+**2. `delta` cannot be calibrated at flat prices, and 7e-1 runs at flat
+prices.** Its entire function is to make a price *deviation* accrue loyalty
+differently. At flat prices the only deviation is the promotion lottery, which
+reaches a given stall in about 4% of weeks. The measured consequence, across
+`delta` = 0 → 1: the oracle optimum does not move at all (2.65 in every cell)
+and profit rises 1%. The `delta` ladder is therefore moved to **7e-2**, where
+schedules supply the price variation it acts on. Running it here was a design
+error, not a null.
+
+**3. Pinning `L_max = 1.5` did not deliver the control it promised, and cost
+the phase its premise.** The intent was that both mechanisms share a ceiling
+so a 7e result could not come from stronger habit. But a nominal ceiling is
+not strength. What binds a buyer is the *gap* between their incumbent's bonus
+and the best alternative's, and a `tanh` stock spreads a smaller bonus across
+several pairs where a counter puts its whole bonus on one and zero on the
+rest:
+
+| | lock-in contrast | pair stability | attached bonus (mean) |
+|---|---|---|---|
+| counter (7a–7d) | **0.811** | **0.430** | 0.542 |
+| stock, `L*` = 1.00 | 0.292 | 0.368 | 0.655 |
+| stock, `L*` = 1.25 | 0.244 | 0.360 | 0.527 |
+
+The registered environment is a **weaker** lock-in than the one it was built to
+enrich — about a third of the incumbency advantage, and lower pair stability
+despite a comparable or higher mean bonus. A learner cannot exploit state that
+binds less than the state it replaced, so every gate below this one would have
+been measuring a poorer market and reporting it as a null about policy
+complexity. Spread loyalty is weak loyalty; the counter's brutality was the
+source of its strength.
+
+**4. Gate 1a is definitional for a `tanh` mechanism and is demoted to a
+descriptive.** A stock's achievable maximum is `L_max * tanh(S(1+delta)/L*)`,
+strictly below `L_max`, so "not pinned at the ceiling" is arithmetic rather
+than evidence — 0.0% in every cell. The counter's 20.5% is the informative
+half of the comparison and is reported as such. A check that cannot fail is
+not a gate, and calling it one inflates the apparent strength of gate 1.
+
+### The corrected 7e-1 design: hold strength fixed, sweep the horizon
+
+The diagnosis names strength, not shape, as what the registered grid got
+wrong. So strength becomes a **control variable** rather than a free
+parameter, and the sweep moves to the dimension the phase is actually about.
+
+- **Control: lock-in contrast is equalized to the counter's**, by calibrating
+  `L_max` per cell to a fixed point (contrast scales nearly linearly in
+  `L_max`, so this converges in one or two iterations). The two environments
+  are then equally strong and differ only in the *shape* of loyalty —
+  persistent and graded against resettable and stepped. That is the controlled
+  comparison the phase wanted, and the nominal ceiling was a bad proxy for it.
+- **Curvature is fixed at the contrast-maximizing operating point.** With
+  `S = beta/(1 - rho)` the steady-state stock of an every-week buyer,
+  `u = S/L*` decides where on the `tanh` the population sits. Measured at
+  `L_max` = 1.5: contrast peaks at `u` ≈ 2 (0.372) and falls off on both sides
+  (0.247 at `u` = 1, 0.154 at `u` = 6). Fixed at **`u` = 2**, with `L*` = 1.00.
+- **Swept: `rho`, the memory horizon** — {0.80, 0.85, 0.90, 0.95}, half-lives
+  3.1 / 4.3 / 6.6 / 13.5 weeks — with `beta = u * L* * (1 - rho)` so the
+  steady-state stock is unchanged and horizon is swept independently of level.
+  One dimension at a time, which is the project's rule applied inside a
+  calibration.
+
+**Gate 1b, replaced: memory horizon.** Excess rate of returning to the same
+seller `k` weeks later, over the **memory-OFF twin** on identical seeds —
+Phase 6's ablation, and necessary because fixed preference produces choice
+repetition at every lag on its own. Probed at **lag 8**, more than twice the
+counter's three-week cap, so a mechanism whose horizon is genuinely longer
+separates from one that merely smoothed the same horizon. Threshold:
+**at least 1.5× the counter's excess at that lag** — relative, per correction 1.
+
+**What the corrected design returned.** Contrast equalized at 0.81–0.84
+against the counter's 0.825:
+
+| `rho` | half-life | `beta` | calibrated `L_max` | contrast | lag-1 excess | lag-8 excess | vs counter | pair stability |
+|---|---|---|---|---|---|---|---|---|
+| counter | (cap 3) | — | 1.50 | 0.825 | +0.117 | +0.019 | 1.00× | 0.436 |
+| **0.80** | 3.1 | 0.400 | 3.30 | 0.833 | +0.085 | **+0.054** | **2.87×** | 0.405 |
+| 0.85 | 4.3 | 0.300 | 3.72 | 0.810 | +0.072 | +0.050 | 2.69× | 0.390 |
+| 0.90 | 6.6 | 0.200 | 4.58 | 0.816 | +0.056 | +0.045 | 2.39× | 0.374 |
+| 0.95 | 13.5 | 0.100 | 5.70 | 0.811 | +0.042 | +0.037 | 1.98× | 0.358 |
+
+Every cell passes gate 1b, and **the registered `rho = 0.80` passes it most
+strongly**. Raising the horizon parameter *lowers* the realized horizon,
+because holding the steady state fixed requires `beta` to fall with `1 - rho`,
+and a buyer who accrues more slowly builds less differentiation inside a
+66-week season than one who accrues quickly and forgets. The chosen value was
+right; what was wrong was the strength, not the horizon — which is the
+opposite of what the failing gate appeared to say.
+
+**Registered cell for 7e-2 and 7e-3:** `rho = 0.80`, `beta = 0.40`,
+`L* = 1.00`, `L_max` calibrated to the counter's contrast, `delta = 0.25`
+carried forward unmeasured and calibrated at 7e-2.
+
+**One difference is not controlled and is stated rather than hidden.**
+Equalizing incumbency advantage does not equalize total loyalty mass: the
+calibrated environment sells more, with a purchase rate of 0.81 against the
+counter's 0.69, because many buyers hold a small bonus toward several stalls
+instead of a large one toward one. Gate 3 compares policies *within* an
+environment, so this does not confound it. It does mean **profit levels are
+not comparable across the two environments**, and no cross-environment profit
+comparison is drawn anywhere in Phase 7e.
+
 **Exit condition:** `git tag phase7e1-calibrated`, and gate 1's verdict
 recorded per cell.
 
