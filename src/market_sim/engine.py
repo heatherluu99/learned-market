@@ -463,6 +463,17 @@ def run_season(cfg: MarketConfig, seed: int) -> SeasonResult:
     climb_direction = np.ones(n_sellers, dtype=float)
     previous_profit: np.ndarray | None = None
     profit_window: list[np.ndarray] = []
+    # Phase 7b: the bandit's own randomness lives in a separate generator, so
+    # adding a pricing policy cannot shift the market's draws and every arm
+    # stays paired with every other on a given seed.
+    policy_rng = np.random.default_rng(10_000 + seed)
+    n_arms = len(cfg.price_arms)
+    arm_price = np.array(
+        [[p * m for m in cfg.price_arms] for p in price0], dtype=float
+    )
+    arm_pulls = np.zeros((n_sellers, n_arms))
+    arm_value = np.zeros((n_sellers, n_arms))
+    chosen_arm = np.zeros(n_sellers, dtype=int)
     weeks: list[RunResult] = []
     chosen_hist, attended_hist, streak_hist = [], [], []
     price_hist, profit_hist = [], []
@@ -474,6 +485,22 @@ def run_season(cfg: MarketConfig, seed: int) -> SeasonResult:
         visibility_draw = rng.random((n_buyers, n_sellers))
         promotion_roll = rng.random()
         promotion_pick = int(rng.integers(0, n_sellers))
+
+        if cfg.price_rule in ("bandit_eps", "bandit_ucb"):
+            for si in range(n_sellers):
+                untried = np.flatnonzero(arm_pulls[si] == 0)
+                if len(untried):
+                    chosen_arm[si] = int(untried[0])
+                elif cfg.price_rule == "bandit_eps":
+                    chosen_arm[si] = (
+                        int(policy_rng.integers(0, n_arms))
+                        if policy_rng.random() < cfg.bandit_epsilon
+                        else int(np.argmax(arm_value[si]))
+                    )
+                else:  # UCB1: exploration decays as arms accumulate pulls
+                    bonus = np.sqrt(2.0 * np.log(_week + 1) / arm_pulls[si])
+                    chosen_arm[si] = int(np.argmax(arm_value[si] + bonus))
+            posted_price = arm_price[np.arange(n_sellers), chosen_arm]
 
         price = posted_price.copy()
         if cfg.forced_promotion_seller is not None:
@@ -603,7 +630,12 @@ def run_season(cfg: MarketConfig, seed: int) -> SeasonResult:
         price_hist.append(posted_price.copy())
         profit_hist.append(profit.copy())
 
-        if cfg.price_rule == "hill_climb":
+        if cfg.price_rule in ("bandit_eps", "bandit_ucb"):
+            for si in range(n_sellers):
+                a = chosen_arm[si]
+                arm_pulls[si, a] += 1
+                arm_value[si, a] += (profit[si] - arm_value[si, a]) / arm_pulls[si, a]
+        elif cfg.price_rule == "hill_climb":
             # Keep moving the way we moved last week while profit improves;
             # reverse when it stops. No thresholds, and the floor at unit cost
             # is the one thing a purely demand-driven rule cannot supply -

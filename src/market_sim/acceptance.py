@@ -647,3 +647,67 @@ def evaluate_phase7a(
         )
     )
     return criteria
+
+
+#: Phase 7b onward: profit is not measured in percentage points, so the Phase 5
+#: materiality margin cannot be applied to it unchanged. Shares keep ±5pp;
+#: profit uses ±5% of the comparison arm's own mean. Same three-verdict test.
+MATERIALITY_PROFIT_PCT = 5.0
+
+
+def evaluate_phase7b(
+    cfg: MarketConfig, arms: dict[str, list], baseline: list
+) -> list[CriterionResult]:
+    """Phase 7b graduation, one set of criteria per bandit arm against 7a.
+
+    What is graded is that the comparison reaches a verdict, as at Phase 5 -
+    not which verdict. An **equivalent** result on every quantity stops the
+    ladder at 7a and is a finding; **material** on any one graduates to 7c.
+    """
+    criteria: list[CriterionResult] = []
+    base_profit = np.array([s.profits.sum(axis=1).mean() for s in baseline])
+
+    for name, seasons in arms.items():
+        profit = np.array([s.profits.sum(axis=1).mean() for s in seasons])
+        gain, glo, ghi = mean_difference_ci(profit, base_profit)
+        # Expressed against the baseline's own mean, so the margin is a
+        # percentage of profit rather than a percentage point of a share.
+        scale = float(base_profit.mean())
+        verdict = equivalence_verdict(
+            glo / scale, ghi / scale, MATERIALITY_PROFIT_PCT
+        )
+        criteria.append(
+            CriterionResult(
+                name=f"{name}: profit comparison against 7a is decisive",
+                passed=verdict != "inconclusive",
+                measured=f"{scale:.1f} -> {profit.mean():.1f} per week, "
+                f"{gain:+.1f} ({gain / scale:+.1%}), 95% CI "
+                f"[{glo / scale:+.1%}, {ghi / scale:+.1%}] -> {verdict}",
+                threshold=f"CI wholly inside or wholly outside ±{MATERIALITY_PROFIT_PCT:g}%",
+                note="Graduation to 7c needs a *material* verdict on some "
+                "quantity; equivalent on all of them stops the ladder at 7a.",
+            )
+        )
+
+        shares = {}
+        for bc in cfg.buyer_classes:
+            for sc in cfg.seller_tier_names():
+                a = np.array([s.tier_share(bc.name, sc) for s in seasons])
+                b = np.array([s.tier_share(bc.name, sc) for s in baseline])
+                m, lo, hi = mean_difference_ci(a, b)
+                shares[f"{bc.name}_to_{sc}"] = (m, lo, hi, equivalence_verdict(lo, hi))
+        undecided = [k for k, v in shares.items() if v[3] == "inconclusive"]
+        material = [k for k, v in shares.items() if v[3] == "material"]
+        worst = max(shares.items(), key=lambda kv: abs(kv[1][0]))
+        criteria.append(
+            CriterionResult(
+                name=f"{name}: class-share comparison against 7a is decisive",
+                passed=not undecided,
+                measured=f"{len(shares) - len(undecided)}/{len(shares)} decisive; "
+                f"largest shift {worst[0]} {worst[1][0] * 100:+.2f} pp",
+                threshold=f"every CI wholly inside or wholly outside ±{MATERIALITY_PP:g} pp",
+                note=(f"material on {', '.join(material)}" if material
+                      else "equivalent on every tracked share"),
+            )
+        )
+    return criteria

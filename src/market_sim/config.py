@@ -101,6 +101,14 @@ class MarketConfig:
     #: nothing and holds its price. Without this the rule random-walks wherever
     #: volume is thin - see docs/phase_specifications.md, Phase 7a.
     price_signal_window: int = 8
+    #: Phase 7b: the bandit's arms, as multipliers on the seller's initial
+    #: price. Deliberately left at the specified +/-20%: the Slow optimum is
+    #: 1.5x, outside this range, and widening the arms to reach it would encode
+    #: the answer into the hypothesis space. The ceiling is the finding.
+    price_arms: tuple[float, ...] = (0.8, 0.9, 1.0, 1.1, 1.2)
+    #: Exploration rate for price_rule="bandit_eps". Unused by UCB1, which has
+    #: no hyperparameter - one reason both are run.
+    bandit_epsilon: float = 0.1
 
     #: Phase 6 onward: weeks in one season. None means a single static
     #: session, which is what Phases 1-5 are.
@@ -554,3 +562,14 @@ PHASE7A_FIXED = _phase7("phase7a_fixed", rule=None)
 #: and stops short of the 3.00 optimum on purpose - that headroom is what
 #: 7b-7d have to win. See docs/phase_specifications.md, Phase 7a.
 PHASE7A_HILL = _phase7("phase7a_hill", rule="hill_climb")
+
+
+# --------------------------------------------------------------------------
+# Phase 7b — Multi-Armed Bandit (context-blind)
+# --------------------------------------------------------------------------
+
+#: Both algorithms are run because the choice between them flips the
+#: graduation verdict: on identical arms and seeds, epsilon-greedy loses to 7a
+#: and UCB1 beats it. See docs/phase_specifications.md, Phase 7b.
+PHASE7B_EPS = _phase7("phase7b_eps", rule="bandit_eps")
+PHASE7B_UCB = _phase7("phase7b_ucb", rule="bandit_ucb")
