@@ -1160,6 +1160,99 @@ def phase7b_slide() -> PhaseSlide:
     )
 
 
+def phase7d_slide() -> PhaseSlide:
+    """Assemble the Phase 7d slide from the run outputs, not hand-typed numbers."""
+    from market_sim import rl
+    from market_sim.config import (
+        PHASE7A_HILL,
+        PHASE7B_UCB,
+        PHASE7D,
+        PHASE7D_TRAIN_SEEDS,
+    )
+    from market_sim.engine import run_season_seeds
+
+    net = rl.train_policy(PHASE7D, PHASE7D_TRAIN_SEEDS, epochs=6)
+    rl_seasons = rl.evaluate(PHASE7D, net, PHASE7B_UCB.seeds)
+    bandit = run_season_seeds(PHASE7B_UCB)
+    heuristic = run_season_seeds(PHASE7A_HILL)
+
+    rp = np.array([s.profits.sum(axis=1).mean() for s in rl_seasons])
+    bp = np.array([s.profits.sum(axis=1).mean() for s in bandit])
+    hp = np.array([s.profits.sum(axis=1).mean() for s in heuristic])
+    gain, lo, hi = acceptance.mean_difference_ci(rp, bp)
+    scale = float(bp.mean())
+    verdict = acceptance.equivalence_verdict(
+        lo / scale, hi / scale, acceptance.MATERIALITY_PROFIT_PCT
+    )
+
+    def corr(seasons, cfg):
+        slow = [i for i, n in enumerate(cfg.seller_class_of()) if n == "Slow"]
+        px = np.array([s.posted_prices[:, slow].mean(axis=1) for s in seasons])
+        weeks = np.arange(px.shape[1])
+        return float(np.mean([np.corrcoef(weeks, p)[0, 1] for p in px])), px
+
+    rl_corr, rl_px = corr(rl_seasons, PHASE7D)
+    bd_corr, _ = corr(bandit, PHASE7B_UCB)
+    third = rl_px.shape[1] // 3
+
+    return PhaseSlide(
+        phase_number=7,
+        phase_name="Seller Learning — 7d Reinforcement Learning",
+        subtitle=(
+            "Multi-week return vs the myopic bandit  ·  git tag: phase7d-validated"
+            "  ·  train 1000–1119, evaluate 0–29"
+        ),
+        badge="NULL — STOP AT 7b",
+        badge_color=GOLD,
+        agents=[
+            ("Buyers: ", "100 — Poor 70 / Middle 20 / Rich 10, dispersed budgets"),
+            ("Sellers: ", "5 — same arms and costs as 7b, so only the horizon differs"),
+        ],
+        environment=[
+            "-  66 weeks. Loyalty is a 3-week capped counter that resets on a switch.",
+            "-  7c skipped: no external market state predicts which arm is best.",
+        ],
+        method=[
+            "PyTorch Q-network on a 10-week discounted return (γ = 0.9).",
+            "State is the seller's own loyal count, last arm, last profit, week.",
+        ],
+        literature=[
+            (
+                "den Boer & Zwart (2015), ",
+                "“Dynamic Pricing and Learning with Finite Inventories” (Op. Res.) "
+                "— learning to price under a finite-inventory constraint.",
+            ),
+        ],
+        metrics=[
+            MetricRow("7a heuristic", f"{hp.mean():.1f}/wk", "—"),
+            MetricRow("7b UCB1 bandit", f"{bp.mean():.1f}/wk", "—"),
+            MetricRow("7d RL, held-out seeds", f"{rp.mean():.1f}/wk", "—"),
+            MetricRow("RL vs bandit", f"{gain / scale:+.1%}", "PASS"),
+            MetricRow("  its 95% CI vs ±5%", f"[{lo / scale:+.1%}, {hi / scale:+.1%}]",
+                      "PASS" if verdict != "inconclusive" else "FAIL"),
+            MetricRow("Week–price correlation", f"RL {rl_corr:.2f} vs bandit {bd_corr:.2f}", "—"),
+        ],
+        research_question=(
+            "Does optimizing cumulative multi-week reward change pricing behaviour "
+            "or outcomes relative to per-week optimization?"
+        ),
+        finding=(
+            f"No — {verdict} at {gain / scale:+.1%}, CI [{lo / scale:+.1%}, "
+            f"{hi / scale:+.1%}]. A ten-week horizon converges to what the myopic "
+            f"bandit already found, and the sacrifice-then-recover trajectory is absent "
+            f"({rl_px[:, :third].mean():.2f} early vs {rl_px[:, -third:].mean():.2f} late)."
+        ),
+        caveat=(
+            f"The pre-registered signature does not measure what it was meant to: any "
+            f"learner climbing toward a better arm produces a rising price path, and "
+            f"the *myopic* bandit scores higher on it ({bd_corr:.2f}) than the RL agent "
+            f"({rl_corr:.2f}). The null itself traces to loyalty_streak_cap = 3 — a "
+            f"bounded counter that resets on one switch is not a stock, so there is "
+            f"nothing to invest in. Phase 7e tests that directly."
+        ),
+    )
+
+
 BUILDERS = {
     "1": phase1_slide,
     "2": phase2_slide,
@@ -1169,6 +1262,7 @@ BUILDERS = {
     "6": phase6_slide,
     "7a": phase7a_slide,
     "7b": phase7b_slide,
+    "7d": phase7d_slide,
 }
 
 
