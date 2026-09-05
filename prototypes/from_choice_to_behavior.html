@@ -264,7 +264,7 @@
     </div>
     <div class="chapter">
       <div class="num">04</div>
-      <div><h3>Validation</h3><p class="rq">Do synthetic decisions resemble human decisions?</p><span class="flowchain">LLM Agents &rarr; Human Benchmark &rarr; Bias &rarr; Robustness &rarr; Failure</span></div>
+      <div><h3>Validation</h3><p class="rq">Do synthetic decisions resemble human decisions?</p><span class="flowchain">Learned Policy &rarr; LLM Agents &rarr; Human Benchmark &rarr; Bias &rarr; Robustness &rarr; Failure</span></div>
     </div>
   </section>
 
@@ -549,10 +549,14 @@ const LENSES = [
    body:"With entry/exit rules that never reference buyer class, does the market nonetheless sort into a stable, class-correlated structure?",
    baseline:"Fixed Seller Set", treatment:"+ Entry / Exit", metric:"stalls",
    mechNote:"Still entirely rule-based on the buyer side. Emergence is being tested precisely because nothing here \u2014 including how buyers decide \u2014 has any model-based reasoning that could quietly encode the effect being looked for."},
-  {id:"p9", label:"Phase 9 · LLM Agents", title:"What does an LLM agent add over a rule?",
-   body:"For the 30% of buyers whose decisions come from an LLM instead of a formula, does the resulting behavior diverge from the rule-based majority \u2014 and at what cost and latency?",
-   baseline:"Rule-Based Decision", treatment:"+ LLM Agent Decision", metric:"participation",
-   mechNote:"LLM agents are introduced here \u2014 deliberately for only 30% of buyers, not all of them. The other 70% stay rule-based on purpose, so both mechanisms run side by side in the exact same market and can be compared directly, rather than replacing the baseline entirely and losing any point of comparison."}
+  {id:"p9a", label:"Phase 9a · Learned Policy", title:"Does a trained policy differ from the hand-written rule?",
+   body:"A small neural network, trained via behavior cloning (and optionally refined with reinforcement learning), replaces the hand-written formula for the entire buyer population. Does its behavior diverge from the rule it was trained on \u2014 and does it give Phase 9b's LLM comparison a real opponent instead of a simple formula?",
+   baseline:"Hand-Written Rule", treatment:"Trained PyTorch Policy", metric:"participation",
+   mechNote:"This is where buyer decisions first move beyond a formula \u2014 but there is still no LLM here. A network trained via behavior cloning (PyTorch) runs the full population. This step exists specifically so Phase 9b's LLM has a properly trained baseline to be compared against, not a hand-written rule that was never a serious opponent to begin with."},
+  {id:"p9b", label:"Phase 9b · LLM Agents", title:"What does an LLM agent add over a trained policy?",
+   body:"For the 30% of buyers whose decisions come from an LLM instead of Phase 9a's trained policy, does the resulting behavior diverge from the majority \u2014 and at what cost and latency?",
+   baseline:"Phase 9a Trained Policy", treatment:"+ LLM Agent Decision", metric:"participation",
+   mechNote:"LLM agents are introduced here \u2014 deliberately for only 30% of buyers, not all of them. The other 70% run Phase 9a's trained policy, not the original hand-written rule, so both mechanisms run side by side in the exact same market and can be compared directly against a real baseline, rather than replacing it entirely and losing any point of comparison."}
 ];
 let currentLens = LENSES[0];
 
@@ -602,9 +606,13 @@ const PHASES = [
    iv:"None \u2014 observed evolution across seasons", dv:"Active sellers per class, season to season",
    baseline:"\u2014", treatment:"\u2014", comparison:"vs. real RI DEM 2019\u20132023 vendor counts",
    metric:"Season-to-season volatility", result:"Simulated volatility within the real range (illustrative)", decision:"PLAUSIBLE", tone:"keep"},
-  {id:"09", nav:"Phase 9 — LLM", rq:"What does an LLM agent add over the rule-based baseline?",
-   iv:"Decision mechanism (rule vs. agent), 30% subset", dv:"Choice distribution, API cost, latency",
-   baseline:"Rule-based decision", treatment:"LLM agent decision (30% of buyers)", comparison:"Agent subgroup vs. rule subgroup, same run",
+  {id:"09a", nav:"Phase 9a \u2014 Learned Policy", rq:"Does a trained PyTorch policy differ from the hand-written rule, and can it serve as a real baseline?",
+   iv:"Decision mechanism (hand-written rule vs. trained policy), full 100-buyer population", dv:"Choice distribution, class shares",
+   baseline:"Hand-written rule (Phase 8)", treatment:"Behavior-cloned / RL-fine-tuned PyTorch policy", comparison:"Full-population A/B, same 5pp-style threshold test as Phase 5",
+   metric:"Percentage-point difference vs. hand-written rule", result:"Establishes the real baseline for 9b, instead of a simple formula (illustrative)", decision:"BASELINE ESTABLISHED", tone:"keep"},
+  {id:"09b", nav:"Phase 9b \u2014 LLM Agent", rq:"What does an LLM agent add over Phase 9a's trained policy?",
+   iv:"Decision mechanism (Phase 9a trained policy vs. LLM agent), 30% subset", dv:"Choice distribution, API cost, latency",
+   baseline:"Phase 9a trained policy", treatment:"LLM agent decision (30% of buyers)", comparison:"Agent subgroup vs. Phase-9a-policy subgroup, same run",
    metric:"Cost/speed ratio vs. human baseline", result:"\u2248 2,000\u00d7 cheaper, \u2248 300\u00d7 faster (illustrative)", decision:"SCAFFOLDING VALIDATED", tone:"keep"},
   {id:"10", nav:"Phase 10 — Human Benchmark", rq:"Where does synthetic behavior match or diverge from real humans?",
    iv:"Data source (N=100 agent responses vs. published human benchmark)", dv:"Per-scenario choice distribution",
@@ -833,7 +841,7 @@ function renderInspector(){
     }
     const utility = stallId ? (1.0 + 0.05*remaining/10 - (b.prefs.priceSensitivity==="High"?0.3:0.1) + (streak>=3?0.5:0)).toFixed(2) : "\u2014";
     el.innerHTML =
-      '<span class="name">BUYER \u00b7 ' + b.id + '</span><span class="sub">' + CLASS_LABEL[b.cls] + (b.mech==="agent"?" \u00b7 LLM agent":" \u00b7 rule-based") + '</span>' +
+      '<span class="name">BUYER \u00b7 ' + b.id + '</span><span class="sub">' + CLASS_LABEL[b.cls] + (b.mech==="agent"?" \u00b7 LLM agent":" \u00b7 trained policy") + '</span>' +
       '<div class="grp-h">CURRENT STATE</div><table>' +
       '<tr><td>Budget</td><td class="v">$' + b.budget + '</td></tr>' +
       '<tr><td>Remaining budget</td><td class="v">$' + remaining.toFixed(2) + '</td></tr>' +
@@ -970,14 +978,14 @@ function renderLegend(){
   if (viewBy === "class") el.innerHTML = '<span><span class="legend-dot" style="background:#3E6FA8;"></span>Poor buyer</span><span><span class="legend-dot" style="background:#5C8A6B;"></span>Middle-class buyer</span><span><span class="legend-dot" style="background:#B8722E;"></span>Rich buyer</span><span><span class="legend-sq" style="background:#1F7A6C;"></span>Low-price stall</span><span><span class="legend-sq" style="background:#7A3B69;"></span>Premium stall</span>';
   else if (viewBy === "tier") el.innerHTML = '<span><span class="legend-dot" style="background:#1F7A6C;"></span>Currently at a low-price stall</span><span><span class="legend-dot" style="background:#7A3B69;"></span>Currently at a premium stall</span>';
   else if (viewBy === "loyalty") el.innerHTML = '<span><span class="legend-dot" style="background:hsl(220,55%,48%);"></span>New / low streak</span><span><span class="legend-dot" style="background:hsl(30,55%,48%);"></span>Long streak</span>';
-  else if (viewBy === "mechanism") el.innerHTML = '<span><span class="legend-dot" style="background:#9AA0AC;"></span>Rule-based buyer</span><span><span class="legend-dot" style="background:#7A5CB8;"></span>LLM agent buyer</span>';
+  else if (viewBy === "mechanism") el.innerHTML = '<span><span class="legend-dot" style="background:#9AA0AC;"></span>Trained-policy buyer (Phase 9a)</span><span><span class="legend-dot" style="background:#7A5CB8;"></span>LLM agent buyer (Phase 9b)</span>';
 }
 
 /* ============================================================
    SCREEN 3 — EXPERIMENT EXPLORER
    ============================================================ */
 const phaseNavEl = document.getElementById("phase-nav");
-const NAV_DIVIDERS = {"01":"BEHAVIOR", "06":"INTERACTION & LEARNING", "09":"VALIDATION", "15":"SCALE"};
+const NAV_DIVIDERS = {"01":"BEHAVIOR", "06":"INTERACTION & LEARNING", "09a":"VALIDATION", "15":"SCALE"};
 PHASES.forEach(function(p){
   if (NAV_DIVIDERS[p.id]){
     const div = document.createElement("div");
