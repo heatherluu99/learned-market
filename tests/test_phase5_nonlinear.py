@@ -97,20 +97,22 @@ def test_equivalence_verdict_three_outcomes():
     assert equivalence_verdict(-MATERIALITY_PP / 100, MATERIALITY_PP / 100) == "equivalent"
 
 
-def test_point_estimate_alone_would_have_misjudged_the_cliff_only_arm():
-    """Why the bar is the interval and not the point estimate.
+def test_cliff_only_arm_is_decisive_and_equivalent():
+    """Both readings of the spec roll back to the linear model.
 
-    At 30 seeds this arm's point estimate sits under 5 pp while its CI reaches
-    past it. A point-estimate rule would call that immaterial; the interval
-    rule correctly refuses to decide.
+    Under the original degenerate population this arm was *inconclusive* at 30
+    seeds - point estimate 4.68 pp with a CI reaching 6.36 - and needed 1000
+    seeds to settle. Dispersing budgets shrank the effect and it now decides
+    at 30. The methodological point that produced the interval rule is
+    recorded in the spec and unit-tested directly in
+    `test_equivalence_verdict_three_outcomes`; it no longer has a live example
+    here, which is worth knowing rather than papering over.
     """
     linear = run_seeds(PHASE5_LINEAR)
     cliff_only = run_seeds(PHASE5_CLIFF_ONLY)
     table = share_shift_table(PHASE5_CLIFF_ONLY, cliff_only, linear)
-    mean, lo, hi, verdict = table["Middle_to_Shigh_share"]
-    assert abs(mean) * 100 < MATERIALITY_PP  # a point-estimate rule would pass it
-    assert hi * 100 > MATERIALITY_PP  # but the interval reaches past the bar
-    assert verdict == "inconclusive"
+    assert {v[3] for v in table.values()} == {"equivalent"}
+    assert max(abs(v[0]) for v in table.values()) * 100 < MATERIALITY_PP
 
 
 def test_additive_arm_is_equivalent_and_triggers_rollback():
@@ -118,15 +120,13 @@ def test_additive_arm_is_equivalent_and_triggers_rollback():
     additive = run_seeds(PHASE5_ADDITIVE)
     table = share_shift_table(PHASE5_ADDITIVE, additive, linear)
     assert {v[3] for v in table.values()} == {"equivalent"}
-    # Poor and Middle are untouched to the last decimal: their purchase
-    # sequences never reach the cliff.
-    for metric in (
-        "Poor_to_Slow_share",
-        "Poor_to_Shigh_share",
-        "Middle_to_Slow_share",
-        "Middle_to_Shigh_share",
-    ):
+    # Poor is still untouched to the last decimal - its budget never reaches
+    # the cliff. Middle no longer is: with dispersed budgets some of its
+    # members now do land near the threshold, which is the mechanism working
+    # rather than a regression.
+    for metric in ("Poor_to_Slow_share", "Poor_to_Shigh_share"):
         assert table[metric][0] == pytest.approx(0.0, abs=1e-12)
+    assert abs(table["Middle_to_Shigh_share"][0]) * 100 < MATERIALITY_PP
 
 
 def test_phase5_criteria_grade_decisiveness_not_direction():

@@ -65,7 +65,7 @@ def test_bandit_randomness_does_not_disturb_the_market():
     assert np.array_equal(a.attended, b.attended)
     seasons = run_season_seeds(PHASE6_MAIN)
     assert float(np.mean([s.purchase_rate().mean() for s in seasons])) == pytest.approx(
-        0.6934, abs=5e-4
+        0.6916, abs=5e-4
     )
 
 

@@ -47,7 +47,7 @@ def test_adding_visibility_did_not_move_phase1_or_phase2():
     )
     p2 = run_seeds(PHASE2_MAIN)
     assert float(np.mean([r.participation_rate for r in p2])) == pytest.approx(
-        0.8183333333333334, abs=1e-12
+        0.8163333333333334, abs=1e-12
     )
 
 

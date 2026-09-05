@@ -41,7 +41,7 @@ def test_earlier_phases_are_untouched_by_adding_promotions():
     )
     p2 = run_seeds(PHASE2_MAIN)
     assert float(np.mean([r.participation_rate for r in p2])) == pytest.approx(
-        0.8183333333333334, abs=1e-12
+        0.8163333333333334, abs=1e-12
     )
 
 
@@ -86,14 +86,23 @@ def test_expected_responder_is_derived_from_parameters_only():
     assert PHASE4_MAIN.expected_responder("Shigh") == "Middle"
 
 
-def test_a_30_percent_discount_never_opens_shigh_to_poor():
-    """4.2 still exceeds a budget of 3 - arithmetic, not behaviour."""
+def test_a_30_percent_discount_barely_opens_shigh_to_poor():
+    """4.2 exceeds Poor's *mean* budget of 3, and almost every draw from it.
+
+    This was an exact zero when every Poor buyer held exactly 3.0. With
+    budgets dispersed the discounted price sits in the extreme upper tail of
+    Poor's distribution, so it reaches a vanishing number of buyers rather
+    than none - which is the more honest statement, and the hard zero was
+    itself an artefact of the degenerate population.
+    """
     poor = next(c for c in PHASE4_MAIN.buyer_classes if c.name == "Poor")
     assert PHASE4_MAIN.discounted_price(6.0) > poor.budget_per_visit
     baseline = run_seeds(PHASE4_NO_PROMOTION)
     forced = run_seeds(PHASE4_FORCED[3])  # a Shigh stall
     lift = class_promotion_lift(forced, baseline, 3, "Poor")
-    assert lift.sum() == 0
+    total_poor = sum(len([t for t in r.transactions if t.buyer_class == "Poor"])
+                     for r in forced)
+    assert lift.sum() / total_poor < 0.001
 
 
 def test_the_market_arm_cannot_support_a_per_seller_comparison():

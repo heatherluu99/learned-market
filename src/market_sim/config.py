@@ -12,6 +12,7 @@ test rather than by a second code path.
 
 from __future__ import annotations
 
+import dataclasses
 from dataclasses import dataclass, field
 
 
@@ -26,6 +27,13 @@ class BuyerClass:
     #: Descriptive only — income does not enter the purchase rule in any phase
     #: through Phase 8. Recorded so the population is documented, not used.
     income: float | None = None
+    #: Phase 2 onward (added at the Phase 7 gate): lognormal sigma for
+    #: within-class budget spread, with `budget_per_visit` as the class MEAN.
+    #: None means every member holds the class value exactly, which is how
+    #: Phases 1-6 were originally built and what produced the price cliff at
+    #: Poor's budget. See docs/phase_specifications.md, "Population
+    #: Specification - Within-Class Dispersion".
+    budget_dispersion: float | None = None
     #: Phase 6 onward: probability this class shows up in a given week. None
     #: means "always shows up", which is what Phases 1-5 assume. A buyer who
     #: does not show up makes no purchase decision at all - distinct from one
@@ -239,6 +247,36 @@ class MarketConfig:
     def has_loyalty(self) -> bool:
         return self.loyalty_bonus_per_streak > 0
 
+    @property
+    def has_budget_dispersion(self) -> bool:
+        return any(c.budget_dispersion for c in self.buyer_classes)
+
+    def buyer_budgets(self, seed: int) -> "np.ndarray":
+        """Per-buyer budget for one run.
+
+        Drawn from its own generator, so adding this mechanism moves no
+        existing random stream and only *enabling* dispersion changes a result.
+        Lognormal with the class value as the mean, so mu = ln(mean) -
+        sigma^2/2 rather than ln(mean).
+        """
+        import numpy as np
+
+        if not self.has_budget_dispersion:
+            return np.array(
+                [c.budget_per_visit for c in self.buyer_classes for _ in range(c.count)],
+                dtype=float,
+            )
+        rng = np.random.default_rng(20_000 + seed)
+        out = []
+        for c in self.buyer_classes:
+            if not c.budget_dispersion:
+                out.extend([c.budget_per_visit] * c.count)
+                continue
+            sigma = c.budget_dispersion
+            mu = np.log(c.budget_per_visit) - sigma**2 / 2
+            out.extend(rng.lognormal(mu, sigma, size=c.count))
+        return np.array(out, dtype=float)
+
     def attendance_prob_of(self) -> list[float]:
         """Attendance probability per buyer id. All 1.0 before Phase 6."""
         return [
@@ -292,14 +330,10 @@ class MarketConfig:
         return MarketConfig(
             name=name,
             phase=self.phase,
+            # dataclasses.replace, never a hand-listed field set: a new
+            # BuyerClass field would otherwise be dropped here in silence.
             buyer_classes=tuple(
-                BuyerClass(
-                    name=c.name,
-                    count=c.count,
-                    budget_per_visit=c.budget_per_visit,
-                    price_sensitivity=alpha,
-                    income=c.income,
-                )
+                dataclasses.replace(c, price_sensitivity=alpha)
                 for c in self.buyer_classes
             ),
             seller_classes=self.seller_classes,
@@ -365,9 +399,11 @@ PHASE2_MAIN = MarketConfig(
     name="phase2_main",
     phase=2,
     buyer_classes=(
-        BuyerClass("Poor", count=70, budget_per_visit=3.0, price_sensitivity=0.85, income=25),
-        BuyerClass("Middle", count=20, budget_per_visit=7.0, price_sensitivity=0.5, income=55),
-        BuyerClass("Rich", count=10, budget_per_visit=10.0, price_sensitivity=0.2, income=100),
+        # budget_dispersion flows from here to Phases 3-7: those configs reuse
+        # these classes, so the population is specified in exactly one place.
+        BuyerClass("Poor", 70, 3.0, 0.85, income=25, budget_dispersion=0.12),
+        BuyerClass("Middle", 20, 7.0, 0.5, income=55, budget_dispersion=0.12),
+        BuyerClass("Rich", 10, 10.0, 0.2, income=100, budget_dispersion=0.12),
     ),
     seller_classes=(
         SellerClass("Slow", count=3, price=2.0, inventory=130),
@@ -500,14 +536,7 @@ PHASE5_CLIFF_ONLY = _phase5("phase5_cliff_only", cliff=0.5, linear_term=False)
 #: single-week mechanics inherited here are the linear ones - see
 #: docs/phase_specifications.md, Phase 5's recorded result.
 _PHASE6_BUYERS = tuple(
-    BuyerClass(
-        name=c.name,
-        count=c.count,
-        budget_per_visit=c.budget_per_visit,
-        price_sensitivity=c.price_sensitivity,
-        income=c.income,
-        attendance_probability=p,
-    )
+    dataclasses.replace(c, attendance_probability=p)
     for c, p in zip(PHASE4_MAIN.buyer_classes, (0.85, 0.84, 0.82))
 )
 

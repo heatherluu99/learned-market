@@ -68,9 +68,7 @@ def test_budget_and_inventory_reset_every_week(seed):
     starting_inventory = np.array(
         [c.inventory for c in PHASE6_MAIN.seller_classes for _ in range(c.count)]
     )
-    budgets = np.array(
-        [c.budget_per_visit for c in PHASE6_MAIN.buyer_classes for _ in range(c.count)]
-    )
+    budgets = PHASE6_MAIN.buyer_budgets(seed)  # per buyer, not per class
     for week in season.weeks:
         assert (week.seller_n_sold + week.seller_inventory_remaining == starting_inventory).all()
         assert (week.buyer_total_spent <= budgets).all()

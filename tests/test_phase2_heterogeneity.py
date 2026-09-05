@@ -82,11 +82,11 @@ def test_tier_shares_sum_to_one_per_class(seed):
 
 
 @pytest.mark.parametrize("seed", SEEDS)
-def test_no_buyer_exceeds_their_own_class_budget(seed):
+def test_no_buyer_exceeds_their_own_budget(seed):
+    """Per buyer, not per class: budgets are dispersed within a class now, so
+    the class value is no longer any individual's actual budget."""
     result = run_single(PHASE2_MAIN, seed)
-    budgets = np.array(
-        [c.budget_per_visit for c in PHASE2_MAIN.buyer_classes for _ in range(c.count)]
-    )
+    budgets = PHASE2_MAIN.buyer_budgets(seed)
     assert (result.buyer_total_spent <= budgets).all()
     assert result.buyer_budget_remaining.min() >= 0
 

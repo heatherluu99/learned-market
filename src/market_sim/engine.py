@@ -214,10 +214,7 @@ def run_single(cfg: MarketConfig, seed: int) -> RunResult:
 
     buyer_class = cfg.buyer_class_of()
     seller_class = cfg.seller_class_of()
-    budget = np.array(
-        [c.budget_per_visit for c in cfg.buyer_classes for _ in range(c.count)],
-        dtype=float,
-    )
+    budget = cfg.buyer_budgets(seed)
     alpha = np.array(
         [c.price_sensitivity for c in cfg.buyer_classes for _ in range(c.count)],
         dtype=float,
@@ -441,9 +438,7 @@ def run_season(cfg: MarketConfig, seed: int) -> SeasonResult:
 
     buyer_class = cfg.buyer_class_of()
     seller_class = cfg.seller_class_of()
-    budget0 = np.array(
-        [c.budget_per_visit for c in cfg.buyer_classes for _ in range(c.count)], dtype=float
-    )
+    budget0 = cfg.buyer_budgets(seed)
     alpha = np.array(
         [c.price_sensitivity for c in cfg.buyer_classes for _ in range(c.count)], dtype=float
     )
