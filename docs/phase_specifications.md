@@ -608,7 +608,22 @@ Two consequences made this unusable rather than merely uninteresting:
 
 A sell-through dead band was tried first and rejected too: centred on the observed baseline sell-through it is a no-op, moving prices by under 1% across 66 weeks, and its thresholds could only be set by eye after seeing the data.
 
-**Measured behaviour of the replacement**, 30 seeds, 66 weeks, against the Phase 6 fixed-price baseline: mean weekly profit 49.8 → **74.1** (final season 80.5), Slow prices climbing 2.00 → 2.61 toward the 3.00 optimum without reaching it, and Poor purchases at Shigh totalling 10 across all seeds — no fabricated wall-break. That the heuristic stops short of the optimum is deliberate headroom: it leaves something for 7b–7d to win.
+**Correction made during implementation: the seller only acts on a change bigger than its own noise.** The rule as written above reverses whenever last week's profit was worse than the week before. That works where volume is thick and random-walks where it is thin, and this market is both at once:
+
+| stall | units/week | weekly profit | sd / mean | final price ÷ initial |
+|---|---|---|---|---|
+| Slow #0 | 27.0 | 29.8 | 0.39 | 1.45 max |
+| Slow #2 | 16.5 | 12.1 | 0.64 | 1.45 max |
+| Shigh #3 | 5.1 | 5.1 | 1.41 | 1.18 max |
+| **Shigh #4** | **3.0** | **−0.89** | **6.53** | **3.56 max (price 21.36)** |
+
+At three units a week a single week's profit has a standard deviation six times its mean, so the far premium stall cannot tell an improvement from a coin flip. It drifted to three and a half times its starting price on noise alone — which reads as the heuristic discovering something, and is not.
+
+The fix restores what this sub-stage was called in the first place. A *moving-average* heuristic compares against a smoothed signal, and dropping the moving average was an error in the replacement rule, not a deliberate simplification. Concretely: the seller keeps the last 8 weeks of its own profit, and acts only when `|profit − last week's profit|` exceeds the standard deviation of that window. Below it, nothing was learned, so the price holds. The window enters as one parameter and the bar it sets is the seller's own measured noise, not a number chosen by hand.
+
+This is deliberately not a fix that lets the quiet stall price "correctly": at three units a week there is no window short enough to track change and long enough to see through the noise. The honest behaviour is for it to stand still, and it does. That it is also structurally unprofitable — three units a week at a margin of 3 against a fixed cost of 10 — is a Phase 8 matter, where a seller in that position exits.
+
+**Measured behaviour of the replacement**, 30 seeds, 66 weeks, against the Phase 6 fixed-price baseline: mean weekly profit 49.5 → **64.3** (95% CI +12.5 to +17.1), final posted prices spanning 0.71× to 1.51× their initial value, the lowest premium price 4.08 against Poor's budget of 3, and `Poor_to_Shigh_share` exactly 0.0000 — no fabricated wall-break. Without the noise gate the profit gain reads +25.1 rather than +14.8; the difference is noise-driven overpricing on the thin stalls, not learning, which is why the gated figure is the one reported. That the heuristic stops short of the optimum is deliberate headroom: it leaves something for 7b–7d to win.
 
 **Acceptance criteria:**
 - Compare profit, participation rate, and class shares over 3 seasons (66 weeks) against the Phase 6 fixed-price baseline, same seeds
