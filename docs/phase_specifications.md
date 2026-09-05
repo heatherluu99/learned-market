@@ -634,19 +634,15 @@ This is the first phase where "week" is a real mechanism, so it is the natural p
 
 The original question — "does adaptive pricing change profit, participation and class-segregation relative to fixed pricing" — is answerable but weak: it compares performance, and the answer was never in doubt. The replacement asks about *structure*, which is what this project's Phase 8 is about anyway, and it is decidable in either direction.
 
-**This market already contains a concrete instance of that question.** Sweeping one Slow seller's price with the others held fixed gives:
+**Where the profit optimum actually is — measured, not inferred.** An oracle sweep at the real Phase 7 configuration (fixed seller policy, no learning, 66 weeks, 40 seeds, one tier swept on a 0.05 grid with the other held fixed):
 
-| price | 1.20 | 2.00 (configured) | **3.00** | 4.00 |
-|---|---|---|---|---|
-| profit/week | 6.4 | 29.6 | **52.0** | 28.4 |
+| Slow price | 2.40 | 2.60 | **2.65** | 2.70 | 3.00 | 3.50 |
+|---|---|---|---|---|---|---|
+| profit/week | 66.6 | 72.2 | **72.4** | 71.3 | 60.1 | 34.5 |
 
-The profit-maximizing price is **3.00, exactly Poor's `budget_per_visit`**. One cent above it, all 70 Poor buyers become unable to transact and weekly sales fall from 26 to 9.5. That cliff is created by buyer heterogeneity, not by the price function:
+A smooth unimodal curve with an interior maximum at **2.65 ± 0.6**, arising from the ordinary trade-off between margin and volume.
 
-- a myopic bandit sampling near the configured price never sees the cliff and climbs a local slope;
-- one that samples as far as 4.00 falls off it, learns to avoid that region, and may abandon the optimum with it;
-- only a learner that represents *which classes are present and where their budgets sit* can park a price on the edge deliberately.
-
-So the market has structure that is exploitable only by modelling the population, which is precisely the stateful-versus-myopic dividing line.
+**This is not where it was.** Before within-class budget dispersion the same sweep put the maximum at exactly 3.00 — Poor's budget — with a 79% collapse in the following 0.05 step. That optimum was an artefact: every Poor buyer held an identical budget, so seventy affordability constraints bound at one price and summed into a cliff. See "Population Specification — Within-Class Dispersion" above. The optimum is now an economic quantity rather than a boundary written into the environment, and this section previously argued from the artefact.
 
 ### Profit, defined (needed here and by Phase 8's exit rule)
 
@@ -705,7 +701,7 @@ The fix restores what this sub-stage was called in the first place. A *moving-av
 
 This is deliberately not a fix that lets the quiet stall price "correctly": at three units a week there is no window short enough to track change and long enough to see through the noise. The honest behaviour is for it to stand still, and it does. That it is also structurally unprofitable — three units a week at a margin of 3 against a fixed cost of 10 — is a Phase 8 matter, where a seller in that position exits.
 
-**Measured behaviour of the replacement**, 30 seeds, 66 weeks, against the Phase 6 fixed-price baseline: mean weekly profit 49.5 → **64.3** (95% CI +12.5 to +17.1), final posted prices spanning 0.71× to 1.51× their initial value, the lowest premium price 4.08 against Poor's budget of 3, and `Poor_to_Shigh_share` exactly 0.0000 — no fabricated wall-break. Without the noise gate the profit gain reads +25.1 rather than +14.8; the difference is noise-driven overpricing on the thin stalls, not learning, which is why the gated figure is the one reported. That the heuristic stops short of the optimum is deliberate headroom: it leaves something for 7b–7d to win.
+**Measured behaviour of the replacement**, 30 seeds, 66 weeks, against the fixed-price baseline: final posted prices span roughly 0.75× to 1.51× their initial value, the lowest premium price stays above Poor's mean budget, and `Poor_to_Shigh_share` is 0.0002 — a far-tail effect of dispersed budgets, not a deflationary wall-break. Without the noise gate the profit gain reads +25.1 rather than +14.8; the difference is noise-driven overpricing on the thin stalls, not learning, which is why the gated figure is the one reported. That the heuristic stops short of the optimum is deliberate headroom: it leaves something for 7b–7d to win.
 
 **Acceptance criteria:**
 - Compare profit, participation rate, and class shares over 3 seasons (66 weeks) against the Phase 6 fixed-price baseline, same seeds
@@ -732,9 +728,22 @@ This is deliberately not a fix that lets the quiet stall price "correctly": at t
 
 The original spec named the algorithm as a free choice and did not mention initialization at all — so the parameter it left open was harmless and the one that mattered was invisible. Both algorithms are run and graded anyway, with an initial sweep in each, and their agreement is reported: two learning rules reaching the same verdict is stronger evidence than one.
 
-**The arm set is deliberately *not* widened, and its ceiling is the finding.** The profit optimum for a Slow seller is 3.00 — which is 1.5× its initial price, outside the specified 1.2× ceiling of 2.40. Widening the arms to reach it would encode the answer into the hypothesis space, which is exactly the post-hoc move this project's gates exist to catch. Measured for completeness only: at 0.8–1.8× arms, UCB1 reaches 2.78 and +26.5 per week against 7a instead of +5.4.
+**The arm set is deliberately *not* widened in the graded run, and a separate ladder measures what that costs.** Widening the arms because the optimum is known to lie outside them would encode the answer into the hypothesis space. Instead the ceiling is varied as its own experiment, with seeds, environment, initialization, reward, horizon and algorithm all held fixed:
 
-So a context-blind bandit is capped by where its arms were placed, while 7a's multiplicative walk has no ceiling and climbed to 2.47. **The bandit's limitation here is not its learning rule but its fixed, local hypothesis space** — and that is precisely the gap Phase 7's research question asks whether a stateful learner can close.
+| arm ceiling | UCB1 | ε-greedy | price UCB1 settles on |
+|---|---|---|---|
+| 1.2× = 2.40 (specified) | 66.0 | 64.7 | 2.35 |
+| 1.3× = 2.60 | 73.0 | 70.8 | 2.53 |
+| **1.4× = 2.80** | **74.0** | 72.1 | 2.58 |
+| 1.5× = 3.00 | 73.4 | 72.1 | 2.60 |
+| 1.6× = 3.20 | 73.0 | 71.0 | 2.60 |
+| 1.8× = 3.60 | 71.9 | 70.1 | 2.62 |
+
+Profit rises with the ceiling until the action set contains the oracle optimum of 2.65, then **stops rising and slowly declines** — additional arms past the optimum buy nothing and cost exploration. Both algorithms trace the same shape.
+
+Two things follow. **Performance improvement comes primarily from expanding the feasible action space until it contains the economic optimum, not from the learning rule** — the specified 2.40 ceiling costs about 8% of achievable profit, and no choice between ε-greedy and UCB1 recovers it. And once the optimum *is* reachable, the bandit finds it: UCB1 settles at 2.58–2.62 against an oracle optimum of 2.65.
+
+This is why a contextual bandit is not the next step. Context conditions the *estimate* of reward, `E[R | X, A]`; it cannot enlarge `A`. Running 7c against a misspecified action space would confound whatever context contributes with the ceiling it still could not cross.
 
 ### Graduation threshold, stated in the right units
 
