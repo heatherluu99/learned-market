@@ -1107,3 +1107,107 @@ def lockin_contrast(seasons: list) -> float:
         held = final[:, -1] > 0  # buyers holding any relationship at all
         gaps.extend((final[held, -1] - final[held, -2]).tolist())
     return float(np.mean(gaps)) if gaps else float("nan")
+
+
+# --------------------------------------------------------------------------
+# Phase 7e-2 — intertemporal headroom, gate 2
+# --------------------------------------------------------------------------
+
+#: Gate 2: the selected schedule must beat flat pricing by at least this much
+#: on the held-out block, with a CI excluding zero. Smaller than the +/-5%
+#: materiality margin because this is an existence check on headroom, not a
+#: graduation decision - a real but modest trade-off still licenses a learner.
+GATE2_MIN_GAIN_PCT = 2.0
+
+
+def schedule_policy(target: int, arms_by_week, n_weeks: int, flat_arm: int):
+    """A deterministic pricing schedule, wired through Phase 7d's policy hook.
+
+    Only `target` follows the schedule; every other stall holds the flat arm,
+    so what is measured is one seller's pricing decision inside an otherwise
+    unchanged market. The week is recovered from `season_fraction` rather than
+    counted, because the hook is called once per seller per week and a counter
+    would depend on the order it happens to be called in.
+    """
+
+    def policy(seller_id: int, state: dict) -> int:
+        if seller_id != target:
+            return flat_arm
+        week = int(round(state["season_fraction"] * max(n_weeks - 1, 1)))
+        return int(arms_by_week[min(week, len(arms_by_week) - 1)])
+
+    return policy
+
+
+def one_shot_schedules(arms: tuple[float, ...], n_weeks: int) -> dict[str, list[int]]:
+    """Phase 7d's family: discount for W weeks, then hold a standing price."""
+    flat = arms.index(1.0)
+    low_arms = [i for i, a in enumerate(arms) if a < 1.0]
+    high_arms = [i for i, a in enumerate(arms) if a >= 1.0]
+    out = {}
+    for weeks in (8, 16):
+        for lo in low_arms:
+            for hi in high_arms:
+                name = f"invest {weeks}wk @{arms[lo]:.2f}x -> {arms[hi]:.2f}x"
+                out[name] = [lo] * weeks + [hi] * (n_weeks - weeks)
+    out["flat"] = [flat] * n_weeks
+    return out
+
+
+def cyclic_schedules(arms: tuple[float, ...], n_weeks: int) -> dict[str, list[int]]:
+    """Repeat k weeks low, m weeks high.
+
+    The shape a decaying stock can actually reward: with a 3.1-week half-life
+    a one-shot investment is gone long before a 58-week harvest ends, so the
+    only way to hold a stock above its flat-price level while charging above
+    the flat price is to keep re-buying it.
+    """
+    low_arms = [i for i, a in enumerate(arms) if a < 1.0]
+    high_arms = [i for i, a in enumerate(arms) if a > 1.0]
+    out = {}
+    for k in (2, 4):
+        for m in (2, 4, 8):
+            for lo in low_arms:
+                for hi in high_arms:
+                    cycle = [lo] * k + [hi] * m
+                    name = f"cycle {k}wk @{arms[lo]:.2f}x / {m}wk @{arms[hi]:.2f}x"
+                    out[name] = (cycle * (n_weeks // len(cycle) + 1))[:n_weeks]
+    return out
+
+
+def schedule_profit(cfg: MarketConfig, arms_by_week, seeds, target: int = 0) -> np.ndarray:
+    """Per seed: the target stall's mean weekly profit under one schedule."""
+    import dataclasses
+
+    from .engine import run_season
+
+    flat_arm = cfg.price_arms.index(1.0)
+    policy = schedule_policy(target, arms_by_week, cfg.weeks, flat_arm)
+    scheduled = dataclasses.replace(cfg, price_rule="policy")
+    return np.array(
+        [
+            float(run_season(scheduled, seed, policy=policy).profits[:, target].mean())
+            for seed in seeds
+        ]
+    )
+
+
+def evaluate_phase7e2(
+    name: str, scheduled: np.ndarray, flat: np.ndarray
+) -> list[CriterionResult]:
+    """Gate 2 on the held-out block, for the schedule selected on the other one."""
+    gain, lo, hi = mean_difference_ci(scheduled, flat)
+    scale = float(flat.mean())
+    pct, lo_pct, hi_pct = gain / scale * 100, lo / scale * 100, hi / scale * 100
+    return [
+        CriterionResult(
+            name="gate 2: a schedule beats the best standing price",
+            passed=lo_pct > 0 and pct >= GATE2_MIN_GAIN_PCT,
+            measured=f"{name}: {flat.mean():.2f} -> {scheduled.mean():.2f} per week, "
+            f"{pct:+.1f}% (95% CI [{lo_pct:+.1f}%, {hi_pct:+.1f}%])",
+            threshold=f"CI excludes zero and the point estimate is ≥ "
+            f"{GATE2_MIN_GAIN_PCT:g}%",
+            note="Selected on the discovery block and tested here, because a "
+            "maximum over ~170 comparisons is significant by construction.",
+        ),
+    ]

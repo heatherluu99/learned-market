@@ -1347,6 +1347,89 @@ def phase7e1_slide() -> PhaseSlide:
     )
 
 
+def phase7e2_slide() -> PhaseSlide:
+    """Assemble the Phase 7e-2 slide from the run outputs, not hand-typed numbers."""
+    import pandas as pd
+
+    discovery = pd.read_csv(REPO_ROOT / "results/phase7e2/discovery.csv")
+    held = pd.read_csv(REPO_ROOT / "results/phase7e2/held_out.csv")
+    selected = discovery.loc[discovery["gain_pct"].idxmax()]
+    ladder = discovery[discovery["schedule"] == selected["schedule"]].set_index("delta")
+    harvest = discovery[discovery["schedule"].str.contains("1.10x|1.20x")]
+
+    gain, lo, hi = acceptance.mean_difference_ci(
+        held["scheduled"].to_numpy(), held["flat"].to_numpy()
+    )
+    scale = float(held["flat"].mean())
+    registered = float(ladder.loc[0.25, "gain_pct"])
+    control = float(ladder.loc[0.0, "gain_pct"])
+
+    return PhaseSlide(
+        phase_number=7,
+        phase_name="Mechanism Sufficiency — 7e-2 Intertemporal Headroom",
+        subtitle=(
+            "Hand-designed schedules vs the best standing price  ·  git tag: "
+            "phase7e2-headroom  ·  select on 2000–2059, test on 0–29"
+        ),
+        badge="GATE 2 PASSED",
+        badge_color=GREEN,
+        agents=[
+            ("Buyers: ", "100 — Poor 70 / Middle 20 / Rich 10, dispersed budgets"),
+            ("Sellers: ", "5 — one prices on a schedule, the rest hold their list price"),
+        ],
+        environment=[
+            "-  7e-1's calibrated stock: rho = 0.80, L_max = 3.30, half-life 3.1 weeks.",
+            "-  The scheduling stall's standing price is its own oracle optimum, 2.65,",
+            "   so the schedule deviates from a price buyers have adapted to.",
+        ],
+        method=[
+            "36 schedules x 4 deltas: one-shot invest-then-harvest, and cycles.",
+            "Selected on a discovery seed block, tested on the evaluation block —",
+            "a maximum over ~150 comparisons is significant by construction.",
+        ],
+        literature=[
+            (
+                "Nerlove & Arrow (1962), ",
+                "“Optimal Advertising Policy under Dynamic Conditions” (Economica) "
+                "— goodwill as a depreciating stock bought with current spending, "
+                "which is the trade-off tested here.",
+            ),
+        ],
+        metrics=[
+            MetricRow("Flat at the optimum", f"{scale:.1f}/wk", "—"),
+            MetricRow("Selected schedule, held out", f"{held['scheduled'].mean():.1f}/wk", "—"),
+            MetricRow("  gain", f"{gain / scale:+.1%}", "PASS"),
+            MetricRow("  its 95% CI vs +2%",
+                      f"[{lo / scale:+.1%}, {hi / scale:+.1%}]", "PASS"),
+            MetricRow("delta = 0 control, same path", f"{control:+.1f}%", "—"),
+            MetricRow("Best harvesting schedule",
+                      f"{harvest['gain_pct'].max():+.1f}%", "—"),
+        ],
+        research_question=(
+            "In an environment where loyalty persists as a stock, can any pricing "
+            "schedule beat the best standing price?"
+        ),
+        finding=(
+            f"Yes, and the control says why: the winning path is "
+            f"{selected['schedule']}, worth {gain / scale:+.1%} on held-out seeds, "
+            f"and the identical path with the investment channel switched off "
+            f"(delta = 0) loses {abs(control):.1f}%. The gain is loyalty, not the "
+            f"price path. But the value is in acquisition, not extraction — every "
+            f"schedule that ever charges above the standing price loses, the best "
+            f"of them by {abs(harvest['gain_pct'].max()):.0f}%."
+        ),
+        caveat=(
+            f"A marginal pass at the edge of the ladder. The CI's lower bound sits "
+            f"on the +2% threshold, and headroom appears only at delta = 1, the "
+            f"strongest investment channel tested; the registered delta = 0.25 gives "
+            f"{registered:+.1f}% and would have failed. Carrying the best cell into "
+            f"7e-3 is selection on the outcome, pre-registered as valid for an "
+            f"existence claim and not for effect size. The ladder is not extended to "
+            f"chase a larger effect."
+        ),
+    )
+
+
 BUILDERS = {
     "1": phase1_slide,
     "2": phase2_slide,
@@ -1358,6 +1441,7 @@ BUILDERS = {
     "7b": phase7b_slide,
     "7d": phase7d_slide,
     "7e1": phase7e1_slide,
+    "7e2": phase7e2_slide,
 }
 
 

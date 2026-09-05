@@ -9,6 +9,7 @@ true, and it is pinned here from both directions.
 from __future__ import annotations
 
 import dataclasses
+import pathlib
 
 import numpy as np
 import pytest
@@ -231,3 +232,101 @@ def test_the_pinned_ceiling_under_binds_and_the_calibration_fixes_it():
     calibrated, after = acceptance.calibrate_max_bonus(pinned, target)
     assert abs(after - target) <= 0.02
     assert calibrated.loyalty_max_bonus > pinned.loyalty_max_bonus
+
+
+# --------------------------------------------------------------------------
+# Phase 7e-2 — schedules
+# --------------------------------------------------------------------------
+
+ORACLE_PRICE = 2.65
+
+
+def _env(delta: float = 0.25):
+    cell = phase7e_cell(delta=delta, max_bonus=3.30)
+    return acceptance.split_target_config(cell, ORACLE_PRICE, name="test")
+
+
+def test_the_flat_schedule_is_the_unscheduled_market_exactly():
+    """The baseline must be the same market, not a near-enough one.
+
+    Routing a flat price through the policy hook must consume no draws and
+    change no price, or gate 2 would be comparing a schedule against a
+    slightly different world.
+    """
+    env = _env()
+    flat = acceptance.one_shot_schedules(env.price_arms, env.weeks)["flat"]
+    policy = acceptance.schedule_policy(0, flat, env.weeks, env.price_arms.index(1.0))
+    for seed in SEEDS:
+        plain = run_season(env, seed)
+        routed = run_season(
+            dataclasses.replace(env, price_rule="policy"), seed, policy=policy
+        )
+        assert np.array_equal(plain.chosen_seller, routed.chosen_seller)
+        assert np.allclose(plain.posted_prices, routed.posted_prices, atol=0, rtol=0)
+        assert np.allclose(plain.profits, routed.profits, atol=0, rtol=0)
+
+
+def test_a_schedule_moves_only_the_target_stall():
+    env = _env()
+    plan = acceptance.one_shot_schedules(env.price_arms, env.weeks)[
+        "invest 8wk @0.80x -> 1.20x"
+    ]
+    policy = acceptance.schedule_policy(0, plan, env.weeks, env.price_arms.index(1.0))
+    season = run_season(
+        dataclasses.replace(env, price_rule="policy"), 0, policy=policy
+    )
+    target = season.posted_prices[:, 0]
+    assert target[:8] == pytest.approx(0.8 * ORACLE_PRICE)
+    assert target[8:] == pytest.approx(1.2 * ORACLE_PRICE)
+    # every other stall holds its own list price for the whole season
+    others = season.posted_prices[:, 1:]
+    assert np.allclose(others, others[0], atol=0, rtol=0)
+
+
+def test_every_schedule_covers_exactly_the_season():
+    env = _env()
+    plans = {
+        **acceptance.one_shot_schedules(env.price_arms, env.weeks),
+        **acceptance.cyclic_schedules(env.price_arms, env.weeks),
+    }
+    assert len(plans) == 37  # 12 one-shot + flat + 24 cyclic
+    for name, plan in plans.items():
+        assert len(plan) == env.weeks, name
+        assert all(0 <= a < len(env.price_arms) for a in plan), name
+
+
+def test_cycles_are_periodic_and_alternate_around_the_standing_price():
+    env = _env()
+    plan = acceptance.cyclic_schedules(env.price_arms, env.weeks)[
+        "cycle 4wk @0.80x / 8wk @1.20x"
+    ]
+    arms = np.array(env.price_arms)[plan]
+    assert arms[:4] == pytest.approx(0.8)
+    assert arms[4:12] == pytest.approx(1.2)
+    assert arms[12:16] == pytest.approx(0.8)  # the cycle repeats
+
+
+def test_the_discovery_and_evaluation_blocks_are_disjoint():
+    """Selection over ~150 comparisons is only honest against held-out seeds."""
+    import importlib.util
+
+    path = (
+        pathlib.Path(__file__).resolve().parents[1]
+        / "experiments" / "phase7e" / "run_phase7e2.py"
+    )
+    spec = importlib.util.spec_from_file_location("run_phase7e2", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    assert not set(mod.DISCOVERY_SEEDS) & set(mod.EVAL_SEEDS)
+    assert set(mod.EVAL_SEEDS) == set(range(30))
+
+
+def test_gate2_needs_both_a_clear_interval_and_a_real_effect():
+    flat = np.full(30, 10.0) + np.linspace(-0.2, 0.2, 30)
+    # +5%, tight interval -> passes
+    assert acceptance.evaluate_phase7e2("s", flat * 1.05, flat)[0].passed
+    # +5% on average but an interval straddling zero -> fails
+    noisy = flat * 1.05 + np.tile([-4.0, 4.0], 15)
+    assert not acceptance.evaluate_phase7e2("s", noisy, flat)[0].passed
+    # a real but sub-threshold effect -> fails the size bar, not the interval
+    assert not acceptance.evaluate_phase7e2("s", flat * 1.01, flat)[0].passed
