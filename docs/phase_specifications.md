@@ -176,6 +176,7 @@ Everything else in the table below is used once, for the phase it's listed under
 | 7b | Multi-armed bandit (first policy-learning stage) | Pricing algorithm (7a heuristic vs. 7b bandit) | Same as 7a | Same 5pp threshold test as Phase 5; graduates to 7c only if cleared |
 | 7c | Contextual bandit + representation learning | **Learned market-state embedding vs. hand-designed features** (the actual research question this phase asks) | Same as 7a | Three-way: 7b (no context) vs. 7c-learned vs. 7c-hand-designed |
 | 7d | Reinforcement learning (multi-week cumulative reward) | Reward horizon (single-week vs. cumulative) | Same as 7a, plus presence/absence of a short-term-loss-for-long-term-loyalty trajectory signature | Same threshold test + qualitative check for a sacrifice-then-recover pricing pattern |
+| 7e | **Mechanism-sufficiency test in a separate environment** — three existence gates run in order, each licensing one level of policy complexity | Loyalty mechanism (bounded streak counter vs. persistent price-sensitive stock), swept over `delta` x `L*` | Gate 1: bonus dispersion and post-shock persistence. Gate 2: schedule headroom over the cell's own oracle optimum. Gate 3: same as 7b-7d | Gates 1-2 against pre-registered thresholds at flat prices; gate 3 on the standard +/-5% test, on the cell with the largest gate-2 headroom - **selection on outcome, valid for existence and not for effect size** |
 | 8 | Emergent-structure test; entry/exit rules contain no class information | No manipulated variable — observed natural evolution across seasons | Active-seller count per class, stratification | **Not an internal model comparison — compared against real RI DEM 2019–2023 vendor counts (24, 31, 25, 24, 26) for plausibility of volatility** |
 
 **Phases 9–14 — comparison shifts from within-model tests to comparison against real human data, with formal statistics**
@@ -847,6 +848,187 @@ That is Phase 6's path-dependence null seen from the seller's side, and it makes
 **Result.** Trained on seeds 1000–1119, evaluated on 0–29: **65.2 profit per week against the bandit's 66.0, −1.3% with a 95% CI of [−2.8%, +0.1%] — equivalent, and decisive.** Optimizing a ten-week discounted return finds nothing that per-week optimization does not, and the sacrifice-then-recover trajectory is absent. This is the pre-registered outcome, now measured rather than inferred, and it closes Phase 7's headline question for the base environment: in a market whose loyalty is a bounded three-week counter, stateful optimization produces no value a myopic learner cannot reach.
 
 **Exit condition:** `git tag phase7d-validated`. If none of 7b–7d clear their graduation threshold over 7a, the project should explicitly adopt 7a as the standing baseline for Phase 8 onward and record that as a finding, not treat it as a failure.
+
+---
+
+## Phase 7e — Mechanism Sufficiency (a second, mechanism-enabled environment)
+
+**Research question:** As a market acquires state-dependent and intertemporal
+mechanisms, at what point does each level of policy complexity become
+*necessary*?
+
+Phase 7 answered its headline question in the negative twice, and both nulls
+trace to a single line of configuration. `loyalty_streak_cap = 3` makes
+loyalty a bounded counter: it tops out after three consecutive weeks, resets
+to 1 on one switch, and is worth the same whatever price was paid to acquire
+it. A counter like that leaves no cross-section worth conditioning on (7c) and
+no stock worth investing in (7d). Phase 7 therefore measured something
+narrower than it set out to measure — not "does stateful learning pay?" but
+"does stateful learning pay in a market that has no state?"
+
+7e makes the obstacle the question. It builds a **separate** environment in
+which loyalty is a stock rather than a counter, and puts the same learners to
+the same test.
+
+**This is not a correction to Phase 7.** Nothing in 7a–7d is revised,
+retracted, or re-run, and the base environment stays the default everywhere
+else in the project. Phase 6 chose the cap deliberately — habit must not
+override taste — and that choice was right for what Phase 6 was testing. The
+value of 7e is the *pair*: complexity pays here and not there, with the
+difference stated as a structural commitment rather than as a parameter that
+was nudged until the result improved.
+
+### The mechanism: persistent, price-sensitive, bounded loyalty
+
+One stock per buyer–seller pair, updated once a week for every pair, before
+the next week begins:
+
+```
+purchased:      L[b,s] <- rho*L[b,s] + beta * max(0, 1 + delta*(1 - p_paid/p_list[s]) / A)
+not purchased:  L[b,s] <- rho*L[b,s]
+utility bonus:  bonus[b,s] = L_max * tanh(L[b,s] / L_star)
+```
+
+`A = max |arm - 1|` is the arm half-range (0.2 for the standard arm set), so
+`delta` is denominated in "one full price move" and means the same thing if
+the arm set ever changes. The accrual multiplier is clamped at zero: a premium
+price can slow accumulation to a stop but never subtract stock directly —
+erosion is `rho`'s job, and letting both channels drain it at once would make
+the harvest side of any schedule punitively expensive for reasons the
+mechanism does not actually claim.
+
+Four departures from the counter, three structural and one that is the whole
+point:
+
+| | streak counter (Phases 6–7d) | loyalty stock (7e) |
+|---|---|---|
+| accumulation | integer, +1 per consecutive week | continuous, geometric toward `q*beta/(1-rho)` |
+| defection | resets to 1 — the entire investment | −20% for one week; the rest survives |
+| saturation | hard cap at 3 | smooth `tanh` knee at `L*` |
+| **price paid** | **irrelevant** | **`delta` makes a cheap purchase build more stock** |
+
+The fourth row is what creates an intertemporal trade-off at all. With
+`delta = 0` a purchase is a purchase, and the only reason to cut price is this
+week's demand — precisely the myopic problem 7b already solves. `delta` is the
+investment channel: it is what a discount *buys* that outlives the week.
+
+**Parameters, and where each came from.** `rho = 0.80` and `beta = 0.25` are
+the values chosen at the design gate. `L_max = 1.5` is not free: it is exactly
+Phase 6's maximum bonus (`0.5 * 3`), so the ceiling on habit is unchanged and
+only the path to it differs. That is deliberate and load-bearing — if 7e's
+learners do better, it cannot be because habit was simply made stronger.
+`delta` and `L*` are what 7e-1 calibrates.
+
+Implied dynamics at `rho = 0.80`, `beta = 0.25`: a stock half-life of
+**3.1 weeks**, and a buyer who buys from the same stall a fraction `q` of
+weeks converges to `L = 1.25q`.
+
+| | `L* = 1.00` | `L* = 1.25` |
+|---|---|---|
+| bonus at `q = 1.0` (every week) | 1.27 | 1.14 |
+| bonus at `q = 0.6` | 0.96 | 0.81 |
+| marginal bonus per unit stock at `q = 0.6` | 0.86 | 1.03 |
+
+The two `L*` points are not a fine grid around a guess; they place the typical
+loyal buyer on opposite sides of the `tanh` knee. At `L* = 1.00` the operating
+point is past the knee, where further investment returns little and the
+mechanism behaves *like* the old cap. At `L* = 1.25` it sits at the knee,
+where marginal investment still pays. If loyalty investment is going to matter
+anywhere in this family, it matters at the second point — and if it does not
+matter even there, that is a much stronger statement than one point failing.
+
+**No new random draws.** The stock update is deterministic given the week's
+purchases. Phases 1–7d stay bit-identical, and the stock model is off by
+default (`loyalty_model = "streak"`), so no existing config changes.
+
+### Three gates, and what each one licenses
+
+Each gate is the *existence condition* for a specific kind of policy. This is
+the structure Phase 7 lacked: 7c and 7d were run against mechanisms that could
+not have rewarded them, and only the results said so.
+
+| Gate | Question | Licenses | Sub-stage |
+|---|---|---|---|
+| 1 | Is there a persistent, dispersed state? | **context** — a contextual policy (7c's revival) | 7e-1 |
+| 2 | Is there an intertemporal trade-off? | **horizon** — a multi-week policy (7d's revival) | 7e-2 |
+| 3 | Does the extra complexity measurably pay? | the answer itself | 7e-3 |
+
+**Gate 1 — a state exists.** Graded on flat pricing, 30 seeds, 66 weeks, so it
+measures the mechanism and not a learner. Two pre-registered checks:
+
+- **Dispersion.** Interquartile range of the loyalty bonus, among buyers who
+  bought from their modal seller in the final week, **≥ 0.20** (13% of
+  `L_max`). Under the counter this is ≈ 0 — loyal buyers sit at the cap, the
+  bonus takes four values, and there is nothing for a contextual policy to
+  condition on. This is the quantity whose absence killed 7c.
+- **Persistence past an interruption.** Using Phase 6's one-week closure
+  probe: mean bonus toward the closed seller among its pre-shock loyal buyers,
+  in the week after reopening, as a fraction of pre-shock. The counter retains
+  **0.33** (streak resets to 1). Threshold: **≥ 0.60**.
+
+**Gate 2 — an intertemporal trade-off exists.** 7d's diagnostic, re-run per
+surviving cell: hand-designed invest-then-harvest schedules against flat
+pricing *at that cell's own oracle optimum*, paired by seed. Passes if the
+best schedule's advantage has a 95% CI excluding zero **and** a point estimate
+**≥ +2%**. In the base environment every schedule lost, the largest by −380.3.
+
+**Gate 3 — complexity is necessary.** Two independent comparisons under the
+standard ±5% relative materiality test, on seeds disjoint from training:
+contextual bandit vs. context-blind bandit (needs gate 1), and the Q-network
+vs. the better bandit (needs gate 2).
+
+### Pre-registered handling of two things that will otherwise be argued after the fact
+
+**Cell selection is deliberate selection on the outcome, and is valid only for
+the claim being made.** 7e-2 runs on every cell that passes gate 1; 7e-3 runs
+on the single cell with the *largest* gate-2 headroom. That is choosing the
+most favorable market in the family. It is the correct design for an
+**existence** claim — if complexity does not pay in the most favorable market
+constructible here, the null is strong — and it is invalid for any statement
+about effect size, which must not be read off 7e-3's chosen cell as though it
+were a typical market.
+
+**Gate 2 failing does skip 7e-3 here, and the reason it did not at 7d is not
+convenience.** At 7d the schedule diagnostic was the only evidence, and it
+tests only the schedules that were thought of, so running the learner added
+information. At 7e the same diagnostic is run across a whole parameter ladder
+including its own control (`delta = 0`); a uniform failure across the ladder
+is a statement about the mechanism family, not about one analyst's
+imagination. If gates 1 and 2 both fail across every cell, the finding is that
+this family of loyalty mechanisms does not generate the structure, and no
+learner is trained.
+
+**Stopping rule, binding.** If gate 3 fails on the most favorable cell, record
+the result: *even with persistent, price-sensitive, bounded loyalty, no
+intertemporal trade-off large enough to reward a multi-week policy formed.*
+Do not tune `rho`, `beta`, `delta`, `L*`, or `L_max` further, and do not widen
+the arms, until a learner wins. A stopping rule that only binds when it is
+convenient is not one.
+
+### Phase 7e-1 — Mechanism calibration (no learner is trained)
+
+A 4 × 2 grid at flat prices, plus the counter as a reference cell:
+`delta` ∈ {0, 0.25, 0.5, 1.0} × `L*` ∈ {1.00, 1.25}, with `rho = 0.80`,
+`beta = 0.25`, `L_max = 1.5` held fixed. `delta = 0` is the control that
+separates the effect of the stock *form* from the effect of price-sensitive
+accrual.
+
+Outputs, per cell:
+1. The two gate-1 statistics against their thresholds.
+2. Stock trajectory: mean and IQR of the bonus by week, against the counter's.
+3. **An oracle flat-price sweep**, which both supplies gate 2's baseline and
+   answers on its own whether the mechanism moved the static optimum away from
+   the base environment's 2.65.
+4. Pair stability and switching rate, comparable to Phase 6's, so the
+   mechanism can be read against a number that already exists.
+
+**Acceptance criterion for 7e-1:** that gate 1 returns a decisive verdict for
+every cell — that the mechanism's presence or absence is established, not that
+any particular cell passes. As at Phase 5, what is graded is that a verdict is
+reached.
+
+**Exit condition:** `git tag phase7e1-calibrated`, and gate 1's verdict
+recorded per cell.
 
 ---
 
