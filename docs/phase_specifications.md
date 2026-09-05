@@ -548,7 +548,33 @@ This is the first phase where "week" is a real mechanism, so it is the natural p
 
 ## Phase 7 — Seller Learning
 
-**Research question:** Does adaptive pricing change profit, participation, and class-segregation patterns relative to the fixed-price baseline (Phase 6), and how much additional learning sophistication (bandit → contextual bandit with a learned representation → reinforcement learning) is actually justified by the results?
+**Research question (replaced at the Phase 7 design review gate):** **Does stateful policy learning produce market structures that cannot emerge from myopic bandit optimization?**
+
+The original question — "does adaptive pricing change profit, participation and class-segregation relative to fixed pricing" — is answerable but weak: it compares performance, and the answer was never in doubt. The replacement asks about *structure*, which is what this project's Phase 8 is about anyway, and it is decidable in either direction.
+
+**This market already contains a concrete instance of that question.** Sweeping one Slow seller's price with the others held fixed gives:
+
+| price | 1.20 | 2.00 (configured) | **3.00** | 4.00 |
+|---|---|---|---|---|
+| profit/week | 6.4 | 29.6 | **52.0** | 28.4 |
+
+The profit-maximizing price is **3.00, exactly Poor's `budget_per_visit`**. One cent above it, all 70 Poor buyers become unable to transact and weekly sales fall from 26 to 9.5. That cliff is created by buyer heterogeneity, not by the price function:
+
+- a myopic bandit sampling near the configured price never sees the cliff and climbs a local slope;
+- one that samples as far as 4.00 falls off it, learns to avoid that region, and may abandon the optimum with it;
+- only a learner that represents *which classes are present and where their budgets sit* can park a price on the edge deliberately.
+
+So the market has structure that is exploitable only by modelling the population, which is precisely the stateful-versus-myopic dividing line.
+
+### Profit, defined (needed here and by Phase 8's exit rule)
+
+```
+profit = revenue - unit_cost * units_sold - fixed_weekly_cost
+unit_cost        = 0.5 * the seller's initial posted price   (Slow 1.0, Shigh 3.0)
+fixed_weekly_cost = 10.0 for every seller
+```
+
+Phases 1–6 have no cost model at all, so "profit" in the original text was undefined and Phase 8's "exit if profit < a fixed cost threshold" was unimplementable. One margin parameter is used rather than two independent costs so the cost is derived from the price rather than picked separately, and the unit cost gives price-cutting a real floor: below cost a further cut is irrational, which no purely demand-driven rule provides. These figures are set here and **must be revisited at Phase 8's gate**, which is where they actually bite.
 
 This phase is split into four sub-stages, run in order. **Each sub-stage requires a graduation gate before moving to the next** — added complexity must materially change the outcome metrics (profit, participation, class shares) by more than a pre-agreed threshold (e.g., >5 percentage points), or the project stops at the simpler sub-stage and documents that finding. This directly applies the project's own "does complexity earn its place" principle to the learning-sophistication dimension, not just the behavioral-modeling dimension.
 
@@ -558,13 +584,31 @@ This phase is split into four sub-stages, run in order. **Each sub-stage require
 
 **Single changed dimension:** sellers adjust price weekly based on a moving-average heuristic; buyer-side mechanics unchanged from Phase 6.
 
-**Mechanism:**
+**Mechanism — profit hill-climbing (replaced at the gate; the original rule is recorded below because its failure is instructive):**
 ```
-if inventory_remaining == 0 at end of week:
-    price *= 1.05
-elif inventory_remaining > 0.5 * starting_inventory:
-    price *= 0.95
+each week: price *= (1 + direction * 0.05)
+           if profit(this week) < profit(last week): direction = -direction
+           price is floored at unit_cost (below cost a further cut is irrational)
 ```
+The seller keeps moving its price the way it moved last week for as long as that keeps helping, and reverses when it stops. It needs **no hand-picked thresholds at all** — it reads only the profit defined above — and it has a natural equilibrium, oscillating around a local optimum instead of running away.
+
+**Why the originally specified rule was rejected.** It read "raise 5% if inventory ran out, cut 5% if more than half the stock is left". Measured over 66 weeks:
+
+| branch | condition | fired |
+|---|---|---|
+| raise ×1.05 | inventory == 0 | **0 of 330 seller-weeks** |
+| cut ×0.95 | inventory > 50% of start | **309 of 330** |
+
+Stock never runs out — a Slow stall sells about 30 of 130 — so the raise branch is dead code and the cut branch fires almost every week. The rule is a one-way ratchet with no restoring force, and prices collapse geometrically: 0.95⁶⁶ = 0.034, taking Slow from 2.00 to **0.071** and Shigh to 0.60.
+
+Two consequences made this unusable rather than merely uninteresting:
+
+1. **It fabricates a finding.** At week 14 the collapsing Shigh price falls below Poor's budget of 3, and Poor makes **1,987 purchases at the premium tier** over the run. The affordability wall documented from Phase 2 through Phase 4 appears to break, and this phase's own criterion asks precisely whether adaptive pricing moves `Poor_to_Shigh_share`. It would have reported a large increase caused entirely by runaway deflation.
+2. **7a is the baseline all three later sub-stages are graded against**, so a degenerate 7a poisons the 7b, 7c and 7d graduation gates simultaneously, and every one of them would inherit the fabricated premium-tier access as "baseline behaviour".
+
+A sell-through dead band was tried first and rejected too: centred on the observed baseline sell-through it is a no-op, moving prices by under 1% across 66 weeks, and its thresholds could only be set by eye after seeing the data.
+
+**Measured behaviour of the replacement**, 30 seeds, 66 weeks, against the Phase 6 fixed-price baseline: mean weekly profit 49.8 → **74.1** (final season 80.5), Slow prices climbing 2.00 → 2.61 toward the 3.00 optimum without reaching it, and Poor purchases at Shigh totalling 10 across all seeds — no fabricated wall-break. That the heuristic stops short of the optimum is deliberate headroom: it leaves something for 7b–7d to win.
 
 **Acceptance criteria:**
 - Compare profit, participation rate, and class shares over 3 seasons (66 weeks) against the Phase 6 fixed-price baseline, same seeds
@@ -675,14 +719,47 @@ The hand-written rule continues to see only `preference` — its proxy for value
 
 **A consequence worth stating: this makes the hand-written rule falsifiable.** With a surplus measure defined, "how much surplus does the hand-written rule leave on the table relative to a policy that optimizes it?" becomes an answerable question, and its answer is a result in its own right — the first time in this project that the rule-based model can be scored against anything other than itself.
 
-### Two arms, and only one of them is a baseline
+### Architecture: a loop, not a pipeline
+
+A generative agent is not a single learning algorithm, and writing this phase as
+"representation learning → policy learning → LLM" would misdescribe what
+Phases 9a and 9b together build. The structure is a closed loop:
+
+```
+behavioural trajectories (Phases 1-8 runs; real human data from Phase 10)
+  -> representation learning        z_t = f(x, h_t)      latent buyer state
+  -> policy / behaviour model       pi(a_t | z_t, e_t)   state -> action
+  -> generative model               concrete decisions   (Phase 9b only)
+  -> environment + memory update    h_{t+1}
+  -> back to the top
+```
+
+Phase 9a builds the first two stages and the memory update; Phase 9b replaces
+the policy stage with an LLM and closes the loop with generated behaviour.
+
+**The latent state is learned, not hand-specified.** `x` is the buyer's stable
+attributes and `h_t` its interaction history — and `h_t` already exists: Phase 6
+gives every buyer a `last_seller_purchased` and a `loyalty_streak`, and the
+transaction log carries the rest. Nothing new has to be invented to have a
+history to compress; what is new is that `z_t` is *learned from trajectories*
+rather than being the four hand-set coefficients Phases 1-8 used.
+
+This matters for the same reason the reward could not be utility: a policy
+conditioned on hand-designed features is still carrying the hand-written model's
+assumptions about what matters. Whether a learned `z_t` beats hand-designed
+features is an open question here exactly as it is for sellers at Phase 7c, and
+it is tested the same way rather than assumed.
+
+### Three arms, and only one of them is a baseline
 
 - **`phase9a_clone` — behavior cloning of the Phase 8 rule.** A pipeline self-check, *not* a baseline. Behavior cloning succeeds exactly when it reproduces what it imitated, so the expected and desired outcome is **equivalent** under the Phase 5 materiality test. That result validates that the network and training pipeline can represent this decision task; it does not produce a stronger comparison group, because a neural copy of an unfitted model is still that unfitted model. Reported under that label so it cannot be mistaken for one.
-- **`phase9a_policy` — a policy trained to maximize realized surplus.** This is the load-bearing arm and the control group Phase 9b is graded against.
+- **`phase9a_policy_handfeat` — a surplus-maximizing policy on hand-designed features.** Class parameters, budget remaining, price, loyalty streak: the quantities the Phase 1-8 rule already used, given to a network that optimizes rather than imitates.
+- **`phase9a_policy_learned` — the same policy on a learned `z_t`.** The load-bearing arm and the control group Phase 9b is graded against, *if* it beats the hand-designed variant; if it does not, the hand-designed one takes that role and the finding is recorded, as at Phase 7c.
 
 **Acceptance criteria:**
 - `phase9a_clone` returns **equivalent** against the Phase 8 rule on the tracked class shares, under the Phase 5 materiality test — the pipeline reproduces known behaviour
-- `phase9a_policy` achieves higher mean realized surplus per buyer than the Phase 8 rule, paired by seed, with its 95% CI excluding zero
+- Both policy arms achieve higher mean realized surplus per buyer than the Phase 8 rule, paired by seed, with 95% CIs excluding zero
+- **Learned vs hand-designed representation is reported as a three-way comparison** (rule / hand-designed features / learned `z_t`) and is not assumed to favour the learned one — the same discipline Phase 7c applies to sellers
 - Report the surplus gap as a percentage of the rule's own surplus — the "how far from optimal was the hand-written rule" number
 
 **Technical note.** PyTorch becomes a real dependency here rather than an aspirational one, and is also what Phases 7c and 7d need. **PettingZoo is deliberately not adopted.** Multi-agent in the agent-based-modelling sense is not multi-agent in the multi-agent-RL sense: PettingZoo exists for several *learning* agents interacting simultaneously, and no phase in this roadmap has buyers and sellers learning at the same time — Phase 7 trains sellers only, Phase 9a trains buyers only. Adopting it would be ceremony. Mesa, SimPy and NetworkX are left unspecified on purpose; at a few hundred agents, plain Python and NumPy are sufficient, and pinning a framework in the spec would constrain implementation for no measured benefit.
