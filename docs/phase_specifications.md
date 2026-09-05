@@ -1232,6 +1232,39 @@ the **context** arm, so the contextual bandit runs either way, and a failure
 here means the multi-week comparison is not run rather than that the phase
 ends. Recorded now so the branch is not chosen after the number is known.
 
+**Result: gate 2 passes, marginally, and the control is what makes it
+readable.** Selected on the discovery block, tested on seeds 0–29: *invest 16
+weeks at 0.90× the standing price, then return to it* earns **44.32 per week
+against flat pricing's 43.18, +2.6% with a 95% CI of [+2.0%, +3.2%]**.
+
+The `delta` ladder run on that identical price path is the causal argument, and
+it is monotone:
+
+| `delta` | 0 (control) | 0.25 (registered) | 0.5 | 1.0 |
+|---|---|---|---|---|
+| gain over flat, discovery block | **−1.24%** | +0.09% | +1.25% | **+3.05%** |
+
+With the investment channel switched off, the same schedule **loses money**. The
+gain is the loyalty stock, not the shape of the price path — which is the
+comparison 7d could not make, because in the base environment there was no
+channel to switch off.
+
+**What actually pays is acquisition, and not extraction.** Every schedule that
+ever charges *above* the standing price loses, the best of them by 5.5% and the
+worst by 56%. So does every cycle. The winner discounts and then stops
+discounting; it never harvests. This sharpens 7d's null rather than reversing
+it: the sacrifice-then-recover signature is absent here too, and now the reason
+is visible — a genuine intertemporal trade-off exists, and its profitable half
+is the sacrifice.
+
+**Two boundary conditions, recorded because they limit the claim.** The
+headroom appears only at `delta` = 1, the strongest investment channel on the
+ladder, so the true optimum may lie outside the range tested; per the phase's
+stopping rule the ladder is **not** extended to find it. And the registered
+`delta` = 0.25 yields +0.09% — it would have failed this gate. Carrying the
+best cell into 7e-3 is the pre-registered selection-on-outcome rule, valid for
+an existence claim and not for effect size.
+
 **Exit condition:** `git tag phase7e2-headroom`, with the verdict and the
 selected schedule recorded.
 
