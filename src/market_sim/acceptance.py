@@ -568,3 +568,82 @@ def plateau_week(seasons: list) -> int | None:
     weekly = np.array([s.pair_stability() for s in seasons])[:, 1:]
     traj = np.nanmean(weekly, axis=0)
     return convergence_seed(traj, convergence_band(traj))
+
+
+def evaluate_phase7a(
+    cfg: MarketConfig, hill: list, fixed: list
+) -> list[CriterionResult]:
+    """Phase 7a acceptance criteria.
+
+    7a does not have to *win* - it is the baseline the three later sub-stages
+    are graded against. What it has to be is non-degenerate, and the criteria
+    are written around the specific way the originally specified rule was not:
+    it was a one-way ratchet that collapsed prices by 97% and, in doing so,
+    fabricated premium-tier access for the Poor class. See
+    docs/phase_specifications.md, Phase 7a.
+    """
+    purchase = np.array([s.purchase_rate().mean() for s in hill])
+    mean_purchase = float(purchase.mean())
+    criteria = [
+        CriterionResult(
+            name="purchase_rate in [0.6, 1.0]",
+            passed=0.6 <= mean_purchase <= 1.0,
+            measured=f"mean {mean_purchase:.3f}",
+            threshold="0.6 - 1.0",
+        )
+    ]
+
+    # Prices bounded. The floor is what the old rule blew through; the ceiling
+    # catches the mirror failure of a runaway climb.
+    initial = np.array(
+        [c.price for c in cfg.seller_classes for _ in range(c.count)], dtype=float
+    )
+    finals = np.array([s.posted_prices[-1] for s in hill])
+    ratio = finals / initial
+    criteria.append(
+        CriterionResult(
+            name="posted prices stay bounded (0.5x - 3x their initial value)",
+            passed=bool(ratio.min() >= 0.5 and ratio.max() <= 3.0),
+            measured=f"final price ratio {ratio.min():.2f}x - {ratio.max():.2f}x initial",
+            threshold="0.5x - 3.0x",
+            note="The rejected rule reached 0.036x here, which is what made it "
+            "unusable as a baseline rather than merely uninteresting.",
+        )
+    )
+
+    # The affordability wall must not be breached by deflation. Stated as the
+    # exact condition under which it breaks, so it is derived rather than a
+    # threshold picked by eye.
+    poor_budget = min(c.budget_per_visit for c in cfg.buyer_classes)
+    shigh_ids = [i for i, n in enumerate(cfg.seller_class_of()) if n == "Shigh"]
+    lowest_shigh = min(
+        float(np.min(s.posted_prices[:, shigh_ids])) for s in hill
+    )
+    criteria.append(
+        CriterionResult(
+            name="premium-tier price never falls within the lowest budget",
+            passed=lowest_shigh > poor_budget,
+            measured=f"lowest Shigh posted price {lowest_shigh:.3f} "
+            f"vs Poor's budget {poor_budget:g}",
+            threshold=f"> {poor_budget:g}",
+            note="The rejected rule crossed this at week 14 and produced 1,987 "
+            "Poor purchases at the premium tier - an artefact of runaway "
+            "deflation that would have read as a finding about adaptive pricing.",
+        )
+    )
+
+    # A heuristic that never moves is as useless a baseline as one that
+    # explodes: the dead-band variant moved prices under 1% in 66 weeks.
+    hill_profit = np.array([s.profits.sum(axis=1).mean() for s in hill])
+    fixed_profit = np.array([s.profits.sum(axis=1).mean() for s in fixed])
+    gain, glo, ghi = mean_difference_ci(hill_profit, fixed_profit)
+    criteria.append(
+        CriterionResult(
+            name="adaptive pricing raises profit over the fixed-price baseline",
+            passed=bool(gain > 0 and glo > 0),
+            measured=f"{fixed_profit.mean():.1f} -> {hill_profit.mean():.1f} per week, "
+            f"{gain:+.1f}, 95% CI [{glo:+.1f}, {ghi:+.1f}]",
+            threshold="mean > 0 and CI lower bound > 0",
+        )
+    )
+    return criteria

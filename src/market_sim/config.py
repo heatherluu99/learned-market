@@ -83,6 +83,25 @@ class MarketConfig:
     preference_coef: float = 1.5
     sigmoid_offset: float = 2.0
 
+    #: Phase 7 onward: seller cost model. Phases 1-6 have none, which is why
+    #: "profit" was undefined before now and Phase 8's exit rule was
+    #: unimplementable. One margin parameter rather than two independent costs,
+    #: so unit cost is derived from the price it is charged against.
+    unit_cost_fraction: float | None = None
+    fixed_weekly_cost: float = 0.0
+    #: Phase 7a: weekly price adaptation. None leaves prices fixed, which is
+    #: every phase through 6. "hill_climb" keeps moving the price the way it
+    #: moved last week while profit improves and reverses when it does not -
+    #: no thresholds, and a natural equilibrium. See
+    #: docs/phase_specifications.md, Phase 7a.
+    price_rule: str | None = None
+    price_step: float = 0.05
+    #: Weeks of profit history used to judge whether a change is signal. A
+    #: seller whose profit moved by less than its own recent noise has learned
+    #: nothing and holds its price. Without this the rule random-walks wherever
+    #: volume is thin - see docs/phase_specifications.md, Phase 7a.
+    price_signal_window: int = 8
+
     #: Phase 6 onward: weeks in one season. None means a single static
     #: session, which is what Phases 1-5 are.
     weeks: int | None = None
@@ -174,6 +193,24 @@ class MarketConfig:
     @property
     def has_environment(self) -> bool:
         return any(c.position_score is not None for c in self.seller_classes)
+
+    @property
+    def has_costs(self) -> bool:
+        return self.unit_cost_fraction is not None
+
+    def unit_cost_of(self) -> list[float]:
+        """Per-seller unit cost. Zero when no cost model is configured."""
+        if self.unit_cost_fraction is None:
+            return [0.0] * self.n_sellers
+        return [
+            c.price * self.unit_cost_fraction
+            for c in self.seller_classes
+            for _ in range(c.count)
+        ]
+
+    @property
+    def has_adaptive_pricing(self) -> bool:
+        return self.price_rule is not None
 
     @property
     def has_weeks(self) -> bool:
@@ -480,3 +517,40 @@ PHASE6_MAIN = _phase6("phase6_main", loyalty=0.5)
 #: the raw pair-stability level is seller popularity and fixed preference
 #: rather than memory - see docs/phase_specifications.md, Phase 6.
 PHASE6_NO_LOYALTY = _phase6("phase6_no_loyalty", loyalty=0.0)
+
+
+# --------------------------------------------------------------------------
+# Phase 7a — Heuristic Seller Pricing
+# --------------------------------------------------------------------------
+
+#: Three seasons, because a single one is not enough for a hill climber to
+#: settle. Buyer-side mechanics are Phase 6's, unchanged.
+PHASE7_WEEKS = 66
+
+
+def _phase7(name: str, rule: str | None) -> MarketConfig:
+    return MarketConfig(
+        name=name,
+        phase=7,
+        buyer_classes=PHASE6_MAIN.buyer_classes,
+        seller_classes=PHASE6_MAIN.seller_classes,
+        seeds=PHASE6_MAIN.seeds,
+        weeks=PHASE7_WEEKS,
+        loyalty_bonus_per_streak=PHASE6_MAIN.loyalty_bonus_per_streak,
+        loyalty_streak_cap=PHASE6_MAIN.loyalty_streak_cap,
+        promotion_probability=PHASE6_MAIN.promotion_probability,
+        promotion_discount=PHASE6_MAIN.promotion_discount,
+        unit_cost_fraction=0.5,
+        fixed_weekly_cost=10.0,
+        price_rule=rule,
+    )
+
+
+#: Baseline arm: Phase 6's market run to 66 weeks with prices held fixed. The
+#: cost model is active here too, so both arms are scored on the same profit.
+PHASE7A_FIXED = _phase7("phase7a_fixed", rule=None)
+
+#: Profit hill-climbing. Reads only profit, needs no hand-picked thresholds,
+#: and stops short of the 3.00 optimum on purpose - that headroom is what
+#: 7b-7d have to win. See docs/phase_specifications.md, Phase 7a.
+PHASE7A_HILL = _phase7("phase7a_hill", rule="hill_climb")

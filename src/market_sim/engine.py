@@ -75,6 +75,9 @@ class RunResult:
     promoted_seller: int | None = None
     #: Posted price actually charged per seller this run, after any discount.
     effective_prices: np.ndarray | None = None
+    #: Phase 7 onward: revenue - unit_cost*sold - fixed_weekly_cost, per seller.
+    #: None before a cost model exists, which is every phase through 6.
+    seller_profit: np.ndarray | None = None
 
     def n_sold_by(self, buyer_class: str, seller_id: int) -> int:
         """Units this class bought from one specific seller."""
@@ -351,6 +354,11 @@ class SeasonResult:
     attended: np.ndarray
     #: (week, buyer) consecutive weeks the chosen seller has been the choice.
     streaks: np.ndarray
+    #: (week, seller) the price posted before that week's promotion, if any.
+    #: Constant across weeks unless the phase has adaptive pricing.
+    posted_prices: np.ndarray | None = None
+    #: (week, seller) profit. None before a cost model exists.
+    profits: np.ndarray | None = None
 
     @property
     def n_weeks(self) -> int:
@@ -446,10 +454,18 @@ def run_season(cfg: MarketConfig, seed: int) -> SeasonResult:
     attendance_prob = np.array(cfg.attendance_prob_of(), dtype=float)
     price_reference = cfg.price_reference
 
+    unit_cost = np.array(cfg.unit_cost_of(), dtype=float)
     last_seller = np.full(n_buyers, -1, dtype=int)
     streak = np.zeros(n_buyers, dtype=int)
+    # Phase 7: the posted price persists across weeks - that persistence is
+    # what makes pricing adaptive. Budget and inventory still reset weekly.
+    posted_price = price0.copy()
+    climb_direction = np.ones(n_sellers, dtype=float)
+    previous_profit: np.ndarray | None = None
+    profit_window: list[np.ndarray] = []
     weeks: list[RunResult] = []
     chosen_hist, attended_hist, streak_hist = [], [], []
+    price_hist, profit_hist = [], []
 
     for _week in range(cfg.weeks):
         attends = rng.random(n_buyers) < attendance_prob
@@ -459,7 +475,7 @@ def run_season(cfg: MarketConfig, seed: int) -> SeasonResult:
         promotion_roll = rng.random()
         promotion_pick = int(rng.integers(0, n_sellers))
 
-        price = price0.copy()
+        price = posted_price.copy()
         if cfg.forced_promotion_seller is not None:
             promoted: int | None = cfg.forced_promotion_seller
         elif promotion_roll < cfg.promotion_probability:
@@ -578,9 +594,51 @@ def run_season(cfg: MarketConfig, seed: int) -> SeasonResult:
                 effective_prices=price.copy(),
             )
         )
+        profit = seller_revenue - unit_cost * seller_n_sold - cfg.fixed_weekly_cost
+        weeks[-1].seller_profit = profit.copy()
+
         chosen_hist.append(chosen)
         attended_hist.append(attends.copy())
         streak_hist.append(streak.copy())
+        price_hist.append(posted_price.copy())
+        profit_hist.append(profit.copy())
+
+        if cfg.price_rule == "hill_climb":
+            # Keep moving the way we moved last week while profit improves;
+            # reverse when it stops. No thresholds, and the floor at unit cost
+            # is the one thing a purely demand-driven rule cannot supply -
+            # below cost a further cut is irrational rather than merely bad.
+            #
+            # A seller only acts on a profit change bigger than its own recent
+            # noise. Volume differs by an order of magnitude across stalls - the
+            # busiest sells 27 units a week, the quietest 3 - and on the quiet
+            # ones a single week's profit says nothing: its standard deviation
+            # is several times its mean. Without this gate the rule random-walks
+            # there and drifts a price to 3.5x its start on noise alone, which
+            # reads as discovery and is not.
+            profit_window.append(profit)
+            if len(profit_window) > cfg.price_signal_window:
+                profit_window.pop(0)
+            if previous_profit is not None:
+                change = profit - previous_profit
+                noise = (
+                    np.std(np.array(profit_window), axis=0, ddof=1)
+                    if len(profit_window) > 1
+                    else np.zeros(n_sellers)
+                )
+                informative = np.abs(change) > noise
+                climb_direction = np.where(
+                    informative & (change < 0), -climb_direction, climb_direction
+                )
+                step = np.where(informative, cfg.price_step, 0.0)
+            else:
+                step = np.full(n_sellers, cfg.price_step)
+            previous_profit = profit
+            posted_price = np.maximum(
+                posted_price * (1.0 + climb_direction * step), unit_cost * 1.01
+            )
+        elif cfg.price_rule is not None:
+            raise ValueError(f"unknown price_rule {cfg.price_rule!r}")
 
     return SeasonResult(
         config_name=cfg.name,
@@ -589,6 +647,8 @@ def run_season(cfg: MarketConfig, seed: int) -> SeasonResult:
         chosen_seller=np.array(chosen_hist),
         attended=np.array(attended_hist),
         streaks=np.array(streak_hist),
+        posted_prices=np.array(price_hist),
+        profits=np.array(profit_hist) if cfg.has_costs else None,
     )
 
 
