@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Millbrook Market — Phase 6: Repeated Interaction</title>
+<style>
+  :root{
+    --bg:#ffffff; --panel:#f6f7f9; --panel-2:#fafafb; --border:#e3e5ea;
+    --text:#1a1d24; --text-2:#5b616e; --text-3:#8b909c;
+    /* Three buyer colours, one per class. None of them reuses a stall tier
+       colour: the two class systems must stay visually unambiguous. */
+    --buyer-poor:#3E6FA8; --buyer-middle:#B8722E; --buyer-rich:#C0453C;
+    --stall-low:#1F7A6C; --stall-high:#7A3B69;
+    --callout-bg:#EEF0FA; --callout-border:#C9CDEF; --callout-text:#3B3F8C;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    --mono:"SF Mono",SFMono-Regular,Consolas,"Liberation Mono",Menlo,monospace;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0; background:var(--bg); color:var(--text); font-family:var(--sans); font-size:14px;}
+
+  header{padding:20px 24px 0;}
+  header h1{font-size:26px; font-weight:700; margin:0; letter-spacing:-0.01em;}
+  header .sub{font-size:14.5px; color:var(--text-2); margin:6px 0 10px; max-width:720px;}
+  header .top-row{display:flex; align-items:flex-start; justify-content:space-between; gap:16px; flex-wrap:wrap;}
+  .badges{display:flex; gap:8px; flex-wrap:wrap;}
+  .badge{font-family:var(--mono); font-size:12px; color:var(--text-2); background:var(--panel); border:1px solid var(--border); border-radius:6px; padding:5px 12px; white-space:nowrap;}
+
+  .readouts{display:flex; gap:10px; flex-wrap:wrap; padding:0 24px 14px;}
+  .readout{background:var(--panel); border:1px solid var(--border); border-radius:8px; padding:8px 14px; min-width:132px;}
+  .readout .k{font-size:10.5px; font-weight:700; letter-spacing:0.03em; color:var(--text-3); text-transform:uppercase;}
+  .readout .v{font-family:var(--mono); font-size:19px; font-weight:600; margin-top:2px;}
+
+  .wrap{padding:0 24px 40px;}
+  .sim-grid{display:grid; grid-template-columns:1.9fr 1fr; gap:16px; align-items:start;}
+  @media (max-width:1000px){ .sim-grid{grid-template-columns:1fr;} }
+
+  /* Filters live above the canvas, never overlaid on it: a fixed-width overlay
+     breaks on narrow viewports and collides with the dots underneath. */
+  .filters{display:flex; flex-wrap:wrap; gap:16px; align-items:center; padding:10px 12px; background:var(--panel); border:1px solid var(--border); border-radius:10px; margin-bottom:8px;}
+  .filter-group{display:flex; gap:8px; align-items:center; flex-wrap:wrap;}
+  .filter-group .lbl{font-size:10.5px; font-weight:700; letter-spacing:0.03em; color:var(--text-3); text-transform:uppercase;}
+  .chip{display:inline-flex; align-items:center; gap:5px; font-size:12px; padding:4px 10px; border-radius:14px; border:1px solid var(--border); background:#fff; cursor:pointer; user-select:none;}
+  .chip.off{opacity:0.38;}
+  .chip .dot{width:9px; height:9px; border-radius:50%;}
+  .chip .sq{width:9px; height:9px; border-radius:2px;}
+  .streak-ctl{display:flex; align-items:center; gap:8px; font-size:12px; color:var(--text-2);}
+  .streak-ctl input{width:120px;}
+  .streak-ctl .val{font-family:var(--mono); font-weight:600; color:var(--text); min-width:14px;}
+
+  .legend-strip{display:flex; flex-wrap:wrap; gap:14px; align-items:center; padding:6px 2px 10px; font-size:11.5px; color:var(--text-2);}
+  .legend-dot{display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:4px; vertical-align:-1px;}
+  .legend-sq{display:inline-block; width:9px; height:9px; border-radius:2px; margin-right:4px; vertical-align:-1px;}
+
+  .canvas-wrap{position:relative; background:var(--panel-2); border:1px solid var(--border); border-radius:10px; width:100%; aspect-ratio:1400/760; overflow:hidden;}
+  #market-canvas{width:100%; height:100%; display:block; cursor:pointer;}
+  .canvas-caption{font-size:11.5px; color:var(--text-3); margin:8px 2px 0; line-height:1.5;}
+
+  .timeline-wrap{margin-top:12px;}
+  .timeline-row{display:flex; align-items:center; gap:10px;}
+  .timeline-row button{width:32px; height:32px; border-radius:50%; border:1px solid var(--border); background:#fff; cursor:pointer; font-size:13px;}
+  .timeline-row button:hover{background:var(--panel);}
+  .week-label{font-family:var(--mono); font-size:13px; font-weight:600; white-space:nowrap; min-width:88px;}
+  #week-range{flex:1;}
+  .timeline-ticks{position:relative; height:16px; margin:4px 2px 0; font-size:10px; color:var(--text-3); font-family:var(--mono);}
+  .timeline-ticks span{position:absolute; transform:translateX(-50%);}
+
+  section.card{background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:14px 16px; margin-bottom:14px;}
+  section.card .h{font-size:11.5px; font-weight:700; letter-spacing:0.03em; color:var(--text-2); margin:0 0 8px; text-transform:uppercase;}
+  .callout{background:var(--callout-bg); border:1px solid var(--callout-border); border-radius:10px; padding:14px 16px; margin-bottom:14px;}
+  .callout .h{font-size:10.5px; font-weight:700; letter-spacing:0.03em; color:var(--callout-text); margin:0 0 6px; text-transform:uppercase;}
+  .callout p{margin:0 0 8px; color:var(--callout-text); font-size:13.5px; line-height:1.55;}
+  .callout p:last-child{margin-bottom:0;}
+  .callout .finding{font-family:var(--mono); font-size:11.5px; opacity:0.9;}
+
+  #metrics-chart{width:100%; height:190px; display:block;}
+  .chart-legend{display:flex; gap:12px; flex-wrap:wrap; font-size:11.5px; margin-top:6px;}
+  .chart-legend .item{cursor:pointer; user-select:none; display:inline-flex; align-items:center; gap:5px; color:var(--text-2);}
+  .chart-legend .item.off{opacity:0.35;}
+  .chart-legend .swatch{width:14px; height:3px; border-radius:2px;}
+
+  /* Detail follows the pointer instead of living in a side panel: at this dot
+     size the eye is already on the buyer, and moving the reading position to
+     the far side of the page breaks that. Transient and pointer-anchored, so
+     unlike a fixed legend overlay it cannot collide with the dots underneath. */
+  #tip{position:fixed; z-index:20; pointer-events:none; opacity:0; transition:opacity .12s;
+       background:rgba(255,255,255,.97); border:1px solid var(--border); border-radius:8px;
+       padding:9px 11px; box-shadow:0 4px 16px rgba(20,24,34,.13); min-width:186px; max-width:250px;}
+  #tip.on{opacity:1;}
+  #tip.pinned{border-color:var(--text);}
+  #inspector-body{font-size:12.5px; color:var(--text-2); line-height:1.55;}
+  #inspector-body .name{color:var(--text); font-weight:700; font-size:13.5px;}
+  #inspector-body .sub{color:var(--text-3); font-size:11.5px; margin-bottom:8px; display:block;}
+  #inspector-body table{width:100%; border-collapse:collapse; font-size:12px; margin-top:6px;}
+  #inspector-body td{padding:3px 0; color:var(--text-2);}
+  #inspector-body td.v{text-align:right; color:var(--text); font-family:var(--mono); font-weight:600;}
+
+  ol.howto{margin:0; padding-left:20px; font-size:12.5px; color:var(--text-2); line-height:1.6;}
+  ol.howto li{margin-bottom:5px;}
+  ol.howto b{color:var(--text);}
+  .footnote{font-size:11px; color:var(--text-3); line-height:1.5; margin-top:10px;}
+</style>
+</head>
+<body>
+
+<div id="tip"><div id="inspector-body"></div></div>
+
+<header>
+  <div class="top-row">
+    <div>
+      <h1>Millbrook Market</h1>
+      <p class="sub">Phase&nbsp;6 — Repeated Interaction. One 22-week season, replayed from a completed simulation run. Buyers remember where they last shopped; the question is whether that memory produces stable relationships.</p>
+    </div>
+    <div class="badges" id="badges"></div>
+  </div>
+</header>
+
+<div class="readouts" id="readouts"></div>
+
+<div class="wrap">
+<div class="sim-grid">
+
+  <div>
+    <div class="filters">
+      <div class="filter-group">
+        <span class="lbl">Buyers</span>
+        <span class="chip" data-buyer="Poor"><span class="dot" style="background:var(--buyer-poor)"></span>Poor</span>
+        <span class="chip" data-buyer="Middle"><span class="dot" style="background:var(--buyer-middle)"></span>Middle</span>
+        <span class="chip" data-buyer="Rich"><span class="dot" style="background:var(--buyer-rich)"></span>Rich</span>
+      </div>
+      <div class="filter-group">
+        <span class="lbl">Stalls</span>
+        <span class="chip" data-stall="Slow"><span class="sq" style="background:var(--stall-low)"></span>Slow</span>
+        <span class="chip" data-stall="Shigh"><span class="sq" style="background:var(--stall-high)"></span>Shigh</span>
+      </div>
+      <div class="streak-ctl">
+        <span class="lbl">Loyalty streak ≥</span>
+        <input type="range" id="streak-slider" min="1" max="8" value="1">
+        <span class="val" id="streak-val">1</span>
+        <span style="color:var(--text-3)">wk</span>
+      </div>
+    </div>
+
+    <div class="legend-strip">
+      <span><span class="legend-dot" style="background:var(--buyer-poor)"></span>Poor buyer</span>
+      <span><span class="legend-dot" style="background:var(--buyer-middle)"></span>Middle buyer</span>
+      <span><span class="legend-dot" style="background:var(--buyer-rich)"></span>Rich buyer</span>
+      <span><span class="legend-sq" style="background:var(--stall-low)"></span>Slow stall (price 2)</span>
+      <span><span class="legend-sq" style="background:var(--stall-high)"></span>Shigh stall (price 6)</span>
+      <span style="color:var(--text-3)">Faded dot = did not shop this week</span>
+    </div>
+
+    <div class="canvas-wrap"><canvas id="market-canvas"></canvas></div>
+    <p class="canvas-caption">
+      Stall size reflects units sold this week; stall x-position reflects its
+      <b>position_score</b> — stalls near the entrance sit left and are noticed by more
+      buyers. Buyers drift between stalls continuously; that drift is atmosphere only and
+      never feeds any number on this page. Every metric comes from the discrete weekly
+      assignment data. Hover any buyer or stall for its detail; click to pin it.
+    </p>
+
+    <div class="timeline-wrap">
+      <div class="timeline-row">
+        <button id="play-btn" title="Play / pause">▶</button>
+        <span class="week-label" id="week-label">Week 0</span>
+        <input type="range" id="week-range" min="0" max="21" value="0">
+      </div>
+      <div class="timeline-ticks" id="timeline-ticks"></div>
+    </div>
+  </div>
+
+  <div>
+    <div class="callout">
+      <div class="h">Research question</div>
+      <p>Does buyer memory — loyalty to a previously-purchased seller — change future behaviour and produce stable buyer–seller relationships over time?</p>
+      <p class="finding" id="finding"></p>
+    </div>
+
+    <section class="card">
+      <div class="h">Metrics over time</div>
+      <canvas id="metrics-chart"></canvas>
+      <div class="chart-legend" id="chart-legend"></div>
+    </section>
+
+    <section class="card">
+      <div class="h">How the simulation works</div>
+      <ol class="howto">
+        <li><b>Each week</b> a buyer decides whether to shop at all — Poor 0.85, Middle 0.84, Rich 0.82. A buyer who stays home makes no decision, which is not the same as shopping and buying nothing.</li>
+        <li><b>Stalls are noticed probabilistically.</b> A stall's <b>position_score</b> sets the chance a given buyer sees it at all; unnoticed stalls are skipped entirely.</li>
+        <li><b>Purchase is a random-utility draw.</b> Price, remaining budget, and a fixed per-buyer taste feed a logit; a buyer keeps buying until the budget runs out.</li>
+        <li><b>Memory accumulates.</b> Returning to the same stall adds <span id="howto-bonus"></span> per consecutive week, capped so habit can match the strongest taste difference but never override it.</li>
+        <li><b>Budget and stock reset weekly.</b> Memory does not — including across weeks a buyer sits out.</li>
+      </ol>
+      <p class="footnote" id="provenance"></p>
+    </section>
+  </div>
+
+</div>
+</div>
+
+<script>
+const DATA = /*__DATA__*/;
+
+/* ---------------------------------------------------------------- state */
+const BUYER_COLOR = {Poor:"#3E6FA8", Middle:"#B8722E", Rich:"#C0453C"};
+const STALL_COLOR = {Slow:"#1F7A6C", Shigh:"#7A3B69"};
+const nWeeks = DATA.meta.weeks, nBuyers = DATA.meta.n_buyers;
+let week = 0, playing = false, minStreak = 1;
+const showBuyer = {Poor:true, Middle:true, Rich:true};
+const showStall = {Slow:true, Shigh:true};
+let selected = null;      // pinned by click - survives the pointer leaving
+let hovered = null;       // whatever the pointer is currently over
+
+/* ------------------------------------------------------------ header */
+const meta = DATA.meta;
+document.getElementById("badges").innerHTML = [
+  `${nBuyers} buyers · ${meta.n_sellers} stalls`,
+  `${nWeeks}-week season`,
+  `seed ${meta.seed}`,
+  `${meta.git_commit.slice(0,7)}`,
+].map(t => `<span class="badge">${t}</span>`).join("");
+
+document.getElementById("finding").textContent =
+  `Across ${meta.n_seeds} seeds: stability ${meta.season_stability.toFixed(3)} with memory ` +
+  `vs ${meta.control_stability.toFixed(3)} without, a gap of ${meta.stability_gap >= 0 ? "+" : ""}` +
+  `${meta.stability_gap.toFixed(3)} (95% CI ${meta.stability_gap_ci[0].toFixed(3)} to ` +
+  `${meta.stability_gap_ci[1].toFixed(3)}). The control's own level is mostly stall ` +
+  `popularity and fixed taste, not memory.`;
+
+document.getElementById("howto-bonus").textContent =
+  `+${meta.loyalty_bonus} × min(streak, ${meta.loyalty_cap})`;
+document.getElementById("provenance").textContent =
+  `Replay of seed ${meta.seed} from commit ${meta.git_commit.slice(0,7)}. ` +
+  `Headline figures are the ${meta.n_seeds}-seed means reported by the phase, not this single season.`;
+
+/* ------------------------------------------------------- stall layout */
+/* x from position_score: near the entrance (high score) sits left.
+   y separates the two tiers so shape and colour are not the only cues. */
+const stallPos = DATA.stalls.map((s, i) => {
+  const tierRow = s.cls === "Slow" ? 0.30 : 0.72;
+  const sameTier = DATA.stalls.filter(o => o.cls === s.cls);
+  const idxInTier = sameTier.findIndex(o => o.id === s.id);
+  const spread = sameTier.length > 1 ? idxInTier / (sameTier.length - 1) : 0.5;
+  // Stalls can share a position_score - two of the three Slow stalls sit at
+  // 0.9 - so identical positions must be fanned apart or they draw on top of
+  // each other. The fan is cosmetic; x still encodes position_score.
+  const samePos = DATA.stalls.filter(o => o.cls === s.cls && o.position === s.position);
+  const posIdx = samePos.findIndex(o => o.id === s.id);
+  const fan = samePos.length > 1 ? (posIdx / (samePos.length - 1) - 0.5) : 0;
+  return {
+    x: 0.15 + 0.70 * (1 - s.position) + fan * 0.11,   // entrance at the left
+    y: tierRow + (spread - 0.5) * 0.26 + fan * 0.10,
+  };
+});
+
+/* --------------------------------------------------------- buyer dots */
+const rand = (() => { let s = 20260904; return () => (s = (s * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff; })();
+const buyers = Array.from({length: nBuyers}, (_, i) => ({
+  id: i, cls: DATA.buyers[i],
+  x: 0.1 + rand() * 0.8, y: 0.1 + rand() * 0.8,
+  tx: 0.5, ty: 0.5, alpha: 1, nextHop: rand() * 3000,
+}));
+
+/* --------------------------------------------------------- the canvas */
+const cv = document.getElementById("market-canvas"), cx = cv.getContext("2d");
+function sizeCanvas(){
+  const r = cv.getBoundingClientRect(), dpr = window.devicePixelRatio || 1;
+  cv.width = r.width * dpr; cv.height = r.height * dpr;
+  cx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  return r;
+}
+let box = sizeCanvas();
+window.addEventListener("resize", () => { box = sizeCanvas(); });
+
+function visible(b){
+  const wk = DATA.weeks[week];
+  if(!showBuyer[b.cls]) return false;
+  if(wk.streak[b.id] < minStreak) return false;
+  const chosen = wk.chosen[b.id];
+  if(chosen >= 0 && !showStall[DATA.stalls[chosen].cls]) return false;
+  return true;
+}
+
+/* Roaming destination. Mostly the buyer's real assigned stall this week;
+   sometimes a browse to another stall; occasionally open space. Purely
+   visual - it never touches a metric. */
+function pickTarget(b){
+  const wk = DATA.weeks[week], chosen = wk.chosen[b.id];
+  const r = rand();
+  if(chosen >= 0 && r < 0.82){
+    const p = stallPos[chosen];
+    return {x: p.x + (rand() - 0.5) * 0.055, y: p.y + (rand() - 0.5) * 0.075};
+  }
+  if(r < 0.95){
+    // Poor and Rich browse within their own tier; Middle is not tier-bound.
+    let pool = DATA.stalls;
+    if(chosen >= 0 && b.cls !== "Middle"){
+      const tier = DATA.stalls[chosen].cls;
+      pool = DATA.stalls.filter(s => s.cls === tier);
+    }
+    const s = pool[Math.floor(rand() * pool.length)];
+    const p = stallPos[s.id];
+    return {x: p.x + (rand() - 0.5) * 0.08, y: p.y + (rand() - 0.5) * 0.09};
+  }
+  return {x: 0.08 + rand() * 0.84, y: 0.08 + rand() * 0.84};
+}
+
+let last = performance.now();
+function frame(now){
+  const dt = Math.min(now - last, 60); last = now;
+  const W = box.width, H = box.height, wk = DATA.weeks[week];
+
+  cx.clearRect(0, 0, W, H);
+
+  // entrance marker
+  cx.fillStyle = "#e8eaee";
+  cx.fillRect(0, H * 0.30, 5, H * 0.44);
+  cx.save();
+  cx.translate(13, H * 0.52); cx.rotate(-Math.PI / 2);
+  cx.fillStyle = "#a9aeb8"; cx.font = "10px " + getComputedStyle(document.body).fontFamily;
+  cx.textAlign = "center"; cx.fillText("ENTRANCE", 0, 0);
+  cx.restore();
+
+  // stalls
+  DATA.stalls.forEach((s, i) => {
+    if(!showStall[s.cls]) return;
+    const p = stallPos[i], sold = wk.sold[i];
+    const side = 15 + Math.min(sold, 40) * 0.55;
+    const x = p.x * W, y = p.y * H;
+    const isSel = (selected && selected.kind === "stall" && selected.id === i)
+               || (hovered && hovered.kind === "stall" && hovered.id === i);
+    cx.globalAlpha = 1;
+    cx.fillStyle = STALL_COLOR[s.cls];
+    cx.beginPath();
+    cx.roundRect(x - side / 2, y - side / 2, side, side, 3);
+    cx.fill();
+    if(wk.promo === i){
+      cx.strokeStyle = "#B8722E"; cx.lineWidth = 2.5;
+      cx.beginPath(); cx.roundRect(x - side / 2 - 4, y - side / 2 - 4, side + 8, side + 8, 5); cx.stroke();
+    }
+    if(isSel){
+      cx.strokeStyle = "#1a1d24"; cx.lineWidth = 2;
+      cx.beginPath(); cx.roundRect(x - side / 2 - 7, y - side / 2 - 7, side + 14, side + 14, 6); cx.stroke();
+    }
+    cx.fillStyle = "#5b616e"; cx.font = "10px " + getComputedStyle(document.body).fontFamily;
+    cx.textAlign = "center";
+    cx.fillText(`#${i} · ${sold}`, x, y + side / 2 + 13);
+  });
+
+  // buyers
+  buyers.forEach(b => {
+    const shown = visible(b);
+    const attended = wk.attended[b.id] === 1;
+    const want = shown ? (attended ? 1 : 0.16) : 0;
+    b.alpha += (want - b.alpha) * Math.min(dt / 260, 1);
+    if(b.alpha < 0.02) return;
+
+    b.nextHop -= dt;
+    if(b.nextHop <= 0){ const t = pickTarget(b); b.tx = t.x; b.ty = t.y; b.nextHop = 2200 + rand() * 2600; }
+    b.x += (b.tx - b.x) * Math.min(dt / 520, 1);
+    b.y += (b.ty - b.y) * Math.min(dt / 520, 1);
+
+    const isSel = (selected && selected.kind === "buyer" && selected.id === b.id)
+               || (hovered && hovered.kind === "buyer" && hovered.id === b.id);
+    cx.globalAlpha = b.alpha;
+    cx.fillStyle = BUYER_COLOR[b.cls];
+    cx.beginPath(); cx.arc(b.x * W, b.y * H, isSel ? 6 : 3.6, 0, Math.PI * 2); cx.fill();
+    if(isSel){ cx.strokeStyle = "#1a1d24"; cx.lineWidth = 2; cx.stroke(); }
+  });
+  cx.globalAlpha = 1;
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+/* -------------------------------------------------------- interaction */
+function hitTest(clientX, clientY){
+  const r = cv.getBoundingClientRect();
+  const mx = (clientX - r.left) / r.width, my = (clientY - r.top) / r.height;
+  const aspect = r.height / r.width;
+  let best = null, bestD = 1e9;
+  buyers.forEach(b => {
+    if(!visible(b) || b.alpha < 0.2) return;
+    const d = Math.hypot(b.x - mx, (b.y - my) * aspect);
+    if(d < bestD){ bestD = d; best = {kind:"buyer", id:b.id}; }
+  });
+  DATA.stalls.forEach((s, i) => {
+    if(!showStall[s.cls]) return;
+    const p = stallPos[i];
+    const d = Math.hypot(p.x - mx, (p.y - my) * aspect);
+    if(d < bestD && d < 0.05){ bestD = d; best = {kind:"stall", id:i}; }
+  });
+  return bestD < 0.03 ? best : null;
+}
+
+const tip = document.getElementById("tip");
+function placeTip(clientX, clientY){
+  // Flip to the other side of the pointer near an edge so the tip never runs
+  // off-screen, and never sits under the cursor itself.
+  const r = tip.getBoundingClientRect();
+  const x = clientX + 16 + r.width > window.innerWidth ? clientX - r.width - 14 : clientX + 16;
+  const y = clientY + 14 + r.height > window.innerHeight ? clientY - r.height - 12 : clientY + 14;
+  tip.style.left = Math.max(6, x) + "px";
+  tip.style.top = Math.max(6, y) + "px";
+}
+
+cv.addEventListener("mousemove", e => {
+  const hit = hitTest(e.clientX, e.clientY);
+  const changed = JSON.stringify(hit) !== JSON.stringify(hovered);
+  hovered = hit;
+  if(hit || selected){
+    if(changed || !selected) renderInspector();
+    tip.classList.add("on");
+    placeTip(e.clientX, e.clientY);
+  } else {
+    tip.classList.remove("on");
+  }
+});
+cv.addEventListener("mouseleave", () => {
+  hovered = null;
+  if(selected){ renderInspector(); } else { tip.classList.remove("on"); }
+});
+cv.addEventListener("click", e => {
+  const hit = hitTest(e.clientX, e.clientY);
+  // Clicking the pinned target unpins it; clicking empty space clears.
+  selected = (selected && hit && selected.kind === hit.kind && selected.id === hit.id) ? null : hit;
+  hovered = hit;
+  tip.classList.toggle("pinned", !!selected);
+  renderInspector();
+  if(selected || hit){ tip.classList.add("on"); placeTip(e.clientX, e.clientY); }
+  else tip.classList.remove("on");
+});
+
+function renderInspector(){
+  const el = document.getElementById("inspector-body"), wk = DATA.weeks[week];
+  const target = hovered || selected;
+  if(!target){ tip.classList.remove("on"); return; }
+  if(target.kind === "buyer"){
+    const i = target.id, cls = DATA.buyers[i], c = DATA.buyer_classes.find(x => x.name === cls);
+    const chosen = wk.chosen[i], attended = wk.attended[i] === 1;
+    const where = !attended ? "did not shop" : chosen < 0 ? "shopped, bought nothing" : `stall #${chosen} (${DATA.stalls[chosen].cls})`;
+    el.innerHTML =
+      `<div class="name">Buyer #${i}</div><span class="sub">${cls} class</span>
+       <table>
+         <tr><td>This week</td><td class="v">${where}</td></tr>
+         <tr><td>Loyalty streak</td><td class="v">${wk.streak[i]} wk</td></tr>
+         <tr><td>Budget / visit</td><td class="v">${c.budget}</td></tr>
+         <tr><td>Price sensitivity α</td><td class="v">${c.alpha}</td></tr>
+         <tr><td>Attendance prob.</td><td class="v">${c.attendance}</td></tr>
+       </table>${selected && selected.kind === "buyer" && selected.id === i ? '<div style="font-size:10.5px;color:var(--text-3);margin-top:7px">pinned - click again to release</div>' : ''}`;
+  } else {
+    const i = target.id, s = DATA.stalls[i];
+    el.innerHTML =
+      `<div class="name">Stall #${i}</div><span class="sub">${s.cls} tier</span>
+       <table>
+         <tr><td>Price</td><td class="v">${wk.promo === i ? (s.price * 0.7).toFixed(2) + " (promo)" : s.price}</td></tr>
+         <tr><td>Units sold this week</td><td class="v">${wk.sold[i]}</td></tr>
+         <tr><td>Position score</td><td class="v">${s.position}</td></tr>
+         <tr><td>Noticed by</td><td class="v">${(s.visibility * 100).toFixed(0)}%</td></tr>
+       </table>`;
+  }
+}
+
+/* ------------------------------------------------------------- chart */
+const SERIES = [
+  {key:"stability",  label:"Pair stability",  color:"#3E6FA8", on:true},
+  {key:"purchase_rate", label:"Purchase rate", color:"#1F7A6C", on:true},
+  {key:"avg_load",   label:"Avg load / stall", color:"#B8722E", on:true, scale:true},
+];
+document.getElementById("chart-legend").innerHTML = SERIES.map((s, i) =>
+  `<span class="item" data-s="${i}"><span class="swatch" style="background:${s.color}"></span>${s.label}</span>`
+).join("");
+document.getElementById("chart-legend").addEventListener("click", e => {
+  const item = e.target.closest(".item"); if(!item) return;
+  const s = SERIES[+item.dataset.s]; s.on = !s.on; item.classList.toggle("off", !s.on); drawChart();
+});
+
+const ch = document.getElementById("metrics-chart"), chx = ch.getContext("2d");
+function drawChart(){
+  const r = ch.getBoundingClientRect(), dpr = window.devicePixelRatio || 1;
+  ch.width = r.width * dpr; ch.height = r.height * dpr;
+  chx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const W = r.width, H = r.height, pad = {l:32, r:8, t:8, b:18};
+  chx.clearRect(0, 0, W, H);
+
+  const active = SERIES.filter(s => s.on);
+  const vals = active.flatMap(s => DATA.weeks.map(w => s.scale ? w[s.key] / 40 : w[s.key]).filter(v => v != null));
+  const hi = Math.max(0.6, ...vals), lo = 0;
+  const X = w => pad.l + (W - pad.l - pad.r) * (w / (nWeeks - 1));
+  const Y = v => H - pad.b - (H - pad.t - pad.b) * ((v - lo) / (hi - lo));
+
+  chx.strokeStyle = "#e3e5ea"; chx.lineWidth = 1;
+  [0, 0.25, 0.5, 0.75, 1].forEach(f => {
+    const v = lo + (hi - lo) * f;
+    chx.beginPath(); chx.moveTo(pad.l, Y(v)); chx.lineTo(W - pad.r, Y(v)); chx.stroke();
+    chx.fillStyle = "#8b909c"; chx.font = "9px " + getComputedStyle(document.body).fontFamily;
+    chx.textAlign = "right"; chx.fillText(v.toFixed(2), pad.l - 4, Y(v) + 3);
+  });
+
+  active.forEach(s => {
+    chx.strokeStyle = s.color; chx.lineWidth = 1.8; chx.beginPath();
+    let started = false;
+    DATA.weeks.forEach(w => {
+      const raw = s.scale ? w[s.key] / 40 : w[s.key];
+      if(raw == null) return;
+      const px = X(w.w), py = Y(raw);
+      started ? chx.lineTo(px, py) : (chx.moveTo(px, py), started = true);
+    });
+    chx.stroke();
+  });
+
+  chx.strokeStyle = "#1a1d24"; chx.lineWidth = 1;
+  chx.beginPath(); chx.moveTo(X(week), pad.t); chx.lineTo(X(week), H - pad.b); chx.stroke();
+  chx.fillStyle = "#8b909c"; chx.font = "9px " + getComputedStyle(document.body).fontFamily;
+  chx.textAlign = "center";
+  [0, 5, 10, 15, 21].forEach(w => chx.fillText("w" + w, X(w), H - 5));
+}
+window.addEventListener("resize", drawChart);
+
+/* ---------------------------------------------------------- readouts */
+function renderReadouts(){
+  const wk = DATA.weeks[week];
+  const items = [
+    ["Attendance", wk.attendance_rate.toFixed(3)],
+    ["Purchase rate", wk.purchase_rate.toFixed(3)],
+    ["Pair stability", wk.stability == null ? "—" : wk.stability.toFixed(3)],
+    ["Active stalls", wk.active_stalls],
+    ["Avg buyers / stall", wk.avg_load.toFixed(1)],
+    ["Revenue", wk.revenue.toFixed(0)],
+  ];
+  document.getElementById("readouts").innerHTML = items.map(([k, v]) =>
+    `<div class="readout"><div class="k">${k}</div><div class="v">${v}</div></div>`).join("");
+}
+
+/* --------------------------------------------------------- timeline */
+const range = document.getElementById("week-range");
+range.max = nWeeks - 1;
+document.getElementById("timeline-ticks").innerHTML = [0, 5, 10, 15, 21]
+  .map(w => `<span style="left:${(w / (nWeeks - 1)) * 100}%">${w}</span>`).join("");
+
+function setWeek(w){
+  week = Math.max(0, Math.min(nWeeks - 1, w));
+  range.value = week;
+  document.getElementById("week-label").textContent =
+    `Week ${week}` + (week === meta.plateau_week ? " · plateau" : "");
+  renderReadouts(); renderInspector(); drawChart();
+  buyers.forEach(b => { b.nextHop = Math.min(b.nextHop, 300 + rand() * 500); });
+}
+range.addEventListener("input", () => setWeek(+range.value));
+
+const playBtn = document.getElementById("play-btn");
+playBtn.addEventListener("click", () => {
+  playing = !playing;
+  playBtn.textContent = playing ? "❚❚" : "▶";
+});
+setInterval(() => { if(playing) setWeek(week >= nWeeks - 1 ? 0 : week + 1); }, 1600);
+
+/* ----------------------------------------------------------- filters */
+document.querySelectorAll(".chip").forEach(chip => {
+  chip.addEventListener("click", () => {
+    if(chip.dataset.buyer) showBuyer[chip.dataset.buyer] = !showBuyer[chip.dataset.buyer];
+    if(chip.dataset.stall) showStall[chip.dataset.stall] = !showStall[chip.dataset.stall];
+    chip.classList.toggle("off");
+  });
+});
+const slider = document.getElementById("streak-slider");
+slider.addEventListener("input", () => {
+  minStreak = +slider.value;
+  document.getElementById("streak-val").textContent = minStreak;
+});
+
+setWeek(0);
+</script>
+</body>
+</html>
