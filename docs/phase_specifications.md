@@ -812,9 +812,33 @@ The same arm wins under every split, and the curve shifts in level without chang
 
 **Research question:** Does optimizing for cumulative multi-week reward (rather than 7a–7c's single-week-ahead reward) change pricing behavior or outcomes — e.g., does an RL seller learn to sacrifice short-term profit for longer-term buyer loyalty?
 
-**Mechanism:** replace the bandit's single-step reward with a standard RL setup (e.g., simple Q-learning or policy gradient) where the state includes the Phase 7c representation and the reward is accumulated over a multi-week horizon rather than the current week alone.
+**Mechanism:** a Q-network over the same arm set 7b uses, trained on a discounted multi-week return rather than the current week's profit. PyTorch, a small MLP, with training and evaluation seeds disjoint.
 
-**Acceptance criteria:** compare against 7c on the same metrics, plus a new one: does the RL seller exhibit any short-term-profit-sacrificing behavior visible in the weekly trajectory (e.g., temporarily under-pricing to build loyalty before raising prices)? This is the qualitative signature that would justify RL's added complexity over 7c.
+**The comparison is against 7b, not 7c, which is skipped.** The state cannot be "the Phase 7c representation" for the same reason: 7c established there is no external market state worth representing, since the profit-maximizing arm is identical under every observable condition tested. What is left is the seller's *own accumulated position* — how many buyers currently hold a loyalty streak with it, its own last price, and how far into the season it is. If a multi-week horizon is worth anything here, that is where it has to come from.
+
+**Pre-registered expectation: a null, and the reason traces to a Phase 6 decision.** Hand-designed invest-then-harvest schedules measured at the gate against flat pricing at the myopic optimum of 2.60, 30 seeds, 66 weeks:
+
+| plan | total profit | vs flat | loyal buyers @wk8 | @wk20 |
+|---|---|---|---|---|
+| flat at 2.60 | 1998.7 | — | 18.9 | 19.8 |
+| discount 8wk to 2.20, then 2.60 | 1951.7 | **−47.0** | 20.9 | **19.8** |
+| discount 8wk to 2.20, then harvest at 3.00 | 1694.5 | −304.2 | 18.6 | 13.7 |
+| discount 16wk to 2.20, then 2.60 | 1903.7 | −94.9 | 21.7 | 20.0 |
+| discount 8wk to 1.80, then harvest at 3.00 | 1618.4 | −380.3 | 20.0 | 13.8 |
+
+Every investment loses, and the loyalty column shows why: eight weeks of discounting does build a larger loyal base — 20.9 buyers against 18.9 at week 8 — and by week 20 it has decayed to 19.8, exactly the flat-pricing level. The discount is never recovered.
+
+**The cause is `loyalty_streak_cap = 3`.** Loyalty is not a stock that can be accumulated: the bonus tops out after three consecutive weeks and resets to zero on a single switch, so a buyer acquired expensively is worth no more than one acquired at the steady-state price, and a defection wipes the investment. There is nothing to invest *in*.
+
+That is Phase 6's path-dependence null seen from the seller's side, and it makes a cross-phase trade-off explicit: **the cap keeps habit from overriding taste, which is why it was chosen, and it simultaneously removes every mechanism that would make sophisticated seller learning pay** — laterally at 7c and intertemporally here.
+
+**7d is run rather than skipped like 7c.** The diagnostic above tests only the schedules that were thought of, and a search might find one that was not; and unlike 7c, this sub-stage carries Phase 7's own headline question, which would be weaker answered by diagnostic than by measurement.
+
+**Acceptance criteria:**
+- The profit comparison against 7b is **decisive** under the ±5% relative margin, evaluated on **seeds never used for training**. As at Phase 5, what is graded is that a verdict is reached, not which verdict it is.
+- **Qualitative signature, reported not graded:** does the learned policy price below the myopic optimum early and above it later? Operationalized as the correlation between week index and chosen price, and the mean price in the first against the last third of the season. Absence is the expected outcome and is a result; presence *without* a profit gain would be more interesting still.
+
+**Training and evaluation seeds are disjoint.** A policy scored on the seeds it was fitted to measures memorization rather than learning. Seeds 0–29 stay the evaluation set every other phase uses; training draws from a separate block.
 
 **Literature basis:** den Boer & Zwart (2015), "Dynamic Pricing and Learning with Finite Inventories" (*Operations Research*) — directly addresses learning-to-price under a finite-inventory constraint, matching this project's seller setup.
 
