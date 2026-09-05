@@ -956,15 +956,44 @@ not have rewarded them, and only the results said so.
 **Gate 1 — a state exists.** Graded on flat pricing, 30 seeds, 66 weeks, so it
 measures the mechanism and not a learner. Two pre-registered checks:
 
-- **Dispersion.** Interquartile range of the loyalty bonus, among buyers who
-  bought from their modal seller in the final week, **≥ 0.20** (13% of
-  `L_max`). Under the counter this is ≈ 0 — loyal buyers sit at the cap, the
-  bonus takes four values, and there is nothing for a contextual policy to
-  condition on. This is the quantity whose absence killed 7c.
-- **Persistence past an interruption.** Using Phase 6's one-week closure
-  probe: mean bonus toward the closed seller among its pre-shock loyal buyers,
-  in the week after reopening, as a fraction of pre-shock. The counter retains
-  **0.33** (streak resets to 1). Threshold: **≥ 0.60**.
+- **Dispersion — is the state at its ceiling for most of the population?**
+  Share of *attached* buyers (those who bought from their modal seller in the
+  final week) whose loyalty bonus sits within 5% of `L_max`. Threshold:
+  **≤ 0.50**. A state variable that is maxed out for most of the people it
+  describes carries no information, whoever reads it — that is exactly the
+  condition that killed 7c, and under the counter it is the normal state of
+  affairs, since three consecutive weeks reach the cap and nothing above it
+  exists. The interquartile range is reported alongside as a descriptive.
+- **Persistence — what does one interruption actually cost?** Phase 6's
+  one-week closure probe, scored on the metric Phase 6 already publishes:
+  **permanent switching rate** among the cohort attached to the closed seller.
+  Threshold: **at least 5 pp below the counter's**, the project's standard
+  materiality unit.
+
+**Both checks were rewritten before anything was run, and the reasons are
+worth keeping.** The first was an interquartile range against an absolute
+threshold of 0.20. That number had no derivation, and a derivation makes it
+worse rather than better: one arm step is worth 0.024 utility at the mean
+price sensitivity, so a bonus spread of 0.20 is eight arm steps and any
+threshold in "actionable" units would be passed trivially. The bonus scale
+(up to 1.5) simply dwarfs the price term (0.11 across the entire arm range for
+a Poor buyer at a Slow stall) — which is itself worth stating, because it
+means a fully loyal buyer in this market buys almost regardless of price, and
+the seller's arm choice is mostly a decision about everyone else. A share is
+interpretable without that conversion, and saturation is the property actually
+at issue.
+
+The second check asserted that the counter retains 0.33 of the bonus after an
+interruption because the streak resets to 1. **That is wrong.** A cohort buyer
+locked out of their stall for a week buys somewhere else, which moves
+`last_seller` to the other stall and makes the bonus toward the original
+**zero**, not a third; the only ones who retain anything are those who bought
+nothing at all that week. So the counter is more brittle than the spec claimed,
+not less. Measuring the bonus would also have been close to definitional on the
+stock side — with no purchase available, the stock decays by exactly `rho`, so
+retention is 0.80 adjusted by `tanh` curvature and the "gate" would be checking
+arithmetic. Permanent switching is behavioral, is not definitional on either
+side, and is directly comparable to a number Phase 6 has already published.
 
 **Gate 2 — an intertemporal trade-off exists.** 7d's diagnostic, re-run per
 surviving cell: hand-designed invest-then-harvest schedules against flat
