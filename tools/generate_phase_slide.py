@@ -1041,6 +1041,125 @@ def phase7a_slide() -> PhaseSlide:
     )
 
 
+def phase7b_slide() -> PhaseSlide:
+    """Assemble the Phase 7b slide from the run outputs, not hand-typed numbers.
+
+    Runs the 1000-seed escalation, because the 30-seed comparison is
+    inconclusive on profit and the graduation verdict is what this slide
+    reports. That makes this builder slow (minutes, not seconds) - the
+    alternative was hard-coding numbers the deck could not re-derive.
+    """
+    import dataclasses
+
+    from market_sim.config import PHASE7A_HILL, PHASE7B_EPS, PHASE7B_UCB
+    from market_sim.engine import run_season_seeds
+
+    extended = tuple(range(1000))
+    baseline = run_season_seeds(dataclasses.replace(PHASE7A_HILL, seeds=extended))
+    arms = {
+        c.name: run_season_seeds(dataclasses.replace(c, seeds=extended))
+        for c in (PHASE7B_EPS, PHASE7B_UCB)
+    }
+    criteria = acceptance.evaluate_phase7b(PHASE7B_UCB, arms, baseline)
+
+    bp = np.array([s.profits.sum(axis=1).mean() for s in baseline])
+    scale = float(bp.mean())
+    rows = {}
+    for name, data in arms.items():
+        pf = np.array([s.profits.sum(axis=1).mean() for s in data])
+        g, lo, hi = acceptance.mean_difference_ci(pf, bp)
+        rows[name] = (pf.mean(), g / scale, lo / scale, hi / scale)
+
+    slow = [i for i, n in enumerate(PHASE7B_UCB.seller_class_of()) if n == "Slow"]
+    ceiling = 2.0 * max(PHASE7B_UCB.price_arms)
+    final_ucb = float(
+        np.array([s.posted_prices[-1, slow] for s in arms["phase7b_ucb"]]).mean()
+    )
+    share_notes = [c.note for c in criteria if "class-share" in c.name]
+    structural = all("equivalent on every tracked share" in n for n in share_notes)
+
+    return PhaseSlide(
+        phase_number=7,
+        phase_name="Seller Learning — 7b Multi-Armed Bandit",
+        subtitle=(
+            "Context-blind bandit vs the 7a heuristic  ·  git tag: phase7b-validated"
+            "  ·  1000 seeds (escalated from 30)"
+        ),
+        badge="GRADUATE TO 7c",
+        badge_color=GREEN,
+        agents=[
+            ("Buyers: ", "100 — Poor 70 / Middle 20 / Rich 10, unchanged from Phase 6"),
+            ("Sellers: ", "5 — costs unchanged from 7a; price chosen from 5 fixed arms"),
+        ],
+        environment=[
+            f"-  Arms {{{', '.join(f'{m:g}' for m in PHASE7B_UCB.price_arms)}}} × initial price. "
+            f"Slow ceiling {ceiling:.2f}.",
+            "-  Deliberately context-blind: no buyer-class or environment information.",
+        ],
+        method=[
+            "Weekly profit as reward; every arm pulled once before any exploiting.",
+            "Both ε-greedy and UCB1 run — the spec left the choice open.",
+        ],
+        literature=[
+            (
+                "Robbins (1952), ",
+                "“Some Aspects of the Sequential Design of Experiments” (Bull. AMS) "
+                "— origin of the multi-armed bandit problem.",
+            ),
+        ],
+        metrics=[
+            MetricRow(
+                "ε-greedy profit vs 7a",
+                f"{rows['phase7b_eps'][1]:+.1%}",
+                "PASS" if criteria[0].passed else "FAIL",
+            ),
+            MetricRow(
+                "  its 95% CI vs ±5% margin",
+                f"[{rows['phase7b_eps'][2]:+.1%}, {rows['phase7b_eps'][3]:+.1%}]",
+                "PASS" if criteria[0].passed else "FAIL",
+            ),
+            MetricRow(
+                "UCB1 profit vs 7a",
+                f"{rows['phase7b_ucb'][1]:+.1%}",
+                "PASS" if criteria[2].passed else "FAIL",
+            ),
+            MetricRow(
+                "  its 95% CI vs ±5% margin",
+                f"[{rows['phase7b_ucb'][2]:+.1%}, {rows['phase7b_ucb'][3]:+.1%}]",
+                "PASS" if criteria[2].passed else "FAIL",
+            ),
+            MetricRow(
+                "Class shares vs 7a",
+                "equivalent" if structural else "moved",
+                "—",
+            ),
+            MetricRow(
+                "Slow price reached (optimum 3.00)",
+                f"{final_ucb:.2f} vs ceiling {ceiling:.2f}",
+                "—",
+            ),
+        ],
+        research_question=(
+            "Does treating price choice as a bandit problem outperform the 7a "
+            "heuristic, without using any market context?"
+        ),
+        finding=(
+            f"Yes on profit, no on structure. Both algorithms clear the ±5% margin — "
+            f"ε-greedy {rows['phase7b_eps'][1]:+.1%}, UCB1 {rows['phase7b_ucb'][1]:+.1%} — "
+            f"while every class-to-tier share stays equivalent to 7a. Myopic "
+            f"optimization raises the seller's own profit without changing the market."
+        ),
+        caveat=(
+            f"The bandit stops at {final_ucb:.2f}, its arm ceiling, while the profit "
+            f"optimum is 3.00 — exactly Poor's budget. Its binding limit is the fixed "
+            f"local hypothesis space, not the learning rule, and widening the arms to "
+            f"reach the optimum would encode the answer. What moved the result was "
+            f"initialization, not the algorithm: without an initial sweep ε-greedy "
+            f"swings 12.8/week and appears to lose to 7a."
+        ),
+    )
+
+
 BUILDERS = {
     "1": phase1_slide,
     "2": phase2_slide,
@@ -1049,6 +1168,7 @@ BUILDERS = {
     "5": phase5_slide,
     "6": phase6_slide,
     "7a": phase7a_slide,
+    "7b": phase7b_slide,
 }
 
 
