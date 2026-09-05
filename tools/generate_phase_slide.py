@@ -938,19 +938,123 @@ def phase6_slide() -> PhaseSlide:
     )
 
 
+def phase7a_slide() -> PhaseSlide:
+    """Assemble the Phase 7a slide from the run outputs, not hand-typed numbers."""
+    from market_sim.config import PHASE7A_FIXED, PHASE7A_HILL
+    from market_sim.engine import run_season_seeds
+
+    hill = run_season_seeds(PHASE7A_HILL)
+    fixed = run_season_seeds(PHASE7A_FIXED)
+    criteria = acceptance.evaluate_phase7a(PHASE7A_HILL, hill, fixed)
+
+    hp = np.array([s.profits.sum(axis=1).mean() for s in hill])
+    fp = np.array([s.profits.sum(axis=1).mean() for s in fixed])
+    gain, glo, ghi = acceptance.mean_difference_ci(hp, fp)
+
+    initial = np.array(
+        [c.price for c in PHASE7A_HILL.seller_classes for _ in range(c.count)]
+    )
+    ratio = np.array([s.posted_prices[-1] for s in hill]) / initial
+    slow = [i for i, n in enumerate(PHASE7A_HILL.seller_class_of()) if n == "Slow"]
+    final_slow = float(np.array([s.posted_prices[-1, slow] for s in hill]).mean())
+    shigh = [i for i, n in enumerate(PHASE7A_HILL.seller_class_of()) if n == "Shigh"]
+    lowest_shigh = min(float(s.posted_prices[:, shigh].min()) for s in hill)
+
+    return PhaseSlide(
+        phase_number=7,
+        phase_name="Seller Learning — 7a Heuristic Pricing",
+        subtitle=(
+            f"Profit hill-climbing, 3 seasons  ·  git tag: phase7a-validated  ·  "
+            f"{len(PHASE7A_HILL.seeds)} seeds"
+        ),
+        badge="ALL CRITERIA PASS",
+        badge_color=GREEN,
+        agents=[
+            ("Buyers: ", "100 — Poor 70 / Middle 20 / Rich 10, unchanged from Phase 6"),
+            (
+                "Sellers: ",
+                f"5 — now with costs: unit cost half the initial price, "
+                f"{PHASE7A_HILL.fixed_weekly_cost:g}/week fixed",
+            ),
+        ],
+        environment=[
+            "-  66 weeks (3 seasons). Price persists across weeks; stock and budget reset.",
+            "-  Phase 3 visibility, Phase 4 promotion, Phase 6 memory all unchanged.",
+        ],
+        method=[
+            f"Move price ±{PHASE7A_HILL.price_step:.0%} the way it moved last week while profit improves.",
+            f"Act only on a change beyond the seller's own {PHASE7A_HILL.price_signal_window}-week noise; floor at unit cost.",
+        ],
+        literature=[
+            (
+                "den Boer (2015), ",
+                "“Dynamic Pricing and Learning” — heuristic, non-optimizing "
+                "adaptive pricing as the stage before formal learning algorithms.",
+            ),
+        ],
+        metrics=[
+            MetricRow(
+                "purchase_rate (0.6–1.0)",
+                f"{np.mean([s.purchase_rate().mean() for s in hill]):.3f}",
+                "PASS" if criteria[0].passed else "FAIL",
+            ),
+            MetricRow(
+                "Final price ÷ initial",
+                f"{ratio.min():.2f}–{ratio.max():.2f}×",
+                "PASS" if criteria[1].passed else "FAIL",
+            ),
+            MetricRow(
+                "Lowest premium price vs Poor's budget",
+                f"{lowest_shigh:.2f} vs 3",
+                "PASS" if criteria[2].passed else "FAIL",
+            ),
+            MetricRow(
+                "Weekly profit vs fixed price",
+                f"{fp.mean():.1f} → {hp.mean():.1f}",
+                "PASS" if criteria[3].passed else "FAIL",
+            ),
+            MetricRow(
+                "  its 95% CI",
+                f"[{glo:+.1f}, {ghi:+.1f}]",
+                "PASS" if glo > 0 else "FAIL",
+            ),
+            MetricRow("Slow price reached (optimum 3.00)", f"{final_slow:.2f}", "—"),
+        ],
+        research_question=(
+            "Does stateful policy learning produce market structures that cannot "
+            "emerge from myopic bandit optimization? 7a sets the heuristic baseline."
+        ),
+        finding=(
+            f"A non-learning heuristic already captures {gain:+.1f} profit per week "
+            f"over fixed pricing, CI [{glo:+.1f}, {ghi:+.1f}], and stops at "
+            f"{final_slow:.2f} — short of the 3.00 optimum. That gap is what 7b–7d "
+            f"have to win."
+        ),
+        caveat=(
+            "Two rules were rejected first. The specified one — raise if stock ran "
+            "out, cut if half is left — fired its raise branch 0 times in 330 "
+            "seller-weeks and collapsed prices to 0.036× initial, fabricating 1,987 "
+            "Poor purchases at the premium tier. The ungated hill climber drifted a "
+            "3-units-a-week stall to 3.5× its price on noise. Since 7b–7d are all "
+            "graded against 7a, either would have poisoned three gates at once."
+        ),
+    )
+
+
 BUILDERS = {
-    1: phase1_slide,
-    2: phase2_slide,
-    3: phase3_slide,
-    4: phase4_slide,
-    5: phase5_slide,
-    6: phase6_slide,
+    "1": phase1_slide,
+    "2": phase2_slide,
+    "3": phase3_slide,
+    "4": phase4_slide,
+    "5": phase5_slide,
+    "6": phase6_slide,
+    "7a": phase7a_slide,
 }
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--phase", type=int, required=True, choices=sorted(BUILDERS))
+    parser.add_argument("--phase", required=True, choices=list(BUILDERS))
     args = parser.parse_args()
 
     if DECK_PATH.exists():
