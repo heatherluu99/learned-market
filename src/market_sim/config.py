@@ -689,21 +689,41 @@ PHASE7D_TRAIN_SEEDS = tuple(range(1000, 1120))
 # Phase 7e — Mechanism Sufficiency (a separate, mechanism-enabled environment)
 # --------------------------------------------------------------------------
 
-#: Fixed across the whole 7e family. rho and beta were chosen at the design
-#: gate; L_max is pinned at Phase 6's maximum streak bonus (0.5 * 3) so both
-#: mechanisms share a ceiling and a 7e result cannot come from stronger habit.
+#: The registered baseline. rho was chosen at the design gate and the first
+#: calibration run confirmed it - with lock-in strength held equal it gives
+#: the longest realized memory of the four horizons tested.
 PHASE7E_RHO = 0.80
-PHASE7E_BETA = 0.25
-PHASE7E_LMAX = 1.5
 
-#: The calibration grid. delta = 0 is the control - the stock form with no
-#: investment channel, where a purchase is a purchase whatever it cost. The
-#: two saturation points straddle the tanh knee: at 1.00 the typical loyal
-#: buyer is past it and the mechanism behaves like the old cap, at 1.25 they
-#: sit on it and marginal investment still pays. See
-#: docs/phase_specifications.md, Phase 7e-1.
-PHASE7E_DELTAS = (0.0, 0.25, 0.5, 1.0)
-PHASE7E_SATURATIONS = (1.00, 1.25)
+#: Where the population sits on the tanh, as a multiple of L*: u = S/L* with
+#: S = beta/(1 - rho) the steady-state stock of an every-week buyer. Fixed at
+#: the empirical contrast maximum, so beta follows from rho rather than being
+#: free. See docs/phase_specifications.md, Phase 7e-1.
+PHASE7E_CURVATURE = 2.0
+PHASE7E_SATURATION = 1.00
+
+#: Starting point for the L_max calibration, not a fixed value: L_max is
+#: solved per cell so the mechanism's incumbency advantage matches the
+#: counter's. Pinning it at Phase 6's ceiling of 1.5 made the stock bind about
+#: a third as hard as the counter, which is what the first run found.
+PHASE7E_LMAX_SEED = 3.3
+
+#: Registered accrual sensitivity to the price paid. Carried forward
+#: unmeasured: at the flat prices 7e-1 runs on, delta is inert by construction
+#: and is calibrated at 7e-2, where schedules supply the price variation.
+PHASE7E_DELTA = 0.25
+
+#: The swept dimension - memory horizon, as half-lives of 3.1, 4.3, 6.6 and
+#: 13.5 weeks. beta moves with it to hold the steady-state stock fixed, so
+#: horizon is swept independently of level.
+PHASE7E_RETENTIONS = (0.80, 0.85, 0.90, 0.95)
+
+
+def phase7e_beta(rho: float) -> float:
+    """The accrual that puts an every-week buyer at u = S/L* on the tanh."""
+    return PHASE7E_CURVATURE * PHASE7E_SATURATION * (1.0 - rho)
+
+
+PHASE7E_BETA = phase7e_beta(PHASE7E_RHO)
 
 #: The week a stall is closed for the gate-1 persistence probe. Phase 6 used
 #: week 12 of 22; at 66 weeks the equivalent point is well past the stock's
@@ -712,25 +732,32 @@ PHASE7E_SATURATIONS = (1.00, 1.25)
 PHASE7E_SHOCK_WEEK = 40
 
 
-def phase7e_cell(delta: float, saturation: float) -> MarketConfig:
+def phase7e_cell(
+    rho: float = PHASE7E_RHO,
+    delta: float = PHASE7E_DELTA,
+    saturation: float = PHASE7E_SATURATION,
+    max_bonus: float = PHASE7E_LMAX_SEED,
+) -> MarketConfig:
     """One calibration cell: Phase 7a's flat-price market, stock loyalty.
 
     Everything outside the loyalty mechanism is 7a's baseline arm, so the
     contrast against the base environment is the mechanism and nothing else.
+    `max_bonus` is a starting point - the cell is only usable once
+    `acceptance.calibrate_max_bonus` has solved it against the counter.
     """
     return dataclasses.replace(
         PHASE7A_FIXED,
-        name=f"phase7e_d{int(delta * 100):03d}_s{int(saturation * 100):03d}",
+        name=f"phase7e_r{int(rho * 100):03d}",
         loyalty_model="stock",
         # Zeroed rather than left at 0.5: the streak bonus is unreachable once
         # the stock model is on, and a config should not carry a number that
         # does nothing.
         loyalty_bonus_per_streak=0.0,
-        loyalty_retention=PHASE7E_RHO,
-        loyalty_increment=PHASE7E_BETA,
+        loyalty_retention=rho,
+        loyalty_increment=phase7e_beta(rho),
         loyalty_deal_sensitivity=delta,
         loyalty_saturation=saturation,
-        loyalty_max_bonus=PHASE7E_LMAX,
+        loyalty_max_bonus=max_bonus,
         record_loyalty_bonus=True,
     )
 
@@ -741,6 +768,4 @@ PHASE7E_COUNTER = dataclasses.replace(
     PHASE7A_FIXED, name="phase7e_counter", record_loyalty_bonus=True
 )
 
-PHASE7E_CELLS = tuple(
-    phase7e_cell(d, s) for s in PHASE7E_SATURATIONS for d in PHASE7E_DELTAS
-)
+PHASE7E_CELLS = tuple(phase7e_cell(rho=r) for r in PHASE7E_RETENTIONS)

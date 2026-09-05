@@ -825,9 +825,6 @@ SATURATION_TOLERANCE = 0.05
 #: variable at its maximum for most of the population it describes carries no
 #: information - the condition that killed 7c.
 GATE1_MAX_SATURATED_SHARE = 0.50
-#: Gate 1b: the stock's permanent switching rate must beat the counter's by at
-#: least the project's standard materiality unit.
-GATE1_MIN_SWITCH_ADVANTAGE_PP = MATERIALITY_PP
 
 
 def attachment_bonus(seasons: list) -> np.ndarray:
@@ -888,42 +885,87 @@ def permanent_switch_rate(cfg: MarketConfig, week: int) -> float:
 def evaluate_phase7e1(
     cfg: MarketConfig,
     seasons: list,
-    counter_stats: dict[str, float],
-    switch_rate: float,
+    counter: dict[str, float],
+    horizon: dict[int, float],
+    contrast: float,
 ) -> list[CriterionResult]:
     """Gate 1 for one calibration cell, against the counter's own numbers.
 
-    Both checks are comparative by construction. What is graded is that each
-    returns a verdict for the cell, as at Phase 5 - not that the cell passes.
-    A cell failing gate 1 is a finding about that corner of the parameter
-    grid, and it simply does not proceed to gate 2.
+    One gate, one control and one descriptive, which is what survived the
+    first run. The horizon check is the only one that can fail on the
+    mechanism's account; the contrast row verifies that the calibration
+    converged, without which the horizon number would not be interpretable;
+    and the saturation row is reported because the counter's value is
+    informative even though the stock's is arithmetic.
     """
     stats = saturation_share(cfg, seasons)
-    advantage_pp = (counter_stats["permanent_switch_rate"] - switch_rate) * 100
+    lag = GATE1_HORIZON_LAG
+    ratio = horizon[lag] / counter["horizon"][lag] if counter["horizon"][lag] else float("inf")
+    drift = abs(contrast - counter["contrast"]) / counter["contrast"]
     return [
         CriterionResult(
-            name="gate 1a: the state is not pinned at its ceiling",
-            passed=stats["saturated_share"] <= GATE1_MAX_SATURATED_SHARE,
-            measured=f"{stats['saturated_share']:.1%} of {int(stats['n'])} attached "
-            f"buyer-seasons within {SATURATION_TOLERANCE:.0%} of "
-            f"L_max={cfg.max_loyalty_bonus():.2f} "
-            f"(counter {counter_stats['saturated_share']:.1%}); "
-            f"IQR {stats['iqr']:.3f} vs counter {counter_stats['iqr']:.3f}",
-            threshold=f"saturated share ≤ {GATE1_MAX_SATURATED_SHARE:.0%}",
-            note="Licenses a contextual policy. This is the quantity whose "
-            "absence made 7c unrunnable.",
+            name=f"gate 1b: memory still reaches {lag} weeks back",
+            passed=ratio >= GATE1_MIN_HORIZON_RATIO,
+            measured=f"excess repeat rate at lag {lag}: {horizon[lag]:+.3f} vs "
+            f"counter {counter['horizon'][lag]:+.3f} ({ratio:.2f}x); "
+            f"lag 1 {horizon[1]:+.3f} vs {counter['horizon'][1]:+.3f}",
+            threshold=f"at least {GATE1_MIN_HORIZON_RATIO:g}x the counter's",
+            note="Measured against the memory-OFF twin on identical seeds, "
+            "because fixed preference repeats choices at every lag on its own.",
         ),
         CriterionResult(
-            name="gate 1b: one interruption does not end the relationship",
-            passed=advantage_pp >= GATE1_MIN_SWITCH_ADVANTAGE_PP,
-            measured=f"permanent switching {switch_rate:.1%} vs counter "
-            f"{counter_stats['permanent_switch_rate']:.1%} "
-            f"({advantage_pp:+.1f} pp)",
-            threshold=f"at least {GATE1_MIN_SWITCH_ADVANTAGE_PP:g} pp below the counter",
-            note="Behavioural rather than definitional: the stock's decay rate "
-            "is rho by construction, but whether a buyer comes back is not.",
+            name="control: lock-in strength is equalized with the counter",
+            passed=drift <= 0.10,
+            measured=f"incumbency advantage {contrast:.3f} vs counter "
+            f"{counter['contrast']:.3f} ({drift:+.1%}), at calibrated "
+            f"L_max={cfg.loyalty_max_bonus:.2f}",
+            threshold="within 10% of the counter's",
+            note="Not a finding - a control. Without it the horizon number "
+            "would be confounded with how hard the mechanism binds at all.",
+        ),
+        CriterionResult(
+            name="descriptive: the state is graded rather than stepped",
+            passed=True,
+            graded=False,
+            measured=f"{stats['saturated_share']:.1%} of {int(stats['n'])} attached "
+            f"buyer-seasons within {SATURATION_TOLERANCE:.0%} of L_max "
+            f"(counter {counter['saturated_share']:.1%}); IQR {stats['iqr']:.3f} "
+            f"vs counter {counter['iqr']:.3f}",
+            threshold="reported, not graded",
+            note="Definitional for a tanh stock, whose achievable maximum is "
+            "strictly below L_max. The counter's share is the informative half.",
         ),
     ]
+
+
+def calibrate_max_bonus(
+    cfg: MarketConfig, target_contrast: float, iterations: int = 5, tol: float = 0.02
+) -> tuple[MarketConfig, float]:
+    """Solve for the L_max at which this cell binds as hard as the counter.
+
+    Contrast is close to linear in L_max, so the fixed point converges in one
+    or two passes. Returns the calibrated config and the contrast it achieved,
+    both of which are reported - a calibration that silently failed to
+    converge would make every downstream number uninterpretable.
+    """
+    import dataclasses
+
+    from .engine import run_season_seeds
+
+    contrast = float("nan")
+    for _ in range(iterations):
+        seasons = run_season_seeds(cfg)
+        contrast = lockin_contrast(seasons)
+        if abs(contrast - target_contrast) <= tol:
+            break
+        cfg = dataclasses.replace(
+            cfg,
+            loyalty_max_bonus=float(
+                np.clip(cfg.loyalty_max_bonus * target_contrast / max(contrast, 1e-6),
+                        0.1, 20.0)
+            ),
+        )
+    return cfg, contrast
 
 
 def split_target_config(cfg: MarketConfig, price: float, name: str = "sweep"):
@@ -985,3 +1027,83 @@ def oracle_flat_price(
         "best_price": float(prices[best]),
         "best_profit": float(mean_profit[best]),
     }
+
+
+#: Gate 1b: the lag at which memory is probed. More than twice the counter's
+#: three-week cap, so a mechanism whose horizon is genuinely longer separates
+#: from one that merely smoothed the same horizon.
+GATE1_HORIZON_LAG = 8
+#: Gate 1b: the stock's excess repeat rate at that lag, as a multiple of the
+#: counter's. Relative rather than absolute, because the first version of this
+#: gate set a threshold larger than the quantity's own range.
+GATE1_MIN_HORIZON_RATIO = 1.5
+
+
+def memory_off(cfg: MarketConfig) -> MarketConfig:
+    """The same market with the loyalty bonus switched off and nothing else.
+
+    Phase 6's ablation design. Neither mechanism draws randomness, so the
+    control is paired with its treatment on every seed down to the draw, and
+    any difference between them is the memory's doing.
+    """
+    import dataclasses
+
+    if cfg.has_loyalty_stock:
+        return dataclasses.replace(cfg, name=f"{cfg.name}_off", loyalty_max_bonus=0.0)
+    return dataclasses.replace(
+        cfg, name=f"{cfg.name}_off", loyalty_bonus_per_streak=0.0
+    )
+
+
+def memory_horizon(
+    cfg: MarketConfig, lags: tuple[int, ...] = (1, 2, 4, 8, 12), burn_in: int = 20
+) -> dict[int, float]:
+    """Excess rate of returning to the same seller `lag` weeks later.
+
+    Measured against the memory-OFF twin, because fixed preference produces
+    choice repetition at every lag on its own and would otherwise be read as
+    memory. Weeks before `burn_in` are dropped so the mechanism is measured at
+    its steady state rather than while it fills up.
+    """
+    from .engine import run_season
+
+    out: dict[int, list[float]] = {lag: [] for lag in lags}
+    off_cfg = memory_off(cfg)
+    for seed in cfg.seeds:
+        on, off = run_season(cfg, seed), run_season(off_cfg, seed)
+        for lag in lags:
+            rates = []
+            for season in (on, off):
+                c = season.chosen_seller
+                a, b = c[burn_in + lag :], c[burn_in : -lag or None]
+                both = (a >= 0) & (b >= 0)
+                rates.append(float((a[both] == b[both]).mean()) if both.any() else np.nan)
+            out[lag].append(rates[0] - rates[1])
+    return {lag: float(np.nanmean(v)) for lag, v in out.items()}
+
+
+def lockin_contrast(seasons: list) -> float:
+    """Mean bonus gap between a buyer's attached seller and its best rival.
+
+    The quantity that decides whether habit actually binds. A counter puts its
+    whole bonus on one seller and zero on the rest, so its gap is its level; a
+    stock spreads a smaller bonus over several pairs, and spread loyalty is
+    weaker loyalty even when the level is the same. Without this check a
+    mechanism can pass gate 1's dispersion test while being a *poorer*
+    environment than the one it replaces - and every downstream null would
+    then say nothing about policy complexity.
+
+    The incumbent is the buyer's strongest relationship, not the seller they
+    happened to pick that week. Reading it off the week's choice measures
+    something else entirely and comes out negative even for the counter,
+    because a buyer who switches has their bonus sitting on the stall they
+    left.
+    """
+    gaps: list[float] = []
+    for s in seasons:
+        if s.loyalty_bonus is None:
+            raise ValueError(f"{s.config_name} was run without record_loyalty_bonus")
+        final = np.sort(s.loyalty_bonus[-1], axis=1)
+        held = final[:, -1] > 0  # buyers holding any relationship at all
+        gaps.extend((final[held, -1] - final[held, -2]).tolist())
+    return float(np.mean(gaps)) if gaps else float("nan")

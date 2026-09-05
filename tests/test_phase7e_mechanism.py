@@ -20,9 +20,12 @@ from market_sim.config import (
     PHASE7E_BETA,
     PHASE7E_CELLS,
     PHASE7E_COUNTER,
-    PHASE7E_LMAX,
+    PHASE7E_CURVATURE,
+    PHASE7E_DELTA,
+    PHASE7E_RETENTIONS,
     PHASE7E_RHO,
-    MarketConfig,
+    PHASE7E_SATURATION,
+    phase7e_beta,
     phase7e_cell,
 )
 from market_sim.engine import run_season, run_seeds
@@ -67,7 +70,7 @@ def test_phase1_is_still_pinned():
 
 def test_an_unvisited_pair_decays_at_exactly_rho():
     """No purchase, no accrual - the stock is multiplied by rho and nothing else."""
-    cfg = phase7e_cell(delta=0.5, saturation=1.25)
+    cfg = phase7e_cell(delta=0.5)
     season = run_season(cfg, 0)
     stock = _stock_from_bonus(cfg, season.loyalty_bonus.astype(float))
     checked = 0
@@ -99,9 +102,9 @@ def test_delta_zero_accrues_the_same_whatever_the_price():
     effect of price-sensitive accrual, so its flatness has to be exact rather
     than approximate.
     """
-    control = phase7e_cell(delta=0.0, saturation=1.25)
+    control = phase7e_cell(delta=0.0)
     accruals = [_accrual(control, m) for m in (0.8, 0.9, 1.0, 1.1, 1.2)]
-    assert accruals == [PHASE7E_BETA] * 5
+    assert accruals == pytest.approx([PHASE7E_BETA] * 5)
 
 
 def test_a_cheaper_purchase_builds_more_stock_when_delta_is_positive():
@@ -111,15 +114,15 @@ def test_a_cheaper_purchase_builds_more_stock_when_delta_is_positive():
     is measured against the standing price - repricing the stall would move
     the reference point instead of creating a discount.
     """
-    cfg = phase7e_cell(delta=1.0, saturation=1.25)
+    cfg = phase7e_cell(delta=1.0)
     cheap, dear = _accrual(cfg, 0.8), _accrual(cfg, 1.2)
     assert cheap > dear
-    assert cheap == pytest.approx(2 * PHASE7E_BETA)  # 1 + 1.0 * 1.0
+    assert cheap == pytest.approx(2 * cfg.loyalty_increment)  # 1 + 1.0 * 1.0
     assert dear == pytest.approx(0.0)  # 1 + 1.0 * -1.0, clamped at zero
 
 
 def test_the_bonus_is_bounded_and_monotone():
-    cfg = phase7e_cell(delta=0.25, saturation=1.0)
+    cfg = phase7e_cell()
     season = run_season(cfg, 0)
     bonus = season.loyalty_bonus
     assert bonus.min() >= 0.0
@@ -130,20 +133,20 @@ def test_the_bonus_is_bounded_and_monotone():
 
 
 def test_the_nominal_ceiling_is_never_reached_in_practice():
-    """L_max is shared with Phase 6 on paper; the stock cannot get there.
+    """L_max is a nominal ceiling, not an operative one.
 
-    Steady state is beta/(1-rho) * (1 + delta) at best, so the achievable
-    maximum bonus is well under L_max and the two mechanisms' *operative*
-    ceilings differ even though their nominal one does not. Recorded as a
-    test because the spec's claim of a shared ceiling depends on it.
+    Steady state tops out at beta*(1+delta)/(1-rho), so the achievable bonus
+    is strictly under L_max however long a buyer stays. Pinned as a test
+    because the first version of gate 1a graded "not pinned at the ceiling"
+    as evidence, when for a tanh stock it is arithmetic - which is why that
+    check is now reported rather than graded.
     """
-    cfg = phase7e_cell(delta=1.0, saturation=1.25)
+    cfg = phase7e_cell()
     best_stock = cfg.loyalty_increment * (1 + cfg.loyalty_deal_sensitivity) / (
         1 - cfg.loyalty_retention
     )
     achievable = cfg.loyalty_max_bonus * np.tanh(best_stock / cfg.loyalty_saturation)
     assert achievable < cfg.loyalty_max_bonus
-    assert achievable == pytest.approx(1.446, abs=0.005)
 
 
 def test_the_counter_holds_a_relationship_with_one_seller_at_a_time():
@@ -151,14 +154,14 @@ def test_the_counter_holds_a_relationship_with_one_seller_at_a_time():
     season = run_season(PHASE7E_COUNTER, 0)
     bonus = season.loyalty_bonus
     assert (bonus > 0).sum(axis=2).max() == 1
-    stock = run_season(phase7e_cell(0.25, 1.25), 0).loyalty_bonus
+    stock = run_season(phase7e_cell(), 0).loyalty_bonus
     assert (stock > 0).sum(axis=2).max() > 1
 
 
 def test_config_guards():
     assert PHASE7E_COUNTER.max_loyalty_bonus() == 1.5
-    assert phase7e_cell(0.25, 1.0).max_loyalty_bonus() == PHASE7E_LMAX
-    assert phase7e_cell(0.25, 1.0).has_loyalty
+    assert phase7e_cell(max_bonus=4.0).max_loyalty_bonus() == 4.0
+    assert phase7e_cell().has_loyalty
     assert not PHASE7E_COUNTER.has_loyalty_stock
     assert PHASE7A_FIXED.arm_half_range == pytest.approx(0.2)
     with pytest.raises(ValueError, match="unknown loyalty_model"):
@@ -196,11 +199,35 @@ def test_the_oracle_sweep_reproduces_the_base_environments_optimum():
     assert result["best_price"] == pytest.approx(2.60)
 
 
-def test_the_calibration_grid_is_the_one_the_spec_registers():
-    assert len(PHASE7E_CELLS) == 8
-    assert {c.loyalty_deal_sensitivity for c in PHASE7E_CELLS} == {0.0, 0.25, 0.5, 1.0}
-    assert {c.loyalty_saturation for c in PHASE7E_CELLS} == {1.0, 1.25}
+def test_the_calibration_grid_sweeps_horizon_and_nothing_else():
+    """beta must move with rho, or the sweep confounds horizon with level."""
+    assert len(PHASE7E_CELLS) == len(PHASE7E_RETENTIONS)
+    assert {c.loyalty_retention for c in PHASE7E_CELLS} == set(PHASE7E_RETENTIONS)
     for c in PHASE7E_CELLS:
-        assert c.loyalty_retention == PHASE7E_RHO
-        assert c.loyalty_increment == PHASE7E_BETA
+        assert c.loyalty_saturation == PHASE7E_SATURATION
+        assert c.loyalty_deal_sensitivity == PHASE7E_DELTA
         assert c.loyalty_bonus_per_streak == 0.0  # unreachable, so not carried
+        steady_state = c.loyalty_increment / (1 - c.loyalty_retention)
+        assert steady_state == pytest.approx(PHASE7E_CURVATURE * PHASE7E_SATURATION)
+    assert phase7e_beta(PHASE7E_RHO) == pytest.approx(PHASE7E_BETA)
+
+
+def test_the_pinned_ceiling_under_binds_and_the_calibration_fixes_it():
+    """The first run's central finding, and the repair, pinned as one test.
+
+    At Phase 6's ceiling of 1.5 the stock's incumbency advantage is a fraction
+    of the counter's, so it is the *weaker* mechanism however dispersed its
+    state is. Solving L_max against the counter's own number is what makes the
+    two environments comparable, and everything downstream depends on it
+    converging.
+    """
+    seeds = tuple(range(8))
+    target = acceptance.lockin_contrast([run_season(PHASE7E_COUNTER, s) for s in seeds])
+    pinned = dataclasses.replace(
+        phase7e_cell(), seeds=seeds, loyalty_max_bonus=1.5, name="pinned"
+    )
+    before = acceptance.lockin_contrast([run_season(pinned, s) for s in seeds])
+    assert before < 0.6 * target  # about a third, in the committed run
+    calibrated, after = acceptance.calibrate_max_bonus(pinned, target)
+    assert abs(after - target) <= 0.02
+    assert calibrated.loyalty_max_bonus > pinned.loyalty_max_bonus
