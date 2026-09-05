@@ -762,9 +762,38 @@ Graduation to 7c requires a **material** verdict on at least one quantity. An **
 
 **Exit condition:** `git tag phase7b-validated`.
 
-### Phase 7c — Contextual Bandit with a Learned Representation
+### Phase 7c — Contextual Bandit with a Learned Representation (SKIPPED)
 
-**Research question:** Does giving the bandit a *learned* compressed representation of market state (rather than hand-designed features) improve pricing decisions further — and is representation learning actually necessary here, or would hand-designed context features do just as well?
+**Status: skipped, on pre-registered evidence rather than after a failed run.** Both halves of this sub-stage — learned representation against hand-designed features, and either against context-blind 7b — presuppose that market state predicts *which action is best*. This market turns out to predict only *how much that action earns*, and a contextual bandit can exploit only the former: it conditions `E[R | X, A]`, and if the ranking over `A` does not move with `X` there is no decision for it to change.
+
+Two diagnostics, both reproducible from `experiments/phase7/run_phase7c_diagnostic.py` and the oracle sweep above.
+
+**Regime level.** The profit-maximizing Slow price under large changes in market state:
+
+| condition | baseline | competitor at 4.20 | competitor at 8.40 | no promotions | frequent promotions | fewer Middle+Rich | fewer Poor |
+|---|---|---|---|---|---|---|---|
+| argmax | 2.65 | 2.65 | 2.65 | 2.60 | 2.65 | 2.55 | 2.65 |
+| peak profit | 72.2 | 68.5 | 80.5 | 73.5 | 69.1 | 56.0 | 47.7 |
+
+Doubling the competitor's price moves the optimum by nothing at all. Peak profit ranges over 47.7 to 80.5 — a 70% spread — while the argmax moves at most 0.10, which is **less than one arm's spacing** (0.20 at the specified arm set). A contextual bandit could not express a different decision even given perfect context.
+
+**Weekly level.** Counterfactual evaluation of five arms bracketing the optimum, 1,584 seller-weeks, with weekly context draws identical across arms:
+
+| condition | n | 2.20 | 2.40 | **2.60** | 2.80 | 3.00 | best |
+|---|---|---|---|---|---|---|---|
+| all weeks | 1584 | 22.9 | 26.8 | **28.7** | 27.6 | 24.1 | 2.60 |
+| a promotion elsewhere | 249 | 23.8 | 27.7 | **29.5** | 28.5 | 24.7 | 2.60 |
+| no promotion elsewhere | 1335 | 22.8 | 26.7 | **28.5** | 27.4 | 24.0 | 2.60 |
+| attendance above median | 651 | 24.6 | 28.7 | **30.6** | 29.5 | 25.7 | 2.60 |
+| attendance at or below median | 933 | 21.8 | 25.6 | **27.3** | 26.3 | 22.9 | 2.60 |
+
+The same arm wins under every split, and the curve shifts in level without changing shape. The per-week *realized* argmax does vary — 2.40 in 15% of weeks, 2.60 in 47%, 2.80 in 28% — but it tracks no observable state. That is noise, and a contextual bandit cannot exploit variation that context does not predict.
+
+**Why this is a skip and not an untested assumption.** The arms in the weekly test bracket the optimum on both sides deliberately: a set pinned at its ceiling could not reveal context-dependence even if it existed, so it would not falsify anything. And this is the ladder's own design working as intended — the graduation gates exist so a rung that cannot earn its place is not built, exactly as Phase 5's rollback was a result rather than a failure.
+
+**What would reopen it.** A market where the demand curve's *shape*, not just its height, varies with observable state — heterogeneous price sensitivity within a class, or seller-specific buyer segments — would restore the premise. The population respecification above disperses budgets but leaves `price_sensitivity` a class constant, and that is the most likely place for such variation to enter.
+
+**Original research question, retained for the record:** Does giving the bandit a *learned* compressed representation of market state (rather than hand-designed features) improve pricing decisions further — and is representation learning actually necessary here, or would hand-designed context features do just as well?
 
 **Mechanism:**
 - Define a "market state" each week: recent buyer arrival mix, recent visibility/promotion status, recent inventory trajectory.
@@ -777,7 +806,7 @@ Graduation to 7c requires a **material** verdict on at least one quantity. An **
 
 **Literature basis:** Li, Chu, Langford & Schapire (2010), "A Contextual-Bandit Approach to Personalized News Article Recommendation" (LinUCB, *WWW*) — contextual bandit algorithm. Bengio, Courville & Vincent (2013), "Representation Learning: A Review and New Perspectives" (*IEEE TPAMI*) — basis for learning a compressed market-state embedding rather than relying on hand-designed features.
 
-**Exit condition:** `git tag phase7c-validated`.
+**Exit condition:** `git tag phase7c-skipped`. No implementation is built.
 
 ### Phase 7d — Reinforcement Learning (multi-week credit assignment)
 

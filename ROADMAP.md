@@ -101,7 +101,7 @@ Full specification: see `docs/phase_specifications.md`.
 | 4 | Person + Environment + Context | Does situational context add explanatory power beyond environment? | Infrastructure only |
 | 5 | Nonlinear Behavior | Do nonlinear/interaction effects change conclusions vs. linear baseline? | Infrastructure only |
 | 6 | Repeated Interaction | Does history/memory change future behavior? ("weeks" become real here) | Infrastructure only — **web viz introduced** |
-| 7 (a–d) | Seller Learning | Does adaptive pricing (heuristic → bandit → contextual bandit w/ learned representation → RL) change market outcomes, and how much learning sophistication is actually justified? | Infrastructure only |
+| 7 (a, b, d) | Seller Learning | Does stateful policy learning produce market structures that myopic bandit optimization cannot? **7c skipped**: the profit-maximizing price is invariant to observable market state, so a contextual bandit has nothing to condition on. | Infrastructure only |
 | 8 | Endogenous Market Structure | Does repeated local interaction produce macro-level structure? | Infrastructure only — **web viz: entry/exit panels** |
 | 9a | Learned Buyer Policy | How does a buyer policy trained to maximize realized surplus differ from the hand-written rule, and how far from optimal was that rule? | Infrastructure only — closes the buyer-side learning ladder |
 | 9b | Synthetic Agent Users | What does an LLM Agent add over a *trained* buyer policy? | First scaffolding for A — **web viz: Agent Inspector; cost/speed KPI begins** |
