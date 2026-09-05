@@ -1182,6 +1182,59 @@ comparison is drawn anywhere in Phase 7e.
 **Exit condition:** `git tag phase7e1-calibrated`, and gate 1's verdict
 recorded per cell.
 
+### Phase 7e-2 — Intertemporal headroom (still no learner)
+
+**Question:** in the calibrated environment, can *any* hand-designed pricing
+schedule beat the best standing price? If not, there is nothing for a
+multi-week policy to find, and 7e-3's horizon arm is not run.
+
+**Environment:** the cell carried from 7e-1 — `rho` = 0.80, `beta` = 0.40,
+`L*` = 1.00, `L_max` = 3.30 — with the target stall's standing price set to
+its own oracle optimum of **2.65**. That is the anchor, so the schedule's
+arms are deviations *from a price buyers have adapted to*, and the loyalty
+stock's reference point does not move with the schedule. `L_max` is held at
+7e-1's calibrated value and is not re-solved here: re-calibrating per schedule
+would make the environment a function of the policy being tested.
+
+**The `delta` ladder runs here**, {0, 0.25, 0.5, 1.0}, because this is the
+first stage with price variation for it to act on. `delta` = 0 remains the
+control: the stock form with no investment channel. At flat prices all four
+cells are identical by construction, which is why 7e-1 could not calibrate it
+and why the flat baseline is shared across the ladder.
+
+**Two schedule families, and the second is the one that matters.**
+
+- **One-shot invest-then-harvest**, 7d's family, kept for comparability:
+  `W` ∈ {8, 16} weeks at a discount, then a standing price for the rest.
+- **Cyclic invest/harvest**: repeat `k` weeks low, `m` weeks high. This is
+  included because at a 3.1-week half-life a one-shot investment provably
+  cannot survive a 58-week harvest — the stock is gone within ten weeks of
+  the harvest beginning. If a decaying stock rewards any schedule at all, it
+  rewards a cycle, and testing only the one-shot family would produce a null
+  that says more about the schedule set than about the mechanism.
+
+**Selection and testing use disjoint seed blocks.** Roughly 170 schedule ×
+`delta` combinations are compared; taking the maximum over them and testing it
+at 95% would manufacture a pass out of noise. Schedules are therefore selected
+on a **discovery block, seeds 2000–2059**, and the selected schedule alone is
+tested on the standard **evaluation block, seeds 0–29**. This is 7d's
+train/evaluate discipline applied to a search over hand-designed policies
+rather than over network weights, and it is the difference between "some
+schedule looked good" and "this schedule is good".
+
+**Gate 2 passes** if, on the evaluation block, the selected schedule's profit
+advantage over flat pricing has a 95% CI excluding zero **and** a point
+estimate **≥ +2%**.
+
+**What each outcome licenses.** Gate 2 passing licenses 7e-3's horizon arm
+(the Q-network). Gate 2 failing does not stop 7e-3 — gate 1 already licensed
+the **context** arm, so the contextual bandit runs either way, and a failure
+here means the multi-week comparison is not run rather than that the phase
+ends. Recorded now so the branch is not chosen after the number is known.
+
+**Exit condition:** `git tag phase7e2-headroom`, with the verdict and the
+selected schedule recorded.
+
 ---
 
 ## Phase 8 — Endogenous Market Structure
