@@ -263,6 +263,49 @@ This side experiment is not part of the main run's acceptance criteria and its n
 
 ---
 
+## Population Specification — Within-Class Dispersion (applies from Phase 2 onward)
+
+**Discovered at Phase 7 and applied retrospectively to Phases 2–7.** Every buyer parameter through Phase 6 was a class constant: all 70 Poor buyers had `budget_per_visit` of exactly 3.0 and `price_sensitivity` of exactly 0.85. The only individual-level variation anywhere in the population was `preference`, drawn `U(0,1)` per buyer per seller.
+
+So the market contained **three distinct buyer types replicated a hundred times**, not a heterogeneous population — and a phase named "Linear Consumer Heterogeneity" was modelling class-level heterogeneity only.
+
+### What it did to the learning landscape
+
+An oracle price sweep at the Phase 7 configuration — fixed seller policy, no learning, 66 weeks, 24 seeds, one tier swept on a 0.10 grid with the other held fixed — makes the consequence exact:
+
+| Slow price | 2.60 | 2.80 | **3.00** | **3.10** | 3.50 |
+|---|---|---|---|---|---|
+| profit/week | 80.0 | 92.5 | **104.3** | **22.4** | 30.3 |
+
+Profit rises monotonically to a maximum at exactly 3.00 and falls **79% in a single 0.10 step**. 3.00 is Poor's budget. Because every Poor buyer's budget is *identical*, all seventy affordability constraints bind at the same price, and seventy individual walls sum into one cliff.
+
+**This is a property of the population, not of the choice rule.** The purchase rule is already probabilistic — a random-utility logit, `P = sigmoid(utility - 2.0)` — with a hard affordability gate on top. The gate is not a behavioural assumption and is not removed: a buyer holding 3 units of money cannot pay 3.01. Holding the gate fixed and giving budgets within-class dispersion:
+
+| within-class budget | argmax | peak profit | drop in the step after the peak |
+|---|---|---|---|
+| none (as originally built) | 3.00 | 104.6 | **78.8%** |
+| lognormal σ = 0.10 | 2.50 | 75.1 | 1.2% |
+| **lognormal σ = 0.12** | 2.60 | 74.4 | **2.5%** |
+| lognormal σ = 0.15 | 2.50 | 69.3 | 1.7% |
+
+The cliff disappears. So does about a third of the peak — 104.6 against 74.4 — because that surplus was the artefact of extracting exactly 3.00 from all seventy Poor buyers at once.
+
+### The specification
+
+`budget_per_visit` is drawn per buyer from a **lognormal distribution whose mean is the class value**, so 3 / 7 / 10 remain the class means and only the within-class shape is new. Real budget and income distributions are right-skewed, which is why lognormal rather than uniform; a uniform distribution would also introduce hard edges of its own, just smaller ones.
+
+**σ = 0.12, derived rather than chosen.** The binding constraint is that the classes must remain identifiable as distinct populations, or Phase 2's between-class stratification finding dissolves into its own noise. The closest adjacent pair is Middle and Rich, `ln(10/7) = 0.357` apart in log space. Setting σ so that adjacent class means sit **three within-class standard deviations apart** gives `0.357 / 3 = 0.119`, rounded to 0.12. At that value Poor's budgets span roughly 2.44–3.63 with a mean of 3.00, and the probability that a Poor buyer can reach the Shigh price of 6 is 0.002% — under one buyer in ten thousand, so the affordability wall documented from Phase 2 onward survives.
+
+`price_sensitivity` is left as a class constant for now. Dispersing it too would change two things at once, and the phases most sensitive to it — Phase 2's attribution diagnostic in particular — should be re-read under dispersed budgets before a second dimension is added.
+
+### Cost, stated plainly
+
+This re-opens Phases 2 through 7. Their published numbers were produced in a market whose population differs from this one, so all five validated tags are re-run and re-evaluated rather than left standing. That is the correct trade: the alternative is a longitudinal table in which Phases 2–7 and Phases 8+ describe different populations, which is exactly what the logging schema has been protecting against since Phase 1.
+
+The findings this is expected to move, and which must be re-read rather than assumed to carry over: Phase 2's stratification gap and its budget-versus-α attribution, Phase 5's equivalence verdicts, Phase 7a's price trajectory, and Phase 7b's arm-ceiling result — the ceiling itself is measured against an optimum that has now moved from 3.00 to about 2.60.
+
+---
+
 ## Phase 2 — Linear Consumer Heterogeneity
 
 **Research question:** Does person-level heterogeneity alone (holding environment and context fixed) produce different purchasing patterns, and specifically, does it produce basic economic stratification (lower-budget buyers sorting toward lower-priced sellers)? With three buyer classes instead of two, this phase also asks a second, previously nonexistent question: **how does the middle class split its patronage between tiers**, given it is not cleanly assigned to either?
