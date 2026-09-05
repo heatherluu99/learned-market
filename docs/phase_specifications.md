@@ -182,7 +182,8 @@ Everything else in the table below is used once, for the phase it's listed under
 
 | Phase | Methodology | Independent variable(s) | Dependent variable(s) | How difference is judged |
 |---|---|---|---|---|
-| 9 | Substitution experiment; Agent decisions replace rule-based decisions for a subset (within-run control group) | Decision mechanism (rule-based vs. Agent), holding everything else fixed | Choice distribution, `synthetic_cost_usd`, latency | Agent subgroup vs. rule-based subgroup within the same run; cost/speed ratio against `human_baseline.csv` |
+| 9a | Learned buyer policy; behavior cloning as a pipeline check, surplus-maximizing policy as the baseline | Buyer decision mechanism (hand-written rule vs. trained policy) | Realized consumer surplus, class shares | Paired against the Phase 8 rule on identical seeds; clone arm expected **equivalent**, policy arm required to raise surplus with CI excluding zero |
+| 9b | Substitution experiment; Agent decisions replace **trained-policy** decisions for a subset (within-run control group) | Decision mechanism (rule / trained policy / Agent), holding everything else fixed | Choice distribution, `synthetic_cost_usd`, latency | Agent subgroup vs. rule-based subgroup within the same run; cost/speed ratio against `human_baseline.csv` |
 | 10 | Distributional comparison against real (published) human data | Data source (N=100 Agent responses vs. an existing published human benchmark) | Per-scenario choice distribution | **Jensen-Shannon divergence** + directional agreement (same top choice or not) |
 | 11 | Structured bias mapping + correction-function fitting | Category × demographic × context × model (four-way grid) | Phase 10's gap metric, aggregated per cell | Fit a correction function on a training subset; check error reduction on a **held-out** subset never used to fit it |
 | 12 | Variance decomposition (ANOVA-style) | Model family (GPT/Claude/etc.), seed, prompt, environment | Output distribution from repeating Phase 10 scenarios | Share of total outcome variance attributable to each factor |
@@ -648,11 +649,59 @@ Extends the Phase 6 page (same underlying artifact, not a rebuild). Adds:
 
 ---
 
-## Phase 9 — Synthetic Agent Users
+## Phase 9a — Learned Buyer Policy (no LLM)
 
-**Research question:** What does replacing the rule-based decision function with an LLM-driven Agent change, holding the rest of the Phase 8 simulation fixed? This is a scaffolding phase, not yet a human comparison.
+**Why this phase exists.** Phases 1–8 give sellers a four-rung learning ladder (7a heuristic → 7b bandit → 7c contextual bandit → 7d RL) but give buyers a single step from a hand-written formula straight to an LLM. That asymmetry weakens the question Phase 9b is supposed to answer.
 
-**Single changed dimension:** decision function for a subset of buyers only — **N = 30 buyers (30% of the 100-buyer population)** run as Agents, the remaining 70 stay rule-based as the control group within the same run.
+The problem is sharper than "we skipped a rung". **No buyer parameter in Phases 1–8 was ever fitted to anything.** `intercept` 1.0, `budget_coef` 0.05, `preference_coef` 1.5, α 0.85/0.5/0.2, the loyalty bonus 0.5 and its cap of 3 — every one is hand-chosen, several of them chosen during this project's own design review gates. So the Phase 9 control group is not "an interpretable model" but *an unfitted model*, and an LLM beating it would establish only that an LLM outperforms a set of numbers someone picked. That is not a finding.
+
+**Research question:** How does a buyer policy trained to actually maximize buyer welfare differ from the hand-written rule, and how far from optimal was the hand-written rule?
+
+### The reward problem, and why a new primitive is needed
+
+Sellers can be given reinforcement learning without difficulty because their objective — profit — is external and uncontroversial. Buyers have no such objective. The obvious answer, "maximize utility", is circular: utility *is* the hand-written formula, so a policy trained on it optimizes the very model this phase exists to move past.
+
+Phase 9a therefore introduces one new simulation primitive: **`willingness_to_pay[buyer, seller]`**, the value a buyer actually places on a unit from that seller. Reward for a purchase is realized consumer surplus, `WTP − price_paid`; not purchasing earns zero. Budget and inventory constraints are unchanged.
+
+**WTP must be the ground truth that `preference` was approximating — not an independent draw.** This is the constraint that makes the comparison valid at all. `preference[b, s] ~ U(0,1)` already exists and plays the role of taste in the hand-written utility. If WTP were drawn separately, the learned policy and the hand-written rule would be facing *different worlds*, and "9a vs Phase 8" would compare two markets rather than two decision rules. WTP is therefore a deterministic, monotone function of the same `preference[b, s]` draw and the buyer's class:
+
+```
+willingness_to_pay[b, s] = wtp_base[class] + wtp_spread[class] * preference[b, s]
+```
+
+The hand-written rule continues to see only `preference` — its proxy for value. The learned policy is evaluated on surplus — the value itself. Both act in one market, on identical seeds and identical draws, exactly as every paired comparison in Phases 1–6 has done.
+
+`wtp_base` and `wtp_spread` are set at this phase's own design review gate, not here, and must be checked against the existing prices (2 and 6) and budgets (3, 7, 10) so that buying is neither always nor never worthwhile.
+
+**A consequence worth stating: this makes the hand-written rule falsifiable.** With a surplus measure defined, "how much surplus does the hand-written rule leave on the table relative to a policy that optimizes it?" becomes an answerable question, and its answer is a result in its own right — the first time in this project that the rule-based model can be scored against anything other than itself.
+
+### Two arms, and only one of them is a baseline
+
+- **`phase9a_clone` — behavior cloning of the Phase 8 rule.** A pipeline self-check, *not* a baseline. Behavior cloning succeeds exactly when it reproduces what it imitated, so the expected and desired outcome is **equivalent** under the Phase 5 materiality test. That result validates that the network and training pipeline can represent this decision task; it does not produce a stronger comparison group, because a neural copy of an unfitted model is still that unfitted model. Reported under that label so it cannot be mistaken for one.
+- **`phase9a_policy` — a policy trained to maximize realized surplus.** This is the load-bearing arm and the control group Phase 9b is graded against.
+
+**Acceptance criteria:**
+- `phase9a_clone` returns **equivalent** against the Phase 8 rule on the tracked class shares, under the Phase 5 materiality test — the pipeline reproduces known behaviour
+- `phase9a_policy` achieves higher mean realized surplus per buyer than the Phase 8 rule, paired by seed, with its 95% CI excluding zero
+- Report the surplus gap as a percentage of the rule's own surplus — the "how far from optimal was the hand-written rule" number
+
+**Technical note.** PyTorch becomes a real dependency here rather than an aspirational one, and is also what Phases 7c and 7d need. **PettingZoo is deliberately not adopted.** Multi-agent in the agent-based-modelling sense is not multi-agent in the multi-agent-RL sense: PettingZoo exists for several *learning* agents interacting simultaneously, and no phase in this roadmap has buyers and sellers learning at the same time — Phase 7 trains sellers only, Phase 9a trains buyers only. Adopting it would be ceremony. Mesa, SimPy and NetworkX are left unspecified on purpose; at a few hundred agents, plain Python and NumPy are sufficient, and pinning a framework in the spec would constrain implementation for no measured benefit.
+
+**Literature basis:** Pomerleau (1991), "Efficient Training of Artificial Neural Networks for Autonomous Navigation" (*Neural Computation*) — the behavior-cloning approach used for the pipeline-check arm. For the optimizing arm, the framing is standard consumer-surplus maximization under a budget constraint rather than a specific paper.
+
+**Exit condition:** `git tag phase9a-validated`.
+
+---
+
+## Phase 9b — Synthetic Agent Users
+
+**Research question:** What does replacing the buyer decision function with an LLM-driven Agent change, holding the rest of the simulation fixed? This is a scaffolding phase, not yet a human comparison.
+
+**The control group is Phase 9a's trained policy, not the hand-written rule.** Comparing an LLM against an unfitted formula can only show that an LLM outperforms a set of hand-picked coefficients, which nobody doubts and which answers nothing. Compared against a policy trained to maximize realized surplus, the question becomes decidable in either direction: if the LLM still wins, that is a result worth reporting; if it does not, the case for LLM agents in this setting is weaker than assumed, and that is equally worth reporting. This is the question the project's own design philosophy asks - what does a foundation model contribute over an interpretable one - and the earlier control group could not answer it.
+
+The rule-based subgroup is still run, as a third arm, so the three decision mechanisms can be ranked against each other in one market.
+
+**Single changed dimension:** decision function for a subset of buyers only — **N = 30 buyers (30% of the 100-buyer population)** run as Agents. The remaining 70 are split between the Phase 9a trained policy and the hand-written rule, so all three mechanisms appear in the same run against the same seeds, prices and draws.
 
 **Why N = 30, not a pilot-and-see number:** Brand, Israeli & Ngwe (2023) describe submitting each prompt/scenario "dozens of times" in their methodology (their abstract separately says "hundreds" — the two are not fully consistent, and both are reported here rather than picking whichever sounds better). 30 sits inside the "dozens" range their methodology actually uses, and this phase carries no human-comparison cost yet, so there is no budget reason to go smaller.
 
@@ -677,7 +726,7 @@ Extends the Phase 6/8 page. This is the centerpiece feature for the portfolio an
 
 **Literature basis:** Park et al. (2023), "Generative Agents: Interactive Simulacra of Human Behavior" (Stanford, *UIST*) — foundational LLM-agent architecture; see also Park et al. (2024), "Generative Agent Simulations of 1,000 People" (arXiv:2411.10109), a closer analogue to this project's population-scale ambitions. Horton (2023), "Large Language Models as Simulated Economic Agents" (NBER WP 31122) — the "Homo Silicus" framing for using LLMs as economic agents.
 
-**Exit condition:** `git tag phase9-validated`.
+**Exit condition:** `git tag phase9b-validated`.
 
 ---
 
