@@ -1268,6 +1268,71 @@ an existence claim and not for effect size.
 **Exit condition:** `git tag phase7e2-headroom`, with the verdict and the
 selected schedule recorded.
 
+### Phase 7e-3a — Does context pay? (the arm gate 1 licensed)
+
+**Question:** now that a persistent, dispersed loyalty state exists, does a
+policy that conditions on it beat one that ignores it?
+
+This is Phase 7c's question, asked in the environment 7c was skipped for
+lacking. 7c was skipped because the profit-maximizing price turned out to be
+invariant to every observable market condition tested — there was nothing for
+a contextual policy to condition on, and running one would have measured the
+cost of learning a useless feature. That answer was specific to the base
+environment and does not carry over on its own.
+
+**Environment:** the cell carried from 7e-2 — `rho` = 0.80, `beta` = 0.40,
+`L*` = 1.00, `L_max` = 3.30, **`delta` = 1.0**, standing price 2.65, arms at
+±20% of it. Carrying the highest-headroom cell is the pre-registered
+selection-on-outcome rule: valid for an existence claim, invalid for effect
+size.
+
+**The context is the mechanism's own state.** The seller observes the mean
+loyalty bonus buyers hold toward it, normalized by `L_max`, alongside the
+features 7d already exposed. Conditioning a "contextual" policy on the streak
+counter instead would test a feature this environment does not run on.
+
+**Two measurements, because a learned null on its own is ambiguous.**
+
+- **The oracle context diagnostic.** Does the profit-maximizing arm actually
+  depend on the loyalty state? Measured by one-week deviations: from an
+  all-flat reference season, at each week `w` play arm `a` for that week alone,
+  then return to flat, and score the **cumulative profit over weeks `w`..`w+8`**
+  — about two and a half stock half-lives, so an arm's effect on the stock is
+  inside the window rather than discarded. The best arm per `(seed, week)` is
+  then split by the loyalty state at `w`. This is 7c's diagnostic rebuilt for a
+  mechanism whose state is endogenous to the price path: 7c could compare
+  parallel full seasons because its state did not depend on the prices, and
+  here it does.
+- **The learned comparison.** LinUCB against context-blind UCB1, identical arms,
+  identical seeds, identical online-within-season learning budget — the only
+  difference is whether the context is visible. Both learn from scratch each
+  season, which is 7b's protocol, so 3a is a clean paired comparison.
+
+Reporting both is what makes a null readable. A LinUCB loss with an oracle that
+*does* vary means context is real but costs more to learn than it returns in 66
+weeks; a LinUCB loss with an oracle that does **not** vary means 7c's finding
+survives the mechanism change. Those are different results and the learned
+number alone cannot distinguish them.
+
+**Reference ladder.** All arms are scored against the same two known points:
+flat pricing at the oracle standing price (the myopic ceiling, 43.18/wk) and
+7e-2's best hand-designed schedule (44.32/wk). A learner that cannot beat a
+schedule written by hand has not found much.
+
+**Gate 3a passes** if LinUCB beats UCB1 by a **material** margin under the
+standard ±5% relative test on the evaluation seeds. As everywhere since Phase
+5, what is *graded* is that the comparison reaches a verdict; which verdict it
+reaches is the finding.
+
+**Literature basis:** Li, Chu, Langford & Schapire (2010), "A Contextual-Bandit
+Approach to Personalized News Article Recommendation" (WWW) — LinUCB, the
+standard linear contextual bandit, used here in its original form rather than
+with a learned representation, since the state is three interpretable features
+rather than raw observations.
+
+**Exit condition:** `git tag phase7e3a-context`, with both measurements
+recorded.
+
 ---
 
 ## Phase 8 — Endogenous Market Structure
