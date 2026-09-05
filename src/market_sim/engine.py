@@ -29,6 +29,9 @@ NO_PURCHASE_INVENTORY = "inventory_empty"
 #: Kept distinct from "did not want to buy" - a buyer who never saw a stall has
 #: not expressed a preference about it.
 NO_PURCHASE_UNNOTICED = "not_noticed"
+#: Phase 6 onward: the buyer did not shop that week at all. Distinct from
+#: shopping and buying nothing - no decision was made either way.
+NO_PURCHASE_ABSENT = "did_not_shop"
 
 
 @dataclass
@@ -133,6 +136,7 @@ def purchase_probability(
     preference: float,
     price_sensitivity: float,
     price_reference: float,
+    loyalty_bonus: float = 0.0,
 ) -> float:
     """P(purchase) for one buyer facing one seller.
 
@@ -160,6 +164,9 @@ def purchase_probability(
     if cfg.budget_cliff_gap is not None:
         if (budget_remaining - price) < cfg.budget_cliff_gap:
             utility -= cfg.budget_cliff_penalty
+    # Phase 6: habit. Passed in rather than read from cfg because it depends on
+    # the buyer's streak, which is run state, not configuration.
+    utility += loyalty_bonus
     return float(sigmoid(utility - cfg.sigmoid_offset))
 
 
@@ -324,3 +331,266 @@ def run_single(cfg: MarketConfig, seed: int) -> RunResult:
 
 def run_seeds(cfg: MarketConfig) -> list[RunResult]:
     return [run_single(cfg, seed) for seed in cfg.seeds]
+
+
+@dataclass
+class SeasonResult:
+    """One 22-week season. State persists across weeks; outputs do not.
+
+    Phases 1-5 repeat a static market for statistics; this repeats it as a
+    timeline. The distinction is the whole point of Phase 6 - see
+    docs/phase_specifications.md, "Why Phases 1-5 have no week axis at all".
+    """
+
+    config_name: str
+    seed: int
+    weeks: list[RunResult]
+    #: (week, buyer) chosen seller that week, -1 if the buyer bought nothing.
+    chosen_seller: np.ndarray
+    #: (week, buyer) whether the buyer showed up at all.
+    attended: np.ndarray
+    #: (week, buyer) consecutive weeks the chosen seller has been the choice.
+    streaks: np.ndarray
+
+    @property
+    def n_weeks(self) -> int:
+        return len(self.weeks)
+
+    def attendance_rate(self) -> np.ndarray:
+        """Per week: share of buyers who showed up."""
+        return self.attended.mean(axis=1)
+
+    def purchase_rate(self) -> np.ndarray:
+        """Per week: share of buyers who bought something.
+
+        Kept separate from attendance because they are different quantities:
+        a buyer can show up and buy nothing. Phases 1-5's `participation_rate`
+        is this one, so this is what the 0.6-1.0 band applies to.
+        """
+        return (self.chosen_seller >= 0).mean(axis=1)
+
+    def pair_stability(self) -> np.ndarray:
+        """Per week: share of buyers whose chosen seller matches last week's.
+
+        Denominator is buyers who bought in *both* weeks - a buyer who skipped
+        a week has no choice to compare, and counting them as a mismatch would
+        confound attendance with loyalty. Week 0 is NaN: nothing precedes it.
+        """
+        out = np.full(self.n_weeks, np.nan)
+        for w in range(1, self.n_weeks):
+            both = (self.chosen_seller[w] >= 0) & (self.chosen_seller[w - 1] >= 0)
+            if both.any():
+                out[w] = float(
+                    (self.chosen_seller[w][both] == self.chosen_seller[w - 1][both]).mean()
+                )
+        return out
+
+    def tier_share(self, buyer_class: str, seller_class: str) -> float:
+        """Season-wide share of a class's purchases that went to a tier."""
+        own = [t for r in self.weeks for t in r.transactions if t.buyer_class == buyer_class]
+        if not own:
+            return float("nan")
+        return sum(1 for t in own if t.seller_class == seller_class) / len(own)
+
+
+def _choice_of_week(bought: list[int]) -> int:
+    """The seller a buyer is taken to have chosen this week.
+
+    Most units purchased, ties broken by first encountered. Deliberately not
+    "most recent": that depends on the buyer's random stall order that week,
+    which would inject noise into what is meant to be a memory state. See
+    docs/phase_specifications.md, Phase 6.
+    """
+    if not bought:
+        return -1
+    counts: dict[int, int] = {}
+    for s in bought:
+        counts[s] = counts.get(s, 0) + 1
+    best = max(counts.values())
+    for s in bought:  # first encountered among the maxima
+        if counts[s] == best:
+            return s
+    return -1
+
+
+def run_season(cfg: MarketConfig, seed: int) -> SeasonResult:
+    """Run one season of `cfg.weeks` weeks with persistent buyer memory.
+
+    Budget and inventory reset every week; `last_seller_purchased` and the
+    loyalty streak do not - that persistence is the phase's changed dimension.
+    Preference is drawn once for the whole season, since the "run" the earlier
+    phases fixed it over is now a season rather than a single session.
+    """
+    if cfg.weeks is None:
+        raise ValueError(f"{cfg.name} has no week axis; use run_single")
+
+    n_buyers, n_sellers = cfg.n_buyers, cfg.n_sellers
+    rng = np.random.default_rng(seed)
+    preference = rng.random((n_buyers, n_sellers))
+
+    buyer_class = cfg.buyer_class_of()
+    seller_class = cfg.seller_class_of()
+    budget0 = np.array(
+        [c.budget_per_visit for c in cfg.buyer_classes for _ in range(c.count)], dtype=float
+    )
+    alpha = np.array(
+        [c.price_sensitivity for c in cfg.buyer_classes for _ in range(c.count)], dtype=float
+    )
+    price0 = np.array(
+        [c.price for c in cfg.seller_classes for _ in range(c.count)], dtype=float
+    )
+    inventory0 = np.array(
+        [c.inventory for c in cfg.seller_classes for _ in range(c.count)], dtype=int
+    )
+    visibility_prob = np.array(cfg.visibility_prob_of(), dtype=float)
+    attendance_prob = np.array(cfg.attendance_prob_of(), dtype=float)
+    price_reference = cfg.price_reference
+
+    last_seller = np.full(n_buyers, -1, dtype=int)
+    streak = np.zeros(n_buyers, dtype=int)
+    weeks: list[RunResult] = []
+    chosen_hist, attended_hist, streak_hist = [], [], []
+
+    for _week in range(cfg.weeks):
+        attends = rng.random(n_buyers) < attendance_prob
+        visit_orders = np.array([rng.permutation(n_sellers) for _ in range(n_buyers)])
+        purchase_draw = rng.random((n_buyers, n_sellers))
+        visibility_draw = rng.random((n_buyers, n_sellers))
+        promotion_roll = rng.random()
+        promotion_pick = int(rng.integers(0, n_sellers))
+
+        price = price0.copy()
+        if cfg.forced_promotion_seller is not None:
+            promoted: int | None = cfg.forced_promotion_seller
+        elif promotion_roll < cfg.promotion_probability:
+            promoted = promotion_pick
+        else:
+            promoted = None
+        if promoted is not None:
+            price[promoted] = cfg.discounted_price(price[promoted])
+
+        budget = budget0.copy()
+        inventory = inventory0.copy()
+        buyer_n_purchases = np.zeros(n_buyers, dtype=int)
+        buyer_total_spent = np.zeros(n_buyers, dtype=float)
+        seller_n_sold = np.zeros(n_sellers, dtype=int)
+        seller_revenue = np.zeros(n_sellers, dtype=float)
+        noticed = np.zeros(n_sellers, dtype=int)
+        blocked = {
+            NO_PURCHASE_UTILITY: 0,
+            NO_PURCHASE_BUDGET: 0,
+            NO_PURCHASE_INVENTORY: 0,
+            NO_PURCHASE_UNNOTICED: 0,
+            NO_PURCHASE_ABSENT: 0,
+        }
+        blocked_pairs: dict[tuple[str, str], int] = {}
+        transactions: list[Transaction] = []
+        bought_this_week: list[list[int]] = [[] for _ in range(n_buyers)]
+
+        for buyer_id in range(n_buyers):
+            if not attends[buyer_id]:
+                blocked[NO_PURCHASE_ABSENT] += n_sellers
+                continue
+            for visit_order, seller_id in enumerate(visit_orders[buyer_id]):
+                seller_id = int(seller_id)
+                if visibility_draw[buyer_id, seller_id] >= visibility_prob[seller_id]:
+                    blocked[NO_PURCHASE_UNNOTICED] += 1
+                    continue
+                noticed[seller_id] += 1
+
+                p = price[seller_id]
+                bonus = 0.0
+                if cfg.has_loyalty and seller_id == last_seller[buyer_id]:
+                    bonus = cfg.loyalty_bonus_per_streak * min(
+                        streak[buyer_id], cfg.loyalty_streak_cap
+                    )
+                p_purchase = purchase_probability(
+                    cfg,
+                    budget[buyer_id],
+                    p,
+                    preference[buyer_id, seller_id],
+                    alpha[buyer_id],
+                    price_reference,
+                    loyalty_bonus=bonus,
+                )
+                wants = p_purchase > purchase_draw[buyer_id, seller_id]
+                can_afford = p <= budget[buyer_id]
+                in_stock = inventory[seller_id] > 0
+
+                if not (wants and can_afford and in_stock):
+                    if not can_afford:
+                        blocked[NO_PURCHASE_BUDGET] += 1
+                        key = (buyer_class[buyer_id], seller_class[seller_id])
+                        blocked_pairs[key] = blocked_pairs.get(key, 0) + 1
+                    elif not in_stock:
+                        blocked[NO_PURCHASE_INVENTORY] += 1
+                    else:
+                        blocked[NO_PURCHASE_UTILITY] += 1
+                    continue
+
+                budget_before = float(budget[buyer_id])
+                budget[buyer_id] -= p
+                inventory[seller_id] -= 1
+                buyer_n_purchases[buyer_id] += 1
+                buyer_total_spent[buyer_id] += p
+                seller_n_sold[seller_id] += 1
+                seller_revenue[seller_id] += p
+                bought_this_week[buyer_id].append(seller_id)
+                transactions.append(
+                    Transaction(
+                        seed=seed,
+                        buyer_id=buyer_id,
+                        buyer_class=buyer_class[buyer_id],
+                        seller_id=seller_id,
+                        seller_class=seller_class[seller_id],
+                        visit_order=visit_order,
+                        price=float(p),
+                        budget_before=budget_before,
+                        budget_after=float(budget[buyer_id]),
+                        seller_inventory_after=int(inventory[seller_id]),
+                    )
+                )
+
+        chosen = np.array([_choice_of_week(b) for b in bought_this_week])
+        for b in range(n_buyers):
+            if chosen[b] < 0:
+                continue  # bought nothing: memory and streak both carry over
+            streak[b] = streak[b] + 1 if chosen[b] == last_seller[b] else 1
+            last_seller[b] = chosen[b]
+
+        weeks.append(
+            RunResult(
+                config_name=cfg.name,
+                seed=seed,
+                buyer_classes=buyer_class,
+                seller_classes=seller_class,
+                transactions=transactions,
+                buyer_n_purchases=buyer_n_purchases,
+                buyer_total_spent=buyer_total_spent,
+                buyer_budget_remaining=budget,
+                seller_n_sold=seller_n_sold,
+                seller_revenue=seller_revenue,
+                seller_inventory_remaining=inventory,
+                blocked_counts=blocked,
+                blocked_by_budget_pairs=blocked_pairs,
+                seller_noticed=noticed,
+                promoted_seller=promoted,
+                effective_prices=price.copy(),
+            )
+        )
+        chosen_hist.append(chosen)
+        attended_hist.append(attends.copy())
+        streak_hist.append(streak.copy())
+
+    return SeasonResult(
+        config_name=cfg.name,
+        seed=seed,
+        weeks=weeks,
+        chosen_seller=np.array(chosen_hist),
+        attended=np.array(attended_hist),
+        streaks=np.array(streak_hist),
+    )
+
+
+def run_season_seeds(cfg: MarketConfig) -> list[SeasonResult]:
+    return [run_season(cfg, seed) for seed in cfg.seeds]

@@ -183,3 +183,45 @@ def write_all(
         frame.to_csv(path, index=False)
         paths[name] = path
     return paths
+
+
+def weekly_summary_frame(cfg: MarketConfig, seasons: list) -> pd.DataFrame:
+    """Phase 6's new table: one row per (seed, week).
+
+    `attendance_rate` and `purchase_rate` are kept separate on purpose - a
+    buyer can show up and buy nothing, and conflating them would make this
+    column incomparable with Phases 1-5's participation_rate.
+    """
+    rows = []
+    for season in seasons:
+        stability = season.pair_stability()
+        attendance = season.attendance_rate()
+        purchase = season.purchase_rate()
+        for w, week in enumerate(season.weeks):
+            row = {
+                "seed": season.seed,
+                "week_number": w,
+                "attendance_rate": float(attendance[w]),
+                "purchase_rate": float(purchase[w]),
+                "buyer_seller_pair_stability": float(stability[w]),
+                "mean_loyalty_streak": float(
+                    season.streaks[w][season.chosen_seller[w] >= 0].mean()
+                    if (season.chosen_seller[w] >= 0).any()
+                    else np.nan
+                ),
+                "total_revenue": week.total_revenue,
+                "promotion_seller_id": week.promoted_seller
+                if week.promoted_seller is not None
+                else -1,
+            }
+            bought = [t for t in week.transactions]
+            for bc in cfg.buyer_classes:
+                own = [t for t in bought if t.buyer_class == bc.name]
+                for sc in cfg.seller_tier_names():
+                    row[f"{bc.name}_to_{sc}_share"] = (
+                        sum(1 for t in own if t.seller_class == sc) / len(own)
+                        if own
+                        else np.nan
+                    )
+            rows.append(row)
+    return pd.DataFrame(rows)

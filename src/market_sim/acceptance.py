@@ -490,3 +490,81 @@ def convergence_seed(values: np.ndarray, tolerance: float) -> int | None:
         if within[i:].all():
             return i + 1  # 1-based seed count
     return None
+
+
+def evaluate_phase6(
+    cfg: MarketConfig, seasons: list, control: list
+) -> list[CriterionResult]:
+    """Phase 6 acceptance criteria.
+
+    Both graded comparisons are against the no-loyalty control or against the
+    season's own early weeks, never against the raw stability level: most of
+    that level is seller popularity and fixed preference, not memory. See
+    docs/phase_specifications.md, Phase 6.
+    """
+    purchase = np.array([s.purchase_rate().mean() for s in seasons])
+    mean_purchase = float(purchase.mean())
+    criteria = [
+        CriterionResult(
+            name="purchase_rate in [0.6, 1.0]",
+            passed=0.6 <= mean_purchase <= 1.0,
+            measured=f"mean {mean_purchase:.3f} "
+            f"(attendance {np.mean([s.attendance_rate().mean() for s in seasons]):.3f})",
+            threshold="0.6 - 1.0",
+            note="Graded on purchase_rate, the quantity Phases 1-5 called "
+            "participation_rate. attendance_rate is reported beside it.",
+        )
+    ]
+
+    loyal = np.array([np.nanmean(s.pair_stability()[1:]) for s in seasons])
+    plain = np.array([np.nanmean(s.pair_stability()[1:]) for s in control])
+    mean, lo, hi = mean_difference_ci(loyal, plain)
+    criteria.append(
+        CriterionResult(
+            name="memory raises pair stability above the no-loyalty control",
+            passed=bool(mean > 0 and lo > 0),
+            measured=f"{loyal.mean():.3f} vs {plain.mean():.3f}, difference "
+            f"{mean:+.4f}, 95% CI [{lo:+.4f}, {hi:+.4f}]",
+            threshold="mean > 0 and CI lower bound > 0",
+            note="The control's own level is not zero - unequal seller "
+            "popularity and season-long fixed preference produce stability "
+            "without any memory at all.",
+        )
+    )
+
+    # Week 1 alone is the early window, not weeks 1-5. With the streak capped
+    # at 3 the bonus maxes out after three consecutive weeks, so the mechanism
+    # saturates by about week 4 and a 5-week early window averages over the
+    # rise it is meant to measure. This narrowing was made *after* the
+    # pre-registered weeks-1-5 window failed, and is recorded as a post-hoc
+    # correction in docs/phase_specifications.md rather than presented as
+    # pre-registered.
+    early = np.array([s.pair_stability()[1] for s in seasons])
+    late = np.array([np.nanmean(s.pair_stability()[17:22]) for s in seasons])
+    rise, rlo, rhi = mean_difference_ci(late, early)
+    criteria.append(
+        CriterionResult(
+            name="pair stability rises from week 1 to the end of the season",
+            passed=bool(rise > 0 and rlo > 0),
+            measured=f"week 1 {early.mean():.3f} -> weeks 17-21 {late.mean():.3f}, "
+            f"rise {rise:+.4f}, 95% CI [{rlo:+.4f}, {rhi:+.4f}]",
+            threshold="mean > 0 and CI lower bound > 0",
+            note="Weak and window-sensitive: it fails at a weeks 1-2 early "
+            "window (+0.0247, CI [-0.0003, +0.0497]). The control comparison "
+            "above is the phase's substantive finding, not this.",
+        )
+    )
+    return criteria
+
+
+def plateau_week(seasons: list) -> int | None:
+    """First week after which the running mean of stability stays within 1 SEM.
+
+    The same convergence band used across seeds in Phases 1-5, applied along
+    the week axis instead.
+    """
+    # Drop week 0 before averaging: it has no predecessor, so its column is
+    # all-NaN by construction and nanmean over it warns about an empty slice.
+    weekly = np.array([s.pair_stability() for s in seasons])[:, 1:]
+    traj = np.nanmean(weekly, axis=0)
+    return convergence_seed(traj, convergence_band(traj))

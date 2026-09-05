@@ -26,6 +26,11 @@ class BuyerClass:
     #: Descriptive only — income does not enter the purchase rule in any phase
     #: through Phase 8. Recorded so the population is documented, not used.
     income: float | None = None
+    #: Phase 6 onward: probability this class shows up in a given week. None
+    #: means "always shows up", which is what Phases 1-5 assume. A buyer who
+    #: does not show up makes no purchase decision at all - distinct from one
+    #: who shopped and bought nothing.
+    attendance_probability: float | None = None
 
 
 @dataclass(frozen=True)
@@ -77,6 +82,17 @@ class MarketConfig:
     budget_coef: float = 0.05
     preference_coef: float = 1.5
     sigmoid_offset: float = 2.0
+
+    #: Phase 6 onward: weeks in one season. None means a single static
+    #: session, which is what Phases 1-5 are.
+    weeks: int | None = None
+    #: Phase 6: loyalty bonus per consecutive week of the same choice,
+    #: `bonus * min(streak, cap)`. 0.0 disables it, which is the control arm.
+    loyalty_bonus_per_streak: float = 0.0
+    #: Capped so the maximum bonus equals preference_coef: habit can match the
+    #: strongest taste difference but never override it. See
+    #: docs/phase_specifications.md, Phase 6.
+    loyalty_streak_cap: int = 3
 
     #: Phase 5: budget-cliff nonlinearity. None disables it entirely (Phases
     #: 1-4). A float is the gap below which the penalty applies:
@@ -158,6 +174,25 @@ class MarketConfig:
     @property
     def has_environment(self) -> bool:
         return any(c.position_score is not None for c in self.seller_classes)
+
+    @property
+    def has_weeks(self) -> bool:
+        return self.weeks is not None
+
+    @property
+    def has_loyalty(self) -> bool:
+        return self.loyalty_bonus_per_streak > 0
+
+    def attendance_prob_of(self) -> list[float]:
+        """Attendance probability per buyer id. All 1.0 before Phase 6."""
+        return [
+            c.attendance_probability if c.attendance_probability is not None else 1.0
+            for c in self.buyer_classes
+            for _ in range(c.count)
+        ]
+
+    def max_loyalty_bonus(self) -> float:
+        return self.loyalty_bonus_per_streak * self.loyalty_streak_cap
 
     @property
     def has_budget_cliff(self) -> bool:
@@ -399,3 +434,49 @@ PHASE5_ADDITIVE = _phase5("phase5_additive", cliff=0.5, linear_term=True)
 #: once by the project's own accounting, which is part of what the three-way
 #: comparison is meant to expose.
 PHASE5_CLIFF_ONLY = _phase5("phase5_cliff_only", cliff=0.5, linear_term=False)
+
+
+# --------------------------------------------------------------------------
+# Phase 6 — Repeated Interaction (history becomes real here)
+# --------------------------------------------------------------------------
+
+#: Phase 4's market with a time axis. Phase 5 rejected the budget cliff, so the
+#: single-week mechanics inherited here are the linear ones - see
+#: docs/phase_specifications.md, Phase 5's recorded result.
+_PHASE6_BUYERS = tuple(
+    BuyerClass(
+        name=c.name,
+        count=c.count,
+        budget_per_visit=c.budget_per_visit,
+        price_sensitivity=c.price_sensitivity,
+        income=c.income,
+        attendance_probability=p,
+    )
+    for c, p in zip(PHASE4_MAIN.buyer_classes, (0.85, 0.84, 0.82))
+)
+
+
+def _phase6(name: str, loyalty: float) -> MarketConfig:
+    return MarketConfig(
+        name=name,
+        phase=6,
+        buyer_classes=_PHASE6_BUYERS,
+        seller_classes=PHASE4_MAIN.seller_classes,
+        seeds=PHASE4_MAIN.seeds,
+        weeks=22,
+        loyalty_bonus_per_streak=loyalty,
+        loyalty_streak_cap=3,
+        promotion_probability=PHASE4_MAIN.promotion_probability,
+        promotion_discount=PHASE4_MAIN.promotion_discount,
+    )
+
+
+#: 22 weeks, memory accumulating up to a bonus of 0.5 * 3 = 1.5 - equal to
+#: preference_coef, so habit can match the strongest taste difference without
+#: overriding it.
+PHASE6_MAIN = _phase6("phase6_main", loyalty=0.5)
+
+#: Control arm: identical market, loyalty disabled. Required because most of
+#: the raw pair-stability level is seller popularity and fixed preference
+#: rather than memory - see docs/phase_specifications.md, Phase 6.
+PHASE6_NO_LOYALTY = _phase6("phase6_no_loyalty", loyalty=0.0)
