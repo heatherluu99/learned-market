@@ -146,28 +146,47 @@ def cache_path(provider: str) -> Path:
     return RESULTS_ROOT / provider / "agent_cache.json"
 
 
-def load_cache(provider: str, model: str) -> dict[str, list[float]]:
+def cache_key(model: str, settings: dict) -> str:
+    """What the answers in a cache section were actually produced under.
+
+    The model alone is not enough. A run spread over days is only sound if
+    every answer in it came from the same conditions, and the decoding
+    settings are conditions: the thinking budget in particular changes the
+    answer. Keyed on the model alone, editing a setting mid-week would serve
+    the old settings' answers under the new settings' name - the same class of
+    error as serving one model's answers under another's, and just as silent.
+    """
     import json
+    return f"{model} {json.dumps(settings, sort_keys=True)}"
+
+
+def load_cache(provider: str, model: str, settings: dict) -> dict[str, list[float]]:
+    import json
+    key = cache_key(model, settings)
     path = cache_path(provider)
     if path.exists():
-        return json.loads(path.read_text()).get(model, {})
+        return json.loads(path.read_text()).get(key, {})
     # A run that finished under the shared-file layout still has answers worth
-    # keeping; they are read from there once and rewritten split.
+    # keeping; they are read from there once and rewritten split. That layout
+    # was keyed on the bare model name, and those answers were produced under
+    # today's settings, so they are claimed only for today's key.
     if LEGACY_CACHE.exists():
         return json.loads(LEGACY_CACHE.read_text()).get(model, {})
     return {}
 
 
-def save_cache(provider: str, model: str, answers: dict[str, list[float]]) -> None:
+def save_cache(provider: str, model: str, settings: dict,
+               answers: dict[str, list[float]]) -> None:
     import json
     path = cache_path(provider)
     path.parent.mkdir(parents=True, exist_ok=True)
     everything = json.loads(path.read_text()) if path.exists() else {}
-    everything[model] = answers
+    everything[cache_key(model, settings)] = answers
     path.write_text(json.dumps(everything))
 
 
-def agent_distributions(records, client, usage, provider: str, model: str, rpm: int) -> tuple[np.ndarray, int]:
+def agent_distributions(records, client, usage, provider: str, model: str,
+                        settings: dict, rpm: int) -> tuple[np.ndarray, int]:
     """One distribution per occasion, querying each distinct prompt once.
 
     Deduplicated *before* querying rather than cached during it, so the work is
@@ -180,7 +199,7 @@ def agent_distributions(records, client, usage, provider: str, model: str, rpm: 
     prompts = [agent.describe_choice(r["alternatives"], r["history"]) for r in records]
     distinct = list(dict.fromkeys(prompts))
     usage.cached = len(prompts) - len(distinct)
-    cache = load_cache(provider, model)
+    cache = load_cache(provider, model, settings)
     todo = [p for p in distinct if p not in cache]
     if cache:
         print(f"    {len(cache):,} answers already on disk; {len(todo):,} to fetch",
@@ -226,7 +245,7 @@ def agent_distributions(records, client, usage, provider: str, model: str, rpm: 
             parsed = [1 / len(BRANDS)] * len(BRANDS)
         cache[prompt] = parsed
     usage.seconds = wall
-    save_cache(provider, model, cache)
+    save_cache(provider, model, settings, cache)
     if exhausted is not None:
         remaining = len(distinct) - len(results)
         print(f"\n    Daily quota reached with {remaining:,} prompts still to "
@@ -348,7 +367,7 @@ def main() -> int:
     build = agent.gemini_client if args.provider == "gemini" else agent.groq_client
     client = build(model, **provider["limits"], **settings)
     print("  Querying the Agent (cached on model and bucketed prompt)...", flush=True)
-    a, unparsed = agent_distributions(records, client, usage, args.provider, model,
+    a, unparsed = agent_distributions(records, client, usage, args.provider, model, settings,
                                      provider["limits"]["requests_per_minute"])
     print(f"  {usage.as_row()}\n")
 

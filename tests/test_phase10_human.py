@@ -177,17 +177,22 @@ def test_agent_cache_cannot_serve_one_model_s_answers_for_another(tmp_path, monk
     monkeypatch.setattr(run, "RESULTS_ROOT", tmp_path)
     monkeypatch.setattr(run, "LEGACY_CACHE", tmp_path / "nonexistent.json")
 
-    run.save_cache("groq", "model-a", {"a prompt": [1.0, 0.0]})
-    run.save_cache("gemini", "model-b", {"a prompt": [0.0, 1.0]})
+    s0 = {"temperature": 0.0}
+    run.save_cache("groq", "model-a", s0, {"a prompt": [1.0, 0.0]})
+    run.save_cache("gemini", "model-b", s0, {"a prompt": [0.0, 1.0]})
 
-    assert run.load_cache("groq", "model-a") == {"a prompt": [1.0, 0.0]}
-    assert run.load_cache("gemini", "model-b") == {"a prompt": [0.0, 1.0]}
+    assert run.load_cache("groq", "model-a", s0) == {"a prompt": [1.0, 0.0]}
+    assert run.load_cache("gemini", "model-b", s0) == {"a prompt": [0.0, 1.0]}
     # Separate files, so neither run's single final write can clobber the other.
     assert run.cache_path("groq") != run.cache_path("gemini")
     assert run.cache_path("groq").exists() and run.cache_path("gemini").exists()
     # A model that has never run has no answers, rather than inheriting them.
-    assert run.load_cache("groq", "model-never-queried") == {}
-    assert run.load_cache("gemini", "model-a") == {}
+    assert run.load_cache("groq", "model-never-queried", s0) == {}
+    assert run.load_cache("gemini", "model-a", s0) == {}
+    # Decoding settings are conditions, not conveniences: the thinking budget
+    # changes the answer, so answers produced under one setting are not
+    # served under another.
+    assert run.load_cache("groq", "model-a", {"temperature": 1.0}) == {}
 
 
 def test_legacy_shared_cache_is_still_readable(tmp_path, monkeypatch):
@@ -204,8 +209,8 @@ def test_legacy_shared_cache_is_still_readable(tmp_path, monkeypatch):
     legacy.write_text(json.dumps({"model-a": {"a prompt": [1.0, 0.0]}}))
     monkeypatch.setattr(run, "LEGACY_CACHE", legacy)
 
-    assert run.load_cache("groq", "model-a") == {"a prompt": [1.0, 0.0]}
-    assert run.load_cache("groq", "model-b") == {}
+    assert run.load_cache("groq", "model-a", {}) == {"a prompt": [1.0, 0.0]}
+    assert run.load_cache("groq", "model-b", {}) == {}
 
 
 def test_both_providers_are_declared_arms_with_frozen_settings():
@@ -262,3 +267,41 @@ def test_each_agent_arm_writes_into_its_own_directory(tmp_path):
 
     assert not (tmp_path / "human_vs_agent.png").exists()
     assert len(list(tmp_path.glob("*/human_vs_agent.png"))) == 2
+
+
+def test_the_agent_prompt_is_pinned():
+    """A canary on the exact prompt text, because the run is spread over days.
+
+    The cache is keyed on the prompt, which invalidates it correctly but
+    silently: an innocent-looking edit to `describe_choice` would discard a
+    week of paid-for answers and start again at zero, and nothing would say
+    so. Changing the prompt is allowed - it is a registered change to the
+    Agent's observation set - but it should take deleting this expectation,
+    not a wording tweak nobody noticed.
+    """
+    from market_sim import agent
+
+    alternatives = [
+        {"brand": b, "price": p, "display": 0, "feature": 0}
+        for b, p in [("kleebler", 90), ("nabisco", 120),
+                     ("private", 70), ("sunshine", 100)]
+    ]
+
+    first = agent.describe_choice(alternatives, {"last": None, "top": None,
+                                                 "top_share": 0.0})
+    assert first == (
+        "Shelf today:\n"
+        "- kleebler: 90 cents\n"
+        "- nabisco: 120 cents\n"
+        "- private: 70 cents\n"
+        "- sunshine: 100 cents\n"
+        "This is the first recorded trip for this household."
+    )
+
+    repeat = agent.describe_choice(alternatives, {"last": "nabisco",
+                                                  "top": "nabisco",
+                                                  "top_share": 1.0})
+    assert repeat.endswith(
+        "Last trip it bought nabisco. Over its recent trips it bought "
+        "nabisco most often (100% of the time)."
+    )

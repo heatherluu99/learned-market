@@ -1,0 +1,17 @@
+=== 2026-09-06 12:46:29 PDT ===
+
+=== Phase 10 — human panel, Agent, and two baselines ===
+  Given the same choice sets and the same household history, does an LLM Agent recover sequential structure in real purchase behaviour that a conditional choice model does not already capture?
+
+  3,289 occasions, conditioned on participation.
+  Agent: openai/gpt-oss-120b, settings frozen at {'temperature': 0.0, 'reasoning_effort': 'low', 'max_tokens': 512}
+
+  Querying the Agent (cached on model and bucketed prompt)...
+    311 answers already on disk; 1,901 to fetch
+    3,289 occasions -> 1,901 distinct prompts (32.7% deduplicated)
+    request-paced at 30/min: expect about 75 minutes
+
+    Daily quota reached with 1,897 prompts still to fetch. 315 answers are saved; re-run tomorrow and it resumes.
+    Error code: 429 - {'error': {'message': 'Rate limit reached for model `openai/gpt-oss-120b` in organization `org_01kz033re7ehtvsba3brc6cvcv` service tier `on_de
+--- exit 2 ---
+

@@ -3112,6 +3112,225 @@ into a brand-choice fidelity number.
 
 ---
 
+## Loyalty v2 — a human-constrained relationship-state branch
+
+**Phases 1–10 are frozen and nothing in them is re-run under this
+specification.** This is a new pre-registered branch with its own gates and its
+own result rows. Where it disagrees with an earlier phase, both stand, labelled
+by the mechanism each was measured under.
+
+### The specification
+
+```
+L[b,s,t+1] = rho * L[b,s,t] + (1 - rho) * 1{y[b,t] = s}         L in [0, 1]
+
+bonus[b,s,t] = gamma * L[b,s,t]
+
+U = intercept - alpha*(p/p_ref) + 1.5*preference + budget + gamma*L
+P(buy) = sigmoid((U - 2) / tau)
+```
+
+History enters the utility **linearly**; the only nonlinearity in the pipeline
+is the choice sigmoid that was always there. `L` is bounded in [0, 1] by
+construction rather than by a saturating transform.
+
+**This is Guadagni & Little (1983), and this document already said so.** The
+Phase 10 section cites their loyalty stock as `L_ijt = lambda*L_ij,t-1 +
+(1 - lambda)*I(Y_i,t-1 = j)` and calls it "the academic ancestor of this
+project's own loyalty mechanism." The specification above *is* that expression.
+What Phase 7e built was a variant that had drifted from it in three separate
+ways, and this branch is a return to the canonical form rather than an
+invention.
+
+### What changed from Phase 7e's stock, and why
+
+| Phase 7e | v2 | reason |
+|---|---|---|
+| `L <- rho*L + beta*(...)`, `beta = 2(1-rho)` | `L <- rho*L + (1-rho)*1{buy}` | `beta` was already a function of `rho`, so the second degree of freedom was nominal. Normalizing makes `L` bounded in [0,1] and leaves `rho` as the one memory parameter, read directly as retention. |
+| `bonus = L_max * tanh(L/L*)`, `L_max` solved per cell | `bonus = gamma * L` | one problem, not two — see below |
+| `delta = 0.25`, active | `delta = 0` | a separate behavioural hypothesis, and an identification problem — see below |
+
+**The saturating transform and the per-cell calibration were the same defect.**
+Under `tanh`, the bonus a buyer actually receives depends on where its own `L`
+sits on the curve, and the distribution of `L` across buyers depends on how
+often they buy, which varies with `rho`. So the realized strength of the
+mechanism was cell-dependent and `L_max` had to be solved per cell to make the
+cells comparable. That solution then invited the obvious objection: if two
+mechanisms are each re-tuned per cell and come out similar, is the similarity
+the mechanisms' or the tuning's? Removing `tanh` removes the cause. With `L` in
+[0,1] and the bonus linear, the maximum effect is `gamma` exactly, the same
+number in every cell, calibrated nowhere.
+
+### Correction to Phase 7e's recorded scope
+
+`MarketConfig.loyalty_deal_sensitivity` defaults to `0.0`, but
+`PHASE7E_DELTA = 0.25` and **every Phase 7e cell that ran used it**. With price
+arms `(0.8, ..., 1.2)` and `arm_half_range = 0.2`, the accrual multiplier ran
+from 0.75 at the highest arm to 1.25 at the deepest discount. Promotion-
+dependent reinforcement was not a dormant option in those runs; it was on.
+
+Phase 7e's results are **not withdrawn**. They are re-labelled: Phase 7e tested
+a **compound** mechanism —
+
+```
+persistent relationship stock + promotion-dependent reinforcement
+                              + nonlinear saturation
+```
+
+— and its findings hold for that compound. What may not be said of them is that
+they isolate relationship persistence. This branch performs the decomposition:
+M2 is the pure relationship stock, `H_promo` is the reinforcement term, and the
+saturating transform is dropped as a functional-form assumption rather than
+carried.
+
+### The pre-registered grid
+
+```
+rho   in {0.50, 0.80, 0.95}      half-life {1.0, 3.1, 13.5} weeks
+gamma in {0.75, 1.50, 3.00}      max log-odds effect gamma/tau
+```
+
+`gamma = 1.5` is not a free choice: it is Phase 6's streak maximum,
+`kappa * C = 0.5 * 3`, so the grid is 0.5x / 1x / 2x around the value every
+earlier phase already used. At `tau = 1` the three levels are odds ratios of
+2.1, 4.5 and 20.
+
+`gamma = 3.0` is a **stress point, not a claim about the world.** No assertion
+is made that real loyalty carries an odds ratio of 20. The cell exists to ask
+whether even very strong causal leverage puts the simulator inside the
+human-compatible region — a diagnostic that a more conservative ceiling could
+not perform.
+
+### Gate A — empirical admissibility (primary)
+
+For each of the nine cells, compute the simulator's state dependence by the
+**same causal ablation Phase 10 used** for its `+0.109`: the identical seeds
+re-run with the loyalty bonus disabled and fixed preference retained, so memory
+is removed and heterogeneity is held constant. Neither mechanism draws
+randomness, so treatment and control are paired down to the draw.
+
+Each cell is then marked by whether
+
+```
+0.02 <= SD_sim(rho, gamma) <= 0.36
+```
+
+the pre-registered human interval from Phase 10, whose endpoints are a lower
+bound (household intercepts absorb some genuine state dependence) and an upper
+bound (marginal shares remove concentration and nothing else).
+
+**The output is a region, not a winner.**
+
+```
+Theta_H = { (rho, gamma) : SD_sim in the human interval }
+```
+
+The question this answers is *which loyalty regimes the human evidence rules
+out*, and selecting a single best cell is explicitly not the goal. A result in
+which most of the grid is admissible is informative in one direction; one in
+which the interval excludes most of it is informative in the other.
+
+**Language discipline — this is calibration, not estimation.** No likelihood is
+maximized and no posterior over `(rho, gamma)` is formed. The map runs
+`(rho, gamma) -> SD_sim`, and the human interval is applied to the image. The
+admissible claim is
+
+> Human data empirically constrain the admissible region of the loyalty
+> parameter space.
+
+and never "we estimate `rho` and `gamma`." Keane (1997) and that literature
+estimate a choice model that separates heterogeneity from structural state
+dependence; this is simulator calibration against an interval, which is a
+weaker and different thing. Any write-up that blurs the two is wrong.
+
+### Gate B — dynamic validity, inside the admissible region only
+
+Longitudinal tests are run **only on cells that pass Gate A**: path dependence,
+shock and recovery, and Phase 9c's amplification. Running them across the whole
+grid and reporting the cells that came out well would be the same post-hoc
+selection Gate A exists to avoid.
+
+The question this poses is the one worth asking:
+
+> Among loyalty specifications consistent with observed human state dependence,
+> which generate persistent market-level dynamics?
+
+which links a micro behavioural constraint to macro emergence:
+
+```
+human state dependence -> (rho, gamma) -> micro persistence -> macro path dependence
+```
+
+**Phase 9c becomes quantitative here.** Its conclusion was qualitative —
+`amplification ~ R x state persistence` — because persistence had no single
+name. It now has two: `rho` for how long memory lasts and `gamma` for how hard
+it pushes. So amplification can be measured as `A = A(R, rho, gamma)` with
+pre-registered signs
+
+```
+dA/drho > 0 ?        dA/dgamma > 0 ?        d2A/(dR drho) > 0 ?
+```
+
+the interaction being the interesting one: when learner feedback is stronger,
+does more persistent buyer memory amplify disproportionately? That is mechanism
+characterization, not robustness.
+
+### Gate C — mechanism robustness
+
+```
+M0  no loyalty
+M1  streak / recency state          kappa * min(streak, C)      (ablation)
+M2  exponentially decayed relationship state                    (main)
+```
+
+M1 is **not deleted and not deprecated.** It encodes a different theory —
+loyalty as consecutive repeat behaviour — against M2's accumulated decaying
+relationship, and it stays as a structural ablation.
+
+Gate C does **not** require M1 and M2 to agree numerically. It asks whether the
+qualitative conclusion depends on the representation. **Pre-registered now, so
+it cannot be fitted later:** if M1 shows no path dependence while
+human-admissible M2 cells do, that is not a robustness failure. It is the
+substantive result
+
+> Finite streak memory suppresses history dependence that emerges under
+> persistent seller-specific relationship memory.
+
+and equally, if the earlier path-dependence null survives across the admissible
+region, the null is strengthened rather than merely repeated — it would then
+hold under a mechanism explicitly built to be more persistent than the one that
+first produced it.
+
+### H_promo — deferred, and why
+
+```
+delta = 0 in every cell of this branch.
+```
+
+Not for cost. For identification. With `rho` moving memory persistence and
+`gamma` moving effect strength, adding `delta` would make a change in state
+dependence attributable to persistence, to strength, or to
+`delta x price exposure`, and the three would not be separable — which is the
+confound this branch exists to remove.
+
+Promotion-dependent reinforcement is a genuine and separate dynamic question,
+and the literature treats it as one: Seetharaman separates structural state
+dependence from lagged marketing carryover as distinct sources. It gets its own
+hypothesis later, with a grid `delta in {-0.25, 0, +0.25}` and **a sign that
+must be predicted before it is run**, because two opposite stories are both
+plausible — a discount is a positive experience that reinforces, or a
+discount-acquired buyer is deal-prone and less attached. A test that would
+accept either direction as confirmation tests nothing.
+
+### Scope
+
+Frozen: Phases 1–10, including all Phase 7e results under their compound label.
+Re-run under this branch: Phase 6 path dependence and shock/recovery, Phase 7e's
+three gates, Phase 9c amplification, and Phase 10's simulator arm `S`. **Phase
+10's Agent arm `A` is not re-run** — it is quota-bound and its comparison is
+against the human panel, not against the simulator's loyalty specification.
+
+
 ## Phase 11 — Bias Quantification (Asset A formalizes; Asset B built)
 
 **Research question:** Is the human-AI gap systematic and predictable, and can it be corrected?

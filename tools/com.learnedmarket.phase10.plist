@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.learnedmarket.phase10</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/luxier/learned_market/tools/phase10_daily.sh</string>
+  </array>
+
+  <!-- Every four hours rather than once a day: the provider's quota resets on
+       its clock, not ours, and a run that finds nothing left costs seconds.
+       launchd will not start a second copy while one is still running. -->
+  <key>StartInterval</key>
+  <integer>14400</integer>
+
+  <!-- Catch up after the machine has been asleep, so a closed lid does not
+       silently cost a day of a seven-day job. -->
+  <key>RunAtLoad</key>
+  <true/>
+
+  <key>StandardOutPath</key>
+  <string>/Users/luxier/learned_market/results/phase10/daily_logs/launchd.out</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/luxier/learned_market/results/phase10/daily_logs/launchd.err</string>
+</dict>
+</plist>
