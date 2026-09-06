@@ -1357,8 +1357,41 @@ standard linear contextual bandit, used here in its original form rather than
 with a learned representation, since the state is three interpretable features
 rather than raw observations.
 
-**Exit condition:** `git tag phase7e3a-context`, with both measurements
-recorded.
+**The oracle diagnostic's result, which is decisive.** Over 460 seller-weeks of
+one-week deviations, split at the median loyalty state, the profit-maximizing
+arm is **1.00× in both halves**, and the whole profit curve has the same shape
+on both sides of the split:
+
+| loyalty state | 0.80× | 0.90× | **1.00×** | 1.10× | 1.20× |
+|---|---|---|---|---|---|
+| at or below median | −5.12 | −0.62 | **0.00** | −11.58 | −25.05 |
+| above median | −7.40 | −2.27 | **0.00** | −9.76 | −22.04 |
+
+A seller with a highly loyal base and one with a weak base want the same price.
+The state exists, is dispersed, and persists — gate 1 established all three —
+and it still does not change what to charge. **7c's finding survives the
+mechanism change.**
+
+**Why, and it connects back to 7e-2.** No *one-week* deviation pays at any
+state, but a *sixteen-week* one pays 2.6%. The exploitable structure in this
+market is a sustained commitment, not a state-contingent weekly choice — and a
+contextual bandit choosing week by week is the wrong instrument for it by
+construction. That is a sharper statement than either sub-stage makes alone.
+
+**Escalation rule for an inconclusive learned comparison, registered before it
+is applied.** On the standard 30-seed evaluation block the learned comparison
+came back **−3.1%, 95% CI [−5.4%, −0.8%] — inconclusive**, its interval
+straddling the −5% materiality boundary. Gate 3a asks for a verdict, so an
+inconclusive interval is a failure to measure rather than a finding, and the
+registered response is Phase 5's: **widen the sample, never the threshold.**
+Phase 5's cliff-only arm was inconclusive at 30 seeds and was settled at 1000.
+The evaluation is therefore repeated on **seeds 0–299**, chosen before the
+result is seen, disjoint from the 2000–2059 tuning block, and the 30-seed
+numbers are reported alongside rather than replaced. Should 300 seeds still not
+decide it, that is itself the result and no further widening is done — the
+escalation happens once.
+
+**Exit condition:** `git tag phase7e3a-context`.
 
 ---
 

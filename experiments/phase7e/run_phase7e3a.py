@@ -42,6 +42,12 @@ LOG_PATH = REPO_ROOT / "experiment_log.csv"
 CARRIED_LMAX, CARRIED_DELTA, ORACLE_PRICE = 3.30, 1.0, 2.65
 DISCOVERY_SEEDS = tuple(range(2000, 2060))
 EVAL_SEEDS = tuple(range(30))
+#: Applied only when the 30-seed comparison comes back inconclusive, and applied
+#: once. Phase 5's rule: an interval that straddles the materiality boundary is
+#: a failure to measure, and the response is more seeds, never a softer
+#: threshold. Chosen before the result was seen and disjoint from the tuning
+#: block. See docs/phase_specifications.md, Phase 7e-3a.
+RESOLUTION_SEEDS = tuple(range(300))
 TARGET = 0
 
 ALPHAS = (0.1, 0.25, 0.5, 1.0)
@@ -179,10 +185,36 @@ def main() -> int:
         mark = "----" if not c.graded else ("PASS" if c.passed else "FAIL")
         print(f"\n    [{mark}] {c.name}\n           {c.measured}")
 
+    # ---- 4. escalation, once, if the interval straddles the boundary --------
+    resolution, seed_block = None, EVAL_SEEDS
+    if not criteria[0].passed:
+        print(f"\n  Inconclusive at {len(EVAL_SEEDS)} seeds. Widening the sample "
+              f"to {len(RESOLUTION_SEEDS)}, which is the registered response - "
+              f"more seeds, never a softer threshold.")
+        flat_eval = acceptance.schedule_profit(env, flat_plan, RESOLUTION_SEEDS, TARGET)
+        resolution = {"flat at the oracle price": flat_eval}
+        for name in ("UCB1", "LinUCB blind", "LinUCB context"):
+            param = float(best.loc[name, "param"])
+            factory = (functools.partial(bandits.UCB1, c=param) if name == "UCB1"
+                       else functools.partial(
+                           bandits.LinUCB, alpha=param,
+                           features=bandits.BLIND if "blind" in name
+                           else bandits.CONTEXT))
+            resolution[name] = bandits.run(env, factory, RESOLUTION_SEEDS, TARGET)
+        for name, v in resolution.items():
+            print(f"    {name:26s} {v.mean():6.2f}/wk")
+        criteria = acceptance.evaluate_phase7e3a(
+            resolution["LinUCB context"], resolution["LinUCB blind"],
+            resolution["UCB1"], flat_eval)
+        for c in criteria:
+            mark = "----" if not c.graded else ("PASS" if c.passed else "FAIL")
+            print(f"\n    [{mark}] {c.name}\n           {c.measured}")
+        scored, seed_block = resolution, RESOLUTION_SEEDS
+
     # ---- artefacts ---------------------------------------------------------
     dev.to_csv(RESULTS_ROOT / "oracle_context.csv", index=False)
     tune.to_csv(RESULTS_ROOT / "tuning.csv", index=False)
-    pd.DataFrame({"seed": EVAL_SEEDS, **scored}).to_csv(
+    pd.DataFrame({"seed": seed_block, **scored}).to_csv(
         RESULTS_ROOT / "held_out.csv", index=False)
     plot(dev, tune, scored, arm_cols, median, env)
 
@@ -195,7 +227,8 @@ def main() -> int:
         "experiment_id": "phase7e3a_context", "git_commit": commit,
         "config_file": "src/market_sim/bandits.py",
         "phase": 7,
-        "seed": f"tune {DISCOVERY_SEEDS[0]}-{DISCOVERY_SEEDS[-1]}, evaluate 0-29",
+        "seed": (f"tune {DISCOVERY_SEEDS[0]}-{DISCOVERY_SEEDS[-1]}, evaluate "
+                 f"{seed_block[0]}-{seed_block[-1]}"),
         "n_buyers": env.n_buyers, "n_sellers": env.n_sellers,
         "model_used": "rule_based", "decision_type": "N/A",
         "human_benchmark_id": "N/A", "human_benchmark_status": "not_applicable",
