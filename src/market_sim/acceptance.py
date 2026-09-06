@@ -1252,3 +1252,48 @@ def evaluate_phase7e3a(
             "bounds the comparison rather than entering it.",
         ),
     ]
+
+
+def evaluate_phase7e3b(
+    rl_profit: np.ndarray,
+    bandit: np.ndarray,
+    schedule: np.ndarray,
+    flat: np.ndarray,
+) -> list[CriterionResult]:
+    """Gate 3b: the multi-week learner against the better bandit.
+
+    A second graded criterion is added here that no earlier gate needed. At
+    7d a null was consistent with there being nothing to find; here the thing
+    to find is measured, is worth 2.6%, and is inside the policy class, so
+    whether the learner reached it is a separate question from whether it beat
+    the bandit - and a policy that beats the bandit while sitting far below the
+    hand-found schedule has still not found what is there.
+    """
+    gain, lo, hi = mean_difference_ci(rl_profit, bandit)
+    scale = float(bandit.mean())
+    verdict = equivalence_verdict(lo / scale, hi / scale, MATERIALITY_PROFIT_PCT)
+    ceiling = float(schedule.mean())
+    reached = (rl_profit.mean() - scale) / (ceiling - scale) if ceiling > scale else float("nan")
+    return [
+        CriterionResult(
+            name="gate 3b: the horizon comparison reaches a verdict",
+            passed=verdict != "inconclusive",
+            measured=f"{scale:.2f} -> {rl_profit.mean():.2f} per week, "
+            f"{gain / scale:+.1%}, 95% CI [{lo / scale:+.1%}, {hi / scale:+.1%}] "
+            f"-> {verdict}",
+            threshold=f"CI wholly inside or wholly outside ±{MATERIALITY_PROFIT_PCT:g}%",
+            note="As since Phase 5, what is graded is that a verdict is reached.",
+        ),
+        CriterionResult(
+            name="gate 3b: the learner reaches what a hand search found",
+            passed=verdict == "material" and gain > 0,
+            measured=f"{reached:.0%} of the way from the bandit ({scale:.2f}) to "
+            f"7e-2's schedule ({ceiling:.2f}); flat at the oracle price is "
+            f"{flat.mean():.2f}",
+            threshold="a material gain over the bandit, in the direction of the "
+            "schedule",
+            note="The schedule is attainable and inside the policy class, so "
+            "failing to approach it is a statement about learning rather than "
+            "about the market.",
+        ),
+    ]

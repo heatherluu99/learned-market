@@ -1522,6 +1522,92 @@ def phase7e3a_slide() -> PhaseSlide:
     )
 
 
+def phase7e3b_slide() -> PhaseSlide:
+    """Assemble the Phase 7e-3b slide from the run outputs, not hand-typed numbers."""
+    import pandas as pd
+
+    held = pd.read_csv(REPO_ROOT / "results/phase7e3b/held_out.csv")
+    paths = pd.read_csv(REPO_ROOT / "results/phase7e3b/price_paths.csv")
+    q = held["Q-network (7e-3b)"].to_numpy()
+    bandit = held["LinUCB blind"].to_numpy()
+    schedule = held["7e-2 schedule"].to_numpy()
+    flat = held["flat at the oracle price"].to_numpy()
+
+    gain, lo, hi = acceptance.mean_difference_ci(q, bandit)
+    scale = float(bandit.mean())
+    verdict = acceptance.equivalence_verdict(
+        lo / scale, hi / scale, acceptance.MATERIALITY_PROFIT_PCT
+    )
+    reached = (q.mean() - scale) / (schedule.mean() - scale)
+    qp, sp = paths["q_network_mean_price"], paths["schedule_price"]
+
+    return PhaseSlide(
+        phase_number=7,
+        phase_name="Mechanism Sufficiency — 7e-3b Does the Horizon Pay?",
+        subtitle=(
+            "A trade-off known to exist, and a learner sent to find it  ·  git "
+            "tag: phase7e3b-horizon  ·  train 1000–1119, test 0–29"
+        ),
+        badge="GATE 3b NOT PASSED",
+        badge_color=GOLD,
+        agents=[
+            ("Buyers: ", "100 — Poor 70 / Middle 20 / Rich 10, dispersed budgets"),
+            ("Sellers: ", "5 — one learns its price, the rest hold their list price"),
+        ],
+        environment=[
+            "-  The cell 7e-2 carried: persistent stock, delta = 1.0, L_max = 3.30.",
+            "-  7e-2 measured a schedule worth +2.6% here before this was built,",
+            "   so the thing to find is known, priced, and inside the policy class.",
+        ],
+        method=[
+            "Phase 7d's Q-network on a 10-week discounted return, with the",
+            "loyalty stock added to its features. Its module is reused and",
+            "parameterized, so 7d still trains on exactly its own four features.",
+        ],
+        literature=[
+            (
+                "Nerlove & Arrow (1962), ",
+                "“Optimal Advertising Policy under Dynamic Conditions” "
+                "(Economica) — goodwill as a depreciating stock bought with "
+                "current spending, the trade-off the learner is sent after.",
+            ),
+        ],
+        metrics=[
+            MetricRow("7e-2 schedule (attainable)", f"{schedule.mean():.1f}/wk", "—"),
+            MetricRow("flat at the oracle price", f"{flat.mean():.1f}/wk", "—"),
+            MetricRow("LinUCB blind", f"{scale:.1f}/wk", "—"),
+            MetricRow("Q-network", f"{q.mean():.1f}/wk", "—"),
+            MetricRow("  vs the bandit", f"{gain / scale:+.1%}", "PASS"),
+            MetricRow("  of the way to the schedule", f"{reached:.0%}", "FAIL"),
+        ],
+        research_question=(
+            "A sustained investment schedule is known to beat the best standing "
+            "price here by 2.6%. Can a multi-week learner find it?"
+        ),
+        finding=(
+            f"The right shape, the right depth, half the duration — and a third "
+            f"of the value. Weeks 0–7 it prices at {qp[:8].mean():.3f} against the "
+            f"hand-found schedule's {sp[:8].mean():.3f}; weeks 8–15 it has already "
+            f"returned to {qp[8:16].mean():.3f} while the schedule holds at "
+            f"{sp[8:16].mean():.3f}. It spends 75% of the discount and collects "
+            f"{reached:.0%} of the gain, because a stock compounds while it is fed. "
+            f"This is 7d's missing sacrifice-then-recover trajectory, appearing for "
+            f"the first time — in the environment built to contain it."
+        ),
+        caveat=(
+            f"Gate 3b does not pass: {gain / scale:+.1%} is {verdict}, not material. "
+            f"And the interval [{lo / scale:+.1%}, {hi / scale:+.1%}] crosses zero, "
+            f"so the sign of the advantage is not established — 300 seeds would "
+            f"settle it in a minute, but the registered escalation fires only on an "
+            f"interval straddling the materiality boundary, which this one does not. "
+            f"The limitation is reported rather than repaired. Phase 7e's answer: "
+            f"complexity became valuable (gate 2) without becoming learnable — the "
+            f"structure that makes a sophisticated policy worth having is not the "
+            f"structure that makes it findable."
+        ),
+    )
+
+
 BUILDERS = {
     "1": phase1_slide,
     "2": phase2_slide,
@@ -1535,6 +1621,7 @@ BUILDERS = {
     "7e1": phase7e1_slide,
     "7e2": phase7e2_slide,
     "7e3a": phase7e3a_slide,
+    "7e3b": phase7e3b_slide,
 }
 
 

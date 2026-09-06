@@ -50,6 +50,7 @@ TITLES = {
     "phase7e1_calibration": "Stock loyalty, calibrated (7e-1)",
     "phase7e2_headroom": "Intertemporal headroom (7e-2)",
     "phase7e3a_context": "Does context pay? (7e-3a)",
+    "phase7e3b_horizon": "Does the horizon pay? (7e-3b)",
 }
 
 #: Runs whose figure was later overwritten in place by a successor writing to
@@ -69,6 +70,7 @@ STATUS = {
     "phase7e1_calibration": "calibrated",
     "phase7e2_headroom": "headroom",
     "phase7e3a_context": "headroom",
+    "phase7e3b_horizon": "headroom",
 }
 
 #: Ordered, and the order matters: "Implement Phase 7e-2: ... headroom gate"
