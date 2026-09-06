@@ -88,35 +88,65 @@ def occasions(panel: pd.DataFrame) -> list[dict]:
     return out
 
 
-def agent_distributions(records, client, usage) -> np.ndarray:
-    """One distribution per occasion, cached on the bucketed prompt."""
-    cache: dict[str, list[float]] = {}
-    out, unparsed = [], 0
-    for k, record in enumerate(records):
-        prompt = agent.describe_choice(record["alternatives"], record["history"])
-        if prompt not in cache:
-            import time
-            started = time.perf_counter()
-            text, tin, tout = client(agent.CHOICE_SYSTEM, prompt)
-            usage.seconds += time.perf_counter() - started
-            usage.calls += 1
-            usage.input_tokens += tin
-            usage.output_tokens += tout
-            parsed = agent.parse_distribution(text, len(BRANDS))
-            if parsed is None:
-                unparsed += 1
-                parsed = [1 / len(BRANDS)] * len(BRANDS)
-            cache[prompt] = parsed
-        else:
-            usage.cached += 1
-        out.append(cache[prompt])
-        if (k + 1) % 250 == 0:
-            print(f"    {k + 1}/{len(records)} occasions, {usage.calls} calls, "
-                  f"{usage.seconds:.0f}s", flush=True)
+#: The provider's free tier caps *tokens* per minute, not requests, so the run
+#: is throughput-bound rather than latency-bound: at roughly 220 tokens a call
+#: an 8,000 TPM cap allows about 36 calls a minute however many workers there
+#: are. Concurrency past a handful only converts throughput into 429s, so a
+#: shared token budget paces the calls and a few workers hide the round trip.
+WORKERS = 4
+TOKENS_PER_MINUTE = 8000
+
+
+def agent_distributions(records, client, usage) -> tuple[np.ndarray, int]:
+    """One distribution per occasion, querying each distinct prompt once.
+
+    Deduplicated *before* querying rather than cached during it, so the work is
+    a flat set of independent calls that can run concurrently and the
+    accounting does not depend on the order occasions happen to arrive in.
+    """
+    import time
+    from concurrent.futures import ThreadPoolExecutor
+
+    prompts = [agent.describe_choice(r["alternatives"], r["history"]) for r in records]
+    distinct = list(dict.fromkeys(prompts))
+    usage.cached = len(prompts) - len(distinct)
+    print(f"    {len(prompts):,} occasions -> {len(distinct):,} distinct prompts "
+          f"({usage.cached / len(prompts):.1%} deduplicated)", flush=True)
+    print(f"    throughput-bound at {TOKENS_PER_MINUTE:,} tokens/min: expect about "
+          f"{len(distinct) * 220 / TOKENS_PER_MINUTE:.0f} minutes", flush=True)
+
+    done = {"n": 0}
+
+    def query(prompt: str):
+        started = time.perf_counter()
+        text, tin, tout = client(agent.CHOICE_SYSTEM, prompt)
+        elapsed = time.perf_counter() - started
+        done["n"] += 1
+        if done["n"] % 250 == 0:
+            print(f"    {done['n']}/{len(distinct)} calls", flush=True)
+        return prompt, agent.parse_distribution(text, len(BRANDS)), tin, tout, elapsed
+
+    started = time.perf_counter()
+    with ThreadPoolExecutor(max_workers=WORKERS) as pool:
+        results = list(pool.map(query, distinct))
+    wall = time.perf_counter() - started
+
+    cache, unparsed = {}, 0
+    for prompt, parsed, tin, tout, _ in results:
+        usage.calls += 1
+        usage.input_tokens += tin
+        usage.output_tokens += tout
+        if parsed is None:
+            unparsed += 1
+            # A uniform fallback is a stated choice, not a silent repair: the
+            # count is reported and logged so it can be weighed.
+            parsed = [1 / len(BRANDS)] * len(BRANDS)
+        cache[prompt] = parsed
+    usage.seconds = wall
     if unparsed:
-        print(f"    warning: {unparsed} replies could not be parsed and were "
-              f"given a uniform distribution")
-    return np.array(out)
+        print(f"    {unparsed} of {len(distinct)} replies could not be parsed and "
+              f"were given a uniform distribution", flush=True)
+    return np.array([cache[p] for p in prompts]), unparsed
 
 
 def js_divergence(p: np.ndarray, q: np.ndarray) -> float:
@@ -214,9 +244,10 @@ def main() -> int:
 
     # ---- A: the Agent ------------------------------------------------------
     usage = agent.Usage()
-    client = agent.groq_client(MODEL, **AGENT_SETTINGS)
+    client = agent.groq_client(MODEL, tokens_per_minute=TOKENS_PER_MINUTE,
+                               **AGENT_SETTINGS)
     print("  Querying the Agent (cached on the bucketed prompt)...", flush=True)
-    a = agent_distributions(records, client, usage)
+    a, unparsed = agent_distributions(records, client, usage)
     print(f"  {usage.as_row()}\n")
 
     arms = {"B0 marginal shares": b0, "B1 conditional model": b1_full,
@@ -255,7 +286,6 @@ def main() -> int:
         "n_buyers": panel["household"].nunique(), "n_sellers": len(BRANDS),
         "model_used": MODEL, "decision_type": "brand_choice",
         "human_benchmark_id": "Ecdat::Cracker",
-        "human_benchmark_status": "compared_to_published_panel",
         "synthetic_cost_usd": usage.as_row()["synthetic_cost_usd"],
         "synthetic_latency_seconds": usage.as_row()["synthetic_latency_seconds"],
         "research_question": RESEARCH_QUESTION,
@@ -265,12 +295,13 @@ def main() -> int:
             f"preference, price, display and feature"
         ),
         "transaction_count": len(records),
+        "human_benchmark_status": "compared_to_published_panel",
         "participation_rate": "N/A - conditioned on participation",
         "result_summary": (
             "; ".join(f"{r['arm']}: JS {r['weighted_js']:.4f}, "
                       f"{r['signs_matched']}/4 directions"
                       for _, r in frame.iterrows())
-            + f". Lowest JS: {best['arm']}."
+            + f". Lowest JS: {best['arm']}. {unparsed} agent replies unparsed."
         ),
         "decision_implication": "N/A - first external comparison, no decision yet",
         "next_experiment": "Phase 10 free-running closed loop",

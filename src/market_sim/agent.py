@@ -34,7 +34,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+import random
 import re
+import threading
 import time
 from dataclasses import dataclass, field
 
@@ -191,9 +193,36 @@ def anthropic_client(model: str, input_price: float, output_price: float,
     return call
 
 
+class TokenBudget:
+    """A thread-safe token-per-minute budget, shared across workers.
+
+    The provider's free tier caps tokens per minute, not requests, so
+    concurrency buys nothing once the cap binds and simply converts throughput
+    into 429s. Callers reserve their estimated cost before issuing a request
+    and the budget blocks until the rolling window has room.
+    """
+
+    def __init__(self, tokens_per_minute: int, headroom: float = 0.85):
+        self.limit = tokens_per_minute * headroom
+        self._spent: list[tuple[float, int]] = []
+        self._lock = threading.Lock()
+
+    def reserve(self, tokens: int) -> None:
+        while True:
+            with self._lock:
+                now = time.monotonic()
+                self._spent = [(t, n) for t, n in self._spent if now - t < 60]
+                if sum(n for _, n in self._spent) + tokens <= self.limit:
+                    self._spent.append((now, tokens))
+                    return
+                oldest = min(t for t, _ in self._spent)
+            time.sleep(max(0.05, 60 - (time.monotonic() - oldest)))
+
+
 def groq_client(model: str, input_price: float = 0.0, output_price: float = 0.0,
                 max_tokens: int = 512, temperature: float = 0.0,
-                reasoning_effort: str | None = "low"):
+                reasoning_effort: str | None = "low",
+                tokens_per_minute: int | None = None, retries: int = 6):
     """A Groq-hosted client, same callable shape as the others.
 
     Two settings here are experimental conditions and not conveniences.
@@ -213,18 +242,31 @@ def groq_client(model: str, input_price: float = 0.0, output_price: float = 0.0,
     default here because the default budget costs about 7x the output tokens
     for the same one-number answer.
     """
+    import groq
     from groq import Groq
 
     client = Groq()
+    budget = TokenBudget(tokens_per_minute) if tokens_per_minute else None
 
     def call(system: str, prompt: str) -> tuple[str, int, int]:
         kwargs = {"reasoning_effort": reasoning_effort} if reasoning_effort else {}
-        response = client.chat.completions.create(
-            model=model, max_tokens=max_tokens, temperature=temperature,
-            messages=[{"role": "system", "content": system},
-                      {"role": "user", "content": prompt}],
-            **kwargs,
-        )
+        # A rough estimate is enough: it only has to be close for the budget to
+        # keep the rolling window under the cap.
+        if budget is not None:
+            budget.reserve(len(system + prompt) // 3 + 60)
+        for attempt in range(retries):
+            try:
+                response = client.chat.completions.create(
+                    model=model, max_tokens=max_tokens, temperature=temperature,
+                    messages=[{"role": "system", "content": system},
+                              {"role": "user", "content": prompt}],
+                    **kwargs,
+                )
+                break
+            except groq.RateLimitError:
+                if attempt == retries - 1:
+                    raise
+                time.sleep(min(60, 2 ** attempt) + random.random())
         message = response.choices[0].message
         return (message.content or ""), response.usage.prompt_tokens, response.usage.completion_tokens
 
