@@ -2612,6 +2612,58 @@ compounds": **in this market, one-step imitation error never becomes materially
 visible at the trajectory level, at any teacher entropy.** Either is reported;
 neither is chased.
 
+**Result: amplification saturates. There is no phase transition in range.**
+
+Extended to a near step function, with the purchase level held at 0.4577–0.4614
+and the deployment block widened to 120 seeds:
+
+| `tau` | `H` bits | `R` | amplification | behavioural | gate |
+|---|---|---|---|---|---|
+| 2.00 | 0.979 | 9.2% | 1.017× | 0.16 pp | ✅ |
+| 1.00 | 0.928 | 17.6% | 1.067× | 0.11 pp | ✅ |
+| 0.50 | 0.760 | 30.6% | 1.186× | 0.84 pp | ✅ |
+| 0.25 | 0.464 | 47.3% | 1.401× | 0.59 pp | ✅ |
+| 0.10 | 0.191 | 84.6% | 1.679× | 2.48 pp | ✅ |
+| 0.05 | 0.093 | 131.9% | **1.710×** | **3.71 pp** | ✅ |
+| 0.02 | 0.036 | 221.4% | 1.741× | 1.54 pp | ❌ |
+| 0.01 | 0.018 | 319.0% | 1.783× | 2.81 pp | ❌ |
+
+**The curve flattens rather than breaking.** Between `tau` = 0.1 and `tau` =
+0.01, `R` rises from 85% to **319%** — a factor of 3.8 — while amplification
+moves from 1.68× to 1.78×, a factor of 1.06. Whatever bounds the amplification
+is not the systematic error, which has nearly quadrupled by then. Spearman
+against entropy stays −1.00, so the ordering never reverses; the curve simply
+stops climbing.
+
+**And no verdict anywhere is material.** All **48 of 48** class-to-tier share
+comparisons across the eight regimes return `equivalent`, with zero `material`
+and, after the escalation, zero `inconclusive`. The largest behavioural
+divergence anywhere is **3.71 pp against a ±5 pp margin**, at `tau` = 0.05.
+
+So the registered second branch is the one that obtains, and it is the stronger
+statement of the two:
+
+> **In this market, one-step imitation error never becomes materially visible
+> at the trajectory level — at any teacher entropy from a coin flip down to a
+> near step function.**
+
+**The two sharpest regimes fail Gate 9a, exactly as registered.** Their floors
+are 0.1916 and 0.1938 against 0.0452 at the flat end: which side of a step a
+buyer falls on is decided by the hidden preference draw, so an observation set
+that excludes it cannot predict a near-deterministic teacher at all. That is
+the observation set failing rather than the student, which is what a
+floor-relative criterion is for — and it means those two rows are reported and
+not relied on. The saturation is already visible across the six regimes that do
+pass.
+
+**What this does not say.** It does not say imitation error never compounds
+materially. It says that in a market with this much intrinsic noise, these
+stabilizers and this action space, the mechanism tops out at about 1.7× and
+1.7× is not enough. Phase 9c shows the same ceiling is a property of the
+environment rather than of the policy: removing the persistence that carries
+the error takes the amplification to 1.00× regardless of how large the error
+is.
+
 **Exit condition:** `git tag phase9b-entropy`.
 
 ---

@@ -9,8 +9,54 @@ moves because you added the mechanism. This project is an attempt to do the
 opposite: every phase states a question **before** it is run, states what result
 would count as a failure, and reports the answer even when the answer is *no*.
 
-Nine of the twenty-five logged experiments returned a null. Those are the ones
-worth reading.
+**Nine of the fifteen headline results below are negative**, and several of the
+rest are "yes, but smaller than it looks". Those are the ones worth reading.
+
+## What this is not
+
+Most synthetic-consumer work evaluates one answer at a time:
+
+```
+Persona + Prompt  ->  Response
+```
+
+A persona is described, a question is asked, an answer is scored against a
+human distribution. That pipeline can measure whether a model *answers* like a
+population. It cannot measure whether a model *behaves* like one, because it
+has no place to put the things that make behaviour behaviour — a budget that
+depletes, a stall you went to last week, a seller who repriced because of what
+you did, a market that is different in week 40 because of week 3.
+
+This project is built on the other shape:
+
+```
+Persona + Persistent State + Environment + Interaction + Memory + Policy
+                          ->  Behavioural Trajectory
+```
+
+**The difference is not realism, it is what becomes measurable.** Three results
+here exist only because the trajectory is the unit:
+
+- **One-step fidelity and trajectory fidelity are different quantities, and the
+  gap is measurable.** A distilled buyer that matches the rule on the rule's own
+  states is measurably worse on the states *it* brings about — `D_shadow`
+  exceeds `D_offline` by +0.0057, CI [+0.0055, +0.0060] (Phase 9a). A
+  prompt-response benchmark cannot represent that comparison at all: it has no
+  second state distribution to evaluate on.
+- **Whether that gap matters is governed by quantities a response benchmark
+  cannot see.** It scales exactly with the policy's entropy — Spearman −1.00
+  across eight regimes (9b) — and vanishes entirely when the environment stops
+  carrying state, 1.67× to 1.00× (9c). Both are properties of the *loop*, not
+  of any answer.
+- **Market structure appears that no agent was told to produce.** A premium
+  tier is competed out of existence by entry and exit rules that never read a
+  class label (Phase 8). There is no prompt whose response is "the premium tier
+  dies in week 60".
+
+The honest counterpart: this project contains **no human data before Phase 10**,
+so nothing in Phases 1–9 claims a synthetic agent resembles a person. What it
+claims is that the trajectory is the level at which the question can be asked,
+and it spends nine phases showing what that buys and what it costs.
 
 ---
 
@@ -32,6 +78,7 @@ worth reading.
 | 9a | Does one-step imitation fidelity survive closed-loop deployment? | **The loop is real and does not compound** — +0.0057 CI excludes zero, at 1.07× |
 | 9b | Does teacher entropy govern whether it compounds? | **Yes for amplification** — Spearman −1.00, 1.02×→1.67×. **Not yet for behaviour** |
 | 9c | Which environment characteristic suppresses divergence? | **Neither — persistence *carries* it.** Removing season-long taste kills amplification outright |
+| 9b+ | Does it ever become material, down to a deterministic teacher? | **No.** Amplification saturates at ~1.7×; **48 of 48 shares equivalent** |
 
 Full detail: [`docs/phase_specifications.md`](docs/phase_specifications.md).
 Every run: [`experiment_log.csv`](experiment_log.csv), or the self-contained
@@ -247,7 +294,7 @@ only visible because both were run.
 
 ## Phase-by-phase
 
-### ✅ Phases 1–6 — mechanics, heterogeneity, environment, context, nonlinearity, memory
+### Phases 1–6 (complete) — mechanics, heterogeneity, environment, context, nonlinearity, memory
 
 **Phase 1** pins the engine: participation 0.822, inventory never binds, budget
 binds 3,961 times. A deliberate inventory-pressure arm drops participation to
@@ -278,7 +325,7 @@ without** — and the control's level is the result: unequal popularity and
 season-long fixed preference produce stability with no memory at all. Path
 dependence is a pre-registered **null**.
 
-### ✅ Phase 7 — seller learning, and two nulls that trace to one line
+### Phase 7 (complete) — seller learning, and two nulls that trace to one line
 
 7a's heuristic lifts profit 48.4 → 60.9. 7b's bandit reaches 66.0 (+10.3% over
 7a) **while moving no class-to-tier share at all** — more profit, identical
@@ -300,7 +347,7 @@ Both nulls trace to `loyalty_streak_cap = 3`: a bounded counter is not a stock,
 so there is neither cross-sectional state to condition on nor an intertemporal
 asset to invest in.
 
-### ✅ Phase 7e — a second environment, built to make complexity necessary
+### Phase 7e (complete) — a second environment, built to make complexity necessary
 
 Three existence gates, each licensing one level of policy complexity.
 
@@ -336,7 +383,7 @@ schedule that ever charges above the standing price loses, the worst by 56%.
 *learnable*.** The market structure that makes a sophisticated policy worth
 having is not the structure that makes it findable.
 
-### ✅ Phase 8 — endogenous market structure
+### Phase 8 (complete) — endogenous market structure
 
 Both halves of the originally registered mechanism were **inoperative**, found
 by diagnostics run before any implementation code: exit would have fired on
@@ -358,7 +405,7 @@ not move**. `N ≈ 15` does not mean the same fifteen stalls.
 of 3.0 against a price of 6.0, and both tiers pay the same rent. The market
 discovered what the population already made true.
 
-### ✅ Phase 9a — learned buyer policy
+### Phase 9a (complete) — learned buyer policy
 
 The next rung, and the concept trap is pinned before any code. Training
 trajectories come from **this project's own hand-coded buyer**, so a fitted
@@ -413,7 +460,7 @@ all six class-to-tier shares equivalent. **Under this stochastic teacher and
 these stabilizing dynamics, imitation error produces measurable endogenous
 distribution shift but not economically meaningful trajectory divergence.**
 
-### ✅ Phase 9b — teacher entropy sweep
+### Phase 9b (complete) — teacher entropy sweep
 
 9a's conclusion names its conditions, so the next phase varies them. Sweeping
 the teacher's logit temperature with the **market's purchase level held fixed**
@@ -432,12 +479,26 @@ regime's student clears Gate 9a against its own floor, so no point on the curve
 is just an undertrained model.
 
 **The fourth link is not reached**: behavioural divergence peaks at 2.49 pp
-against a ±5 pp margin and all six shares stay equivalent everywhere. Teacher
-stochasticity governs amplification and does not, alone, carry it into material
-behaviour. What sits between them is the environment — **9c** ablates the budget
-wall and the season-long preference draw to find out which of them absorbs it.
+against a ±5 pp margin and all six shares stay equivalent everywhere.
 
-### ✅ Phase 9c — stabilizer ablation
+**Extended to the deterministic limit** — `τ` down to 0.01, a near step
+function — **the curve flattens rather than breaking.** Between `τ` = 0.1 and
+0.01 the error-to-noise ratio rises **85% → 319%** while amplification moves
+only **1.68× → 1.78×**. Whatever bounds it is not the systematic error. Across
+all eight regimes, **48 of 48 class-to-tier comparisons return `equivalent`** —
+zero material, zero inconclusive after escalating to 120 deployment seeds — and
+the worst divergence anywhere is 3.71 pp.
+
+> **In this market, one-step imitation error never becomes materially visible
+> at the trajectory level — at any teacher entropy from a coin flip to a near
+> step function.**
+
+The two sharpest regimes fail Gate 9a, as registered: which side of a step a
+buyer falls on is decided by the hidden taste draw, so the observation set
+cannot predict a near-deterministic teacher at all. That is the observation set
+failing rather than the student, and those rows are reported and not relied on.
+
+### Phase 9c (complete) — stabilizer ablation
 
 9b left the environment as the missing link, so 9c removes its two candidate
 stabilizers one at a time at the sharpest entropy, with the purchase level held
@@ -467,9 +528,29 @@ every cell returns `equivalent`. The mechanism has been isolated, its governing
 quantity identified and its carrier found — and it has still never moved this
 market by enough to change a decision.
 
-### ⬜ Phases 9d–16
+### Phase 9d — synthetic agent users (harness built, not run)
 
-LLM agents (9d), human comparison (10), bias quantification (11), cross-model
+The first phase needing LLM calls. This environment has no API key and no SDK,
+so **9d has not been run** — its harness is built and tested against a
+deterministic mock, and three decisions in it are load-bearing:
+
+- **The Agent is asked for a probability, not a decision.** 9b and 9c
+  established that policy *entropy* governs whether error compounds, so an
+  Agent answering buy/don't-buy would import the `τ → 0` regime into a
+  comparison meant to be about the model.
+- **It sees a bucketed view of exactly the distilled policy's observation
+  set** — what a natural-language interface does anyway, and what lets a cache
+  work. It is *coarser*, so an Agent that loses has two explanations and this
+  is one of them.
+- **An unparseable reply raises**, rather than defaulting to 0.5 and turning a
+  broken parse into a plausible-looking answer.
+
+`human_baseline.csv` is left as a template with sources unfilled. An unsourced
+figure there would make the cost/speed claim look measured when it is not.
+
+### Phases 10–16 (not started)
+
+human comparison (10), bias quantification (11), cross-model
 robustness (12–13), decision reliability (14), reference-scale demonstration
 (15), data flywheel (16). No human data enters before Phase 10, and nothing in
 Phases 1–9 claims anything about human behaviour.
@@ -480,7 +561,7 @@ Phases 1–9 claims anything about human behaviour.
 
 ```bash
 python -m venv .venv && .venv/bin/pip install -r requirements.txt
-.venv/bin/python -m pytest -q                        # 299 tests
+.venv/bin/python -m pytest -q                        # 307 tests
 .venv/bin/python experiments/phase8/run_phase8.py    # any phase
 .venv/bin/python tools/build_experiment_explorer.py  # rebuild the explorer
 ```

@@ -86,7 +86,10 @@ visualization** gets, and when. Specifically:
 
 ## Current phase
 
-**Phase 9c complete; next is Phase 9d.** Every phase through 9c is tagged.
+**Phase 9c complete; 9d is blocked on credentials.** Every phase through 9c
+is tagged. Phase 9d needs LLM calls and this environment has no API key and no
+SDK; its harness is built and tested against a deterministic mock, so the
+phase is one command away once a key exists.
 
 Phase 9a distilled the hand-written buyer into a policy that sees eight
 observable columns and not the latent taste draw, and deployed it. The gate
@@ -132,9 +135,19 @@ carry the largest systematic error in the study — 116% against 85% — and
 amplify by exactly 1.00×. So `amplification ~ R × state persistence`, with 9b
 varying the first term and 9c collapsing the second.
 
-**Nothing across 9a–9c reached materiality.** The worst behavioural divergence
-anywhere is 2.49 pp against ±5, and every class-to-tier share in every cell
-returns `equivalent`.
+**9b was then extended to the deterministic limit**, `tau` down to 0.01 and a
+near step function. **Amplification saturates rather than breaking**: between
+`tau` = 0.1 and 0.01 the error-to-noise ratio rises 85% → 319% while
+amplification moves only 1.68× → 1.78×. Whatever bounds it is not the
+systematic error.
+
+**Nothing across 9a–9c reached materiality.** All 48 of 48 class-to-tier share
+comparisons across the eight entropy regimes return `equivalent` — zero
+material, zero inconclusive after the registered escalation to 120 deployment
+seeds — and the worst behavioural divergence anywhere is 3.71 pp against ±5.
+In this market, one-step imitation error never becomes materially visible at
+the trajectory level, at any teacher entropy from a coin flip to a near step
+function.
 
 Phase 8's entry/exit dynamics selectively eliminated the premium tier — from
 a 40% starting share to essentially zero in all eight cells — under this
