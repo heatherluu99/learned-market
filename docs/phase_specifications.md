@@ -2609,6 +2609,82 @@ policy error  x  teacher stochasticity  x  environment feedback strength
               x  state persistence      ->  trajectory divergence
 ```
 
+### Phase 9c result — the persistence was carrying the divergence, not suppressing it
+
+**The result reverses the framing 9a proposed, and the reversal is the
+finding.** 9a called season-long fixed preference a *stabilizer* that "pulls a
+wandering buyer back", and predicted that removing it would let divergence
+grow. Removing it **eliminates the amplification entirely.**
+
+| `tau` | budget | taste | `H` | `R` | `D_offline` | `D_shadow` | amplification | state drift | behavioural | gate |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 1.0 | wall | fixed | 0.928 | 17.5% | 0.0830 | 0.0887 | 1.07× | 0.0051 | 0.62 pp | ✅ |
+| 0.1 | wall | fixed | 0.191 | 84.6% | 0.1679 | 0.2799 | **1.67×** | 0.0883 | 2.49 pp | ✅ |
+| 0.1 | **open** | fixed | 0.210 | 82.5% | 0.1729 | 0.2747 | 1.59× | 0.0250 | 1.75 pp | ✅ |
+| 0.1 | wall | **weekly** | 0.262 | 116.0% | 0.2728 | 0.2736 | **1.00×** | 0.0053 | 0.38 pp | ❌ |
+| 0.1 | **open** | **weekly** | 0.239 | 116.9% | 0.2616 | 0.2613 | **1.00×** | 0.0072 | 1.41 pp | ✅ |
+
+Removing the **budget wall** barely moves the amplification: 1.67× → 1.59×.
+Removing **season-long preference** collapses it to **1.00× — no amplification
+at all** — and takes the state drift with it, 0.0883 → 0.0053.
+
+### Why, and the sentence that has to be corrected
+
+Amplification requires a **carrier**. The mechanism is: a student's early error
+moves the buyer into a state the teacher would not have produced, and the error
+is then larger *in that state*. For that to happen the state has to **persist**
+long enough to be inhabited. Season-long preference is exactly what makes a
+buyer's situation persist from week to week; redraw taste weekly and there is
+no state to be moved into, so a deviation this week does not reach next week.
+
+So the two descriptions are both true and are the same mechanism seen twice:
+
+> Fixed preference **stabilizes the trajectory** (pair stability 0.44 against
+> 0.40) **and is the channel through which imitation error propagates.**
+> Persistence and error-carrying are not two properties of memory; they are one.
+
+**And `R` alone does not govern amplification.** The weekly-taste cells have the
+*largest* systematic error in the whole study — `R` of 116%, against 85% in the
+baseline — because the observation set predicts a weekly-redrawn taste badly.
+They amplify by exactly **1.00×**. A bigger policy error with nothing to carry
+it produces no compounding whatever. 9b's conclusion therefore needs its
+condition attached:
+
+```
+amplification ~ R  x  state persistence
+```
+
+with 9b having varied the first term at persistence held high, and 9c showing
+the product goes to zero when the second term does.
+
+### What this does and does not settle
+
+**Behavioural divergence decouples from amplification.** The open-budget,
+weekly-taste cell has no amplification and still moves 1.41 pp, because a
+market with weekly taste is simply noisier week to week. Behavioural divergence
+has two sources and only one of them is the compounding loop.
+
+**Nothing in this phase reached materiality.** The largest behavioural
+divergence anywhere across Phases 9a–9c is **2.49 pp against a ±5 pp margin**,
+and every class-to-tier share in every cell returns `equivalent`. The
+compounding mechanism has been isolated, its governing quantity identified, and
+its carrier found — and it has still never moved this market by an amount that
+would change a decision.
+
+**One cell fails Gate 9a and its numbers are reported but not relied on.** The
+walled, weekly-taste cell's best student misses the gate; its twin with the
+budget wall open passes and shows the same 1.00× amplification, so the
+conclusion rests on a cell whose student is verified fair.
+
+**A limitation to state plainly.** Holding the purchase level fixed at 0.4584–
+0.4594 does not hold entropy fixed: the ablations move it from 0.191 to 0.262
+bits. The comparison is therefore not perfectly clean on the entropy axis, and
+the weekly-taste cells sit at slightly *higher* entropy than the baseline —
+which, per 9b, would predict slightly *less* amplification rather than none.
+The direction of that bias is toward the observed effect, so it cannot explain
+a collapse from 1.67× to 1.00×, but it is a confound and not a controlled
+variable.
+
 **Exit condition:** `git tag phase9c-stabilizers`.
 
 ## Phase 9d — Synthetic Agent Users

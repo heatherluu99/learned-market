@@ -1883,6 +1883,92 @@ def phase9b_slide() -> PhaseSlide:
     )
 
 
+def phase9c_slide() -> PhaseSlide:
+    """Assemble the Phase 9c slide from the run outputs, not hand-typed numbers."""
+    import pandas as pd
+
+    c = pd.read_csv(REPO_ROOT / "results/phase9c/cells.csv")
+    baseline = c.iloc[1]
+    open_budget = c.iloc[2]
+    weekly = c.iloc[4]
+
+    return PhaseSlide(
+        phase_number=9,
+        phase_name="Stabilizer Ablation — 9c",
+        subtitle=(
+            "Which environment characteristic carries the divergence?  ·  git "
+            "tag: phase9c-stabilizers  ·  5 cells x 30 deployment seeds"
+        ),
+        badge="FRAMING REVERSED",
+        badge_color=GOLD,
+        agents=[
+            ("Buyers: ", "100 — a distilled policy deployed against the rule"),
+            ("Sellers: ", "5 — Phase 6's market, unchanged in every cell"),
+        ],
+        environment=[
+            "-  Budget wall removed by raising Poor's budget 3.0 -> 8.0, which",
+            "   opens the premium tier: 0% -> 22% of Poor's encounters.",
+            "-  Season-long taste removed by redrawing preference every week.",
+            "-  One at a time and then together, at the sharpest entropy 9b saw.",
+        ],
+        method=[
+            "Every cell's offset re-solved to hold the purchase level at 0.4594,",
+            "so an ablation opens the action space without changing how much",
+            "buying happens. Each cell trains up its own capacity ladder to",
+            "Gate 9a before it is deployed.",
+        ],
+        literature=[
+            (
+                "Ross, Gordon & Bagnell (2011), ",
+                "“A Reduction of Imitation Learning and Structured Prediction to "
+                "No-Regret Online Learning” (AISTATS) — whose compounding bound "
+                "assumes a state that persists to be compounded over.",
+            ),
+        ],
+        metrics=[
+            MetricRow("Baseline amplification",
+                      f"{baseline['amplification']:.2f}x", "—"),
+            MetricRow("  budget wall removed",
+                      f"{open_budget['amplification']:.2f}x", "—"),
+            MetricRow("  fixed taste removed",
+                      f"{weekly['amplification']:.2f}x", "—"),
+            MetricRow("State drift, baseline -> weekly",
+                      f"{baseline['state_drift']:.4f} -> {weekly['state_drift']:.4f}", "—"),
+            MetricRow("R, baseline -> weekly",
+                      f"{baseline['R']:.0%} -> {weekly['R']:.0%}", "—"),
+            MetricRow("Worst behavioural, any cell",
+                      f"{c['behavioural_divergence_pp'].max():.2f} pp", "—"),
+        ],
+        research_question=(
+            "Which environment characteristics suppress the trajectory "
+            "divergence that imitation error would otherwise produce?"
+        ),
+        finding=(
+            f"Neither — one of them was *carrying* it. Removing the budget wall "
+            f"barely moves the amplification ({baseline['amplification']:.2f}x → "
+            f"{open_budget['amplification']:.2f}x). Removing season-long taste "
+            f"collapses it to {weekly['amplification']:.2f}x — no amplification at "
+            f"all — and takes the state drift with it "
+            f"({baseline['state_drift']:.4f} → {weekly['state_drift']:.4f}). "
+            f"Amplification needs a carrier: an early error has to move the buyer "
+            f"into a state that *persists* long enough to be inhabited."
+        ),
+        caveat=(
+            f"This reverses 9a's own framing, which called fixed taste a "
+            f"stabilizer that would suppress divergence. Both readings are the "
+            f"same mechanism: persistence stabilizes the trajectory and carries "
+            f"the error. It also shows R alone does not govern amplification — "
+            f"the weekly cells have the largest systematic error in the study "
+            f"({weekly['R']:.0%} against {baseline['R']:.0%}) and amplify by "
+            f"exactly 1.00x. Nothing across 9a–9c reached materiality: the worst "
+            f"behavioural divergence anywhere is "
+            f"{c['behavioural_divergence_pp'].max():.2f} pp against ±5, and every "
+            f"share in every cell is equivalent. One cell fails Gate 9a; its twin "
+            f"passes and shows the same result."
+        ),
+    )
+
+
 BUILDERS = {
     "1": phase1_slide,
     "2": phase2_slide,
@@ -1900,6 +1986,7 @@ BUILDERS = {
     "8": phase8_slide,
     "9a": phase9a_slide,
     "9b": phase9b_slide,
+    "9c": phase9c_slide,
 }
 
 

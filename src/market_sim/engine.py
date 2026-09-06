@@ -587,6 +587,11 @@ def run_season(cfg: MarketConfig, seed: int, policy=None) -> SeasonResult:
         visibility_draw = rng.random((n_buyers, n_sellers))
         promotion_roll = rng.random()
         promotion_pick = int(rng.integers(0, n_sellers))
+        if cfg.weekly_preference:
+            # Drawn last in the week's sequence, and only when the ablation is
+            # on, so every earlier phase consumes exactly the stream it always
+            # did. Phase 9c only.
+            preference = rng.random((n_buyers, n_sellers))
 
         if cfg.price_rule == "policy":
             if policy is None:

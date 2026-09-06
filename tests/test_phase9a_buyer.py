@@ -242,3 +242,87 @@ def test_the_offset_calibration_holds_the_level_while_entropy_moves():
     assert abs(calibrated - target) <= tolerance
     # ... while the entropy stays where the temperature put it
     assert buyer.teacher_entropy_bits(buyer.encounters(fixed, seeds)) < 0.6
+
+
+# --------------------------------------------------------------------------
+# Phase 9c — the stabilizer ablation
+# --------------------------------------------------------------------------
+
+
+def test_weekly_preference_is_off_by_default_and_draws_nothing_when_off():
+    """It adds a draw inside the week loop, so an accidental default moves all.
+
+    Drawn last in the week's sequence and only when the flag is set, so every
+    earlier phase consumes exactly the stream it always did.
+    """
+    from market_sim.config import PHASE6_MAIN as P6
+
+    assert not P6.weekly_preference
+    p1 = run_seeds(PHASE1_MAIN)
+    assert float(np.mean([r.participation_rate for r in p1])) == pytest.approx(
+        0.8216666666666667, abs=1e-12
+    )
+    explicit = dataclasses.replace(P6, weekly_preference=False)
+    for seed in (0, 5):
+        assert np.array_equal(run_season(P6, seed).chosen_seller,
+                              run_season(explicit, seed).chosen_seller)
+
+
+def test_weekly_preference_removes_the_season_long_pull():
+    """The stabilizer, ablated: taste stops being a property of the season.
+
+    With preference redrawn weekly a buyer has no standing reason to return to
+    the same stall, so pair stability must fall toward what memory alone
+    sustains. It falls by about 0.037 rather than collapsing, because the
+    loyalty bonus is still on and is the other half of what holds a pair
+    together - which is why the two stabilizers have to be ablated separately.
+    """
+    from market_sim.config import PHASE6_MAIN as P6
+
+    fixed = float(np.nanmean(run_season(P6, 0).pair_stability()[1:]))
+    weekly = dataclasses.replace(P6, weekly_preference=True)
+    shifting = float(np.nanmean(run_season(weekly, 0).pair_stability()[1:]))
+    assert shifting < fixed - 0.02, (fixed, shifting)
+
+
+def test_opening_the_budget_wall_opens_the_premium_tier_to_poor():
+    from market_sim.config import PHASE9C_CELLS, PHASE9C_OPEN_BUDGET
+
+    walled = [c for c in PHASE9C_CELLS if c.buyer_classes[0].budget_per_visit < 6.0]
+    opened = [c for c in PHASE9C_CELLS if c.buyer_classes[0].budget_per_visit >= 6.0]
+    assert walled and opened
+    for cfg in opened:
+        poor = next(b for b in cfg.buyer_classes if b.name == "Poor")
+        assert poor.budget_per_visit == PHASE9C_OPEN_BUDGET > 6.0
+    # and only Poor moves - the ablation is one change, not a repricing
+    for cfg in opened:
+        for name in ("Middle", "Rich"):
+            a = next(b for b in cfg.buyer_classes if b.name == name)
+            b = next(c for c in walled[0].buyer_classes if c.name == name)
+            assert a.budget_per_visit == b.budget_per_visit
+
+    walled_season = run_season(dataclasses.replace(walled[0], record_encounters=True), 0)
+    opened_season = run_season(dataclasses.replace(opened[0], record_encounters=True), 0)
+    i_cls = ENCOUNTER_FIELDS.index("buyer_class_index")
+    i_prem = ENCOUNTER_FIELDS.index("is_premium")
+    for season, expected in ((walled_season, False), (opened_season, True)):
+        d = np.asarray(season.encounters)
+        poor_premium = float(((d[:, i_cls] == 0) & (d[:, i_prem] == 1)).mean())
+        # `bool(...)`, not `is`: a numpy bool is never the Python singleton.
+        assert bool(poor_premium > 0.05) is expected, poor_premium
+
+
+def test_the_ablation_grid_is_the_five_rows_registered():
+    from market_sim.config import PHASE9C_CELLS, PHASE9C_HIGH_ENTROPY, PHASE9C_LOW_ENTROPY
+
+    assert len(PHASE9C_CELLS) == 5
+    grid = [(c.teacher_temperature,
+             c.buyer_classes[0].budget_per_visit < 6.0,
+             not c.weekly_preference) for c in PHASE9C_CELLS]
+    assert grid == [
+        (PHASE9C_HIGH_ENTROPY, True, True),    # reference
+        (PHASE9C_LOW_ENTROPY, True, True),     # low-entropy baseline
+        (PHASE9C_LOW_ENTROPY, False, True),    # budget wall removed alone
+        (PHASE9C_LOW_ENTROPY, True, False),    # fixed preference removed alone
+        (PHASE9C_LOW_ENTROPY, False, False),   # both
+    ]

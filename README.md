@@ -31,6 +31,7 @@ worth reading.
 | 8 | Does macro structure emerge from micro interaction? | **Yes** — premium tier eliminated, no rule ever reads a class label |
 | 9a | Does one-step imitation fidelity survive closed-loop deployment? | **The loop is real and does not compound** — +0.0057 CI excludes zero, at 1.07× |
 | 9b | Does teacher entropy govern whether it compounds? | **Yes for amplification** — Spearman −1.00, 1.02×→1.67×. **Not yet for behaviour** |
+| 9c | Which environment characteristic suppresses divergence? | **Neither — persistence *carries* it.** Removing season-long taste kills amplification outright |
 
 Full detail: [`docs/phase_specifications.md`](docs/phase_specifications.md).
 Every run: [`experiment_log.csv`](experiment_log.csv), or the self-contained
@@ -436,9 +437,39 @@ stochasticity governs amplification and does not, alone, carry it into material
 behaviour. What sits between them is the environment — **9c** ablates the budget
 wall and the season-long preference draw to find out which of them absorbs it.
 
-### ⬜ Phases 9c–16
+### ✅ Phase 9c — stabilizer ablation
 
-stabilizer ablation (9c), LLM agents (9d), human comparison (10), bias quantification (11), cross-model
+9b left the environment as the missing link, so 9c removes its two candidate
+stabilizers one at a time at the sharpest entropy, with the purchase level held
+fixed. **The result reverses 9a's own framing.**
+
+| | amplification | state drift | behavioural |
+|---|---|---|---|
+| low entropy, both stabilizers on | **1.67×** | 0.0883 | 2.49 pp |
+| budget wall removed | 1.59× | 0.0250 | 1.75 pp |
+| **season-long taste removed** | **1.00×** | 0.0053 | 0.38 pp |
+
+9a called fixed preference a stabilizer that "pulls a wandering buyer back" and
+predicted removing it would let divergence grow. Removing it **eliminates the
+amplification entirely.** Compounding needs a **carrier**: an early error has to
+move the buyer into a state that *persists* long enough to be inhabited. Redraw
+taste weekly and there is no such state, so this week's deviation never reaches
+next week.
+
+Persistence stabilizes the trajectory *and* carries the error — one mechanism,
+seen twice. And `R` alone does not govern amplification: the weekly-taste cells
+have the **largest** systematic error in the study (116% against 85%) and
+amplify by exactly 1.00×. So `amplification ~ R × state persistence`.
+
+**Nothing across 9a–9c reached materiality.** The worst behavioural divergence
+anywhere is 2.49 pp against a ±5 pp margin, and every class-to-tier share in
+every cell returns `equivalent`. The mechanism has been isolated, its governing
+quantity identified and its carrier found — and it has still never moved this
+market by enough to change a decision.
+
+### ⬜ Phases 9d–16
+
+LLM agents (9d), human comparison (10), bias quantification (11), cross-model
 robustness (12–13), decision reliability (14), reference-scale demonstration
 (15), data flywheel (16). No human data enters before Phase 10, and nothing in
 Phases 1–9 claims anything about human behaviour.
@@ -449,7 +480,7 @@ Phases 1–9 claims anything about human behaviour.
 
 ```bash
 python -m venv .venv && .venv/bin/pip install -r requirements.txt
-.venv/bin/python -m pytest -q                        # 295 tests
+.venv/bin/python -m pytest -q                        # 299 tests
 .venv/bin/python experiments/phase8/run_phase8.py    # any phase
 .venv/bin/python tools/build_experiment_explorer.py  # rebuild the explorer
 ```

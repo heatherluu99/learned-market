@@ -194,6 +194,12 @@ class MarketConfig:
     #: bonus (0.5 * 3) so the two mechanisms share a ceiling and only the path
     #: to it differs - a 7e result cannot come from stronger habit.
     loyalty_max_bonus: float = 1.5
+    #: Phase 9c: redraw `preference[b, s]` every week instead of once per
+    #: season. Season-long taste is a *stabilizer* - it pulls a wandering buyer
+    #: back toward the same stalls - and this ablates it. False everywhere
+    #: before Phase 9c, and when False no extra draw is taken at all, so no
+    #: earlier phase's random stream moves.
+    weekly_preference: bool = False
     #: Phase 9b: temperature on the purchase logit. 1.0 is every phase before
     #: it. Below 1 sharpens the same preference ordering toward a step
     #: function; above 1 flattens it toward a coin flip. It changes how
@@ -860,4 +866,55 @@ PHASE8_CELLS = tuple(
     phase8_cell(rule, cost)
     for rule in PHASE8_EXIT_RULES
     for cost in PHASE8_FIXED_COSTS
+)
+
+
+# --------------------------------------------------------------------------
+# Phase 9c — which environment characteristics suppress divergence?
+# --------------------------------------------------------------------------
+
+#: The two entropy levels the ablation is run at: Phase 9a's, and the sharpest
+#: regime Phase 9b measured, where amplification reached 1.67x.
+PHASE9C_HIGH_ENTROPY = 1.0
+PHASE9C_LOW_ENTROPY = 0.1
+
+#: Opening the budget wall means giving Poor a budget that reaches the premium
+#: tier's price of 6.0 rather than stopping at 3.0. Set well clear of it so the
+#: wall is genuinely open rather than marginally so.
+PHASE9C_OPEN_BUDGET = 8.0
+
+
+def phase9c_cell(
+    temperature: float, budget_wall: bool, fixed_preference: bool
+) -> "MarketConfig":
+    """One cell of the stabilizer ablation. Phase 6's market otherwise.
+
+    The two stabilizers are removed one at a time and then together, because
+    removing both at once cannot say which of them was doing the work.
+    """
+    buyers = tuple(
+        c if budget_wall or c.name != "Poor"
+        else dataclasses.replace(c, budget_per_visit=PHASE9C_OPEN_BUDGET)
+        for c in PHASE6_MAIN.buyer_classes
+    )
+    wall = "wall" if budget_wall else "open"
+    taste = "fixed" if fixed_preference else "weekly"
+    return dataclasses.replace(
+        PHASE6_MAIN,
+        name=f"phase9c_t{int(temperature * 100):03d}_{wall}_{taste}",
+        phase=9,
+        buyer_classes=buyers,
+        teacher_temperature=temperature,
+        weekly_preference=not fixed_preference,
+    )
+
+
+#: The registered five rows: a high-entropy reference, then the low-entropy
+#: regime with each stabilizer removed alone and both together.
+PHASE9C_CELLS = (
+    phase9c_cell(PHASE9C_HIGH_ENTROPY, budget_wall=True, fixed_preference=True),
+    phase9c_cell(PHASE9C_LOW_ENTROPY, budget_wall=True, fixed_preference=True),
+    phase9c_cell(PHASE9C_LOW_ENTROPY, budget_wall=False, fixed_preference=True),
+    phase9c_cell(PHASE9C_LOW_ENTROPY, budget_wall=True, fixed_preference=False),
+    phase9c_cell(PHASE9C_LOW_ENTROPY, budget_wall=False, fixed_preference=False),
 )

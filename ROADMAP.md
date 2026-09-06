@@ -86,7 +86,7 @@ visualization** gets, and when. Specifically:
 
 ## Current phase
 
-**Phase 9b complete; next is Phase 9c.** Every phase through 9b is tagged.
+**Phase 9c complete; next is Phase 9d.** Every phase through 9c is tagged.
 
 Phase 9a distilled the hand-written buyer into a policy that sees eight
 observable columns and not the latent taste draw, and deployed it. The gate
@@ -118,6 +118,23 @@ against a ±5 pp margin, and all six class-to-tier shares return `equivalent` in
 every regime including the sharpest. Teacher stochasticity governs
 amplification; it does not, alone, carry it through to material behaviour.
 What remains between them is the environment, which **9c** ablates.
+
+**Phase 9c reversed 9a's own framing.** 9a called season-long fixed preference
+a stabilizer that would suppress divergence. Removing it **eliminates the
+amplification entirely** — 1.67× → 1.00×, with state drift collapsing 0.0883 →
+0.0053 — while removing the budget wall barely moves it (1.67× → 1.59×).
+Amplification needs a **carrier**: an early error has to move the buyer into a
+state that persists long enough to be inhabited. Persistence stabilizes the
+trajectory *and* carries the error; they are one mechanism seen twice.
+
+It also shows `R` alone does not govern amplification. The weekly-taste cells
+carry the largest systematic error in the study — 116% against 85% — and
+amplify by exactly 1.00×. So `amplification ~ R × state persistence`, with 9b
+varying the first term and 9c collapsing the second.
+
+**Nothing across 9a–9c reached materiality.** The worst behavioural divergence
+anywhere is 2.49 pp against ±5, and every class-to-tier share in every cell
+returns `equivalent`.
 
 Phase 8's entry/exit dynamics selectively eliminated the premium tier — from
 a 40% starting share to essentially zero in all eight cells — under this
@@ -233,7 +250,7 @@ Full specification: see `docs/phase_specifications.md`.
 | 8 | Endogenous Market Structure | Does repeated local interaction produce macro-level structure? | Infrastructure only — **web viz: entry/exit panels** |
 | 9a | Learned Buyer Policy | Can a learned policy recover the rule-based buyer's conditional behaviour, and does one-step fidelity survive closed-loop deployment? **The loop is real and does not compound** — D_shadow exceeds D_offline decisively (+0.0057, CI excludes zero) at 7%, with every trajectory quantity equivalent. | Infrastructure only — closes the buyer-side learning ladder |
 | 9b | Teacher Entropy Sweep | Does the ratio of systematic policy error to intrinsic teacher stochasticity govern whether one-step error compounds? **Yes for amplification** (Spearman −1.00, 1.02×→1.67×), **not yet for behaviour** (peak 2.49 pp against ±5). | Infrastructure only |
-| 9c | Stabilizer Ablation | Which environment characteristics — the budget wall, season-long fixed preference — suppress trajectory divergence? | Infrastructure only |
+| 9c | Stabilizer Ablation | Which environment characteristics suppress trajectory divergence? **Neither — persistence *carries* it.** Removing season-long taste collapses amplification 1.67×→1.00×; removing the budget wall barely moves it. | Infrastructure only |
 | 9d | Synthetic Agent Users | What does an LLM Agent add over a *trained* buyer policy? | First scaffolding for A — **web viz: Agent Inspector; cost/speed KPI begins** |
 | 10 | Human vs Agent | Where does synthetic behavior match/diverge from real humans? | **A begins** |
 | 11 | Bias Quantification | Can the gap be measured, mapped, and corrected? | **A formalizes; B built** |
