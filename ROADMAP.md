@@ -86,9 +86,10 @@ visualization** gets, and when. Specifically:
 
 ## Current phase
 
-**Phase 7e-3a complete; next is 7e-3b.** Phases 1–6 and 7a, 7b, 7d are
-tagged validated; 7c is tagged `phase7c-skipped`; 7e-1, 7e-2 and 7e-3a are
-tagged `phase7e1-calibrated`, `phase7e2-headroom` and `phase7e3a-context`.
+**Phase 7e complete; next is Phase 8.** Phases 1–6 and 7a, 7b, 7d are
+tagged validated; 7c is tagged `phase7c-skipped`; 7e-1 through 7e-3b are
+tagged `phase7e1-calibrated`, `phase7e2-headroom`, `phase7e3a-context` and
+`phase7e3b-horizon`.
 
 Phase 7 answered its headline question in the negative, twice over. A
 context-blind bandit beats the heuristic on profit (+10.3%) while leaving
@@ -141,6 +142,27 @@ it connects back to 7e-2 — no *one-week* deviation pays at any state, but a
 commitment rather than a weekly state-contingent choice, and a contextual
 bandit is the wrong instrument for it by construction.
 
+**Gate 3b: the right shape, the right depth, half the duration.** The
+Q-network prices at 2.379 over weeks 0–7 against the hand-found schedule's
+2.385 — then returns to the standing price at week 8 where the schedule holds
+to week 16. It spends 75% of the discount and collects 31% of the gain,
+because a stock compounds while it is being fed. This is the
+sacrifice-then-recover trajectory 7d looked for and did not find, appearing
+for the first time, in the environment built to contain it. It is still
++2.2% with a CI of [−0.4%, +4.8%] — equivalent, not material — so gate 3b
+does not pass, and the sign of the advantage is not established. The
+registered escalation fires only on an interval straddling the materiality
+boundary, which this one does not, so it is not run and the limitation is
+reported rather than repaired.
+
+**Phase 7e's answer.** Policy complexity became *valuable* without becoming
+*learnable*. Gate 2 measured an intertemporal trade-off worth 2.6% where the
+base environment had none; context stayed worthless even against an oracle,
+and the multi-week learner recovered under a third of a trade-off known to
+exist. **The market structure that makes a sophisticated policy worth having
+is not the structure that makes it findable.** Phase 7's original null was
+understating the problem, not overstating it.
+
 Full specification: see `docs/phase_specifications.md`.
 
 ## Full phase list (summary)
@@ -154,7 +176,7 @@ Full specification: see `docs/phase_specifications.md`.
 | 5 | Nonlinear Behavior | Do nonlinear/interaction effects change conclusions vs. linear baseline? | Infrastructure only |
 | 6 | Repeated Interaction | Does history/memory change future behavior? ("weeks" become real here) | Infrastructure only — **web viz introduced** |
 | 7 (a, b, d) | Seller Learning | Does stateful policy learning produce market structures that myopic bandit optimization cannot? **No, in the base environment.** 7b beats the heuristic on profit but moves no class share; 7d's multi-week horizon adds nothing (equivalent). **7c skipped**: the profit-maximizing price is invariant to observable market state. | Infrastructure only |
-| 7e | Mechanism Sufficiency | Under what market structure does each level of policy complexity become *necessary*? A separate environment with persistent, price-sensitive, bounded loyalty, run as three gates: state exists → intertemporal trade-off exists → complexity pays. **Gates 1 and 2 passed** — memory reaches 2.8× further than the counter's at lag 8 with lock-in strength held equal, and a discount-then-stop schedule beats the best standing price by +2.6% while the delta = 0 control loses. **Gate 3a null** — conditioning on the state is worth −2.3% (equivalent), and an oracle says the best arm is the same at every state. | Infrastructure only — gives context conditioning and stateful learning an existence condition |
+| 7e | Mechanism Sufficiency | Under what market structure does each level of policy complexity become *necessary*? A separate environment with persistent, price-sensitive, bounded loyalty, run as three gates: state exists → intertemporal trade-off exists → complexity pays. **Gates 1 and 2 passed** — memory reaches 2.8× further than the counter's at lag 8 with lock-in strength held equal, and a discount-then-stop schedule beats the best standing price by +2.6% while the delta = 0 control loses. **Gate 3a null** — conditioning on the state is worth −2.3% (equivalent), and an oracle says the best arm is the same at every state. **Gate 3b not passed** — the Q-network reproduces the schedule's first eight weeks and stops, collecting 31% of a gain known to exist. Complexity became valuable without becoming learnable. | Infrastructure only — gives context conditioning and stateful learning an existence condition |
 | 8 | Endogenous Market Structure | Does repeated local interaction produce macro-level structure? | Infrastructure only — **web viz: entry/exit panels** |
 | 9a | Learned Buyer Policy | How does a buyer policy trained to maximize realized surplus differ from the hand-written rule, and how far from optimal was that rule? | Infrastructure only — closes the buyer-side learning ladder |
 | 9b | Synthetic Agent Users | What does an LLM Agent add over a *trained* buyer policy? | First scaffolding for A — **web viz: Agent Inspector; cost/speed KPI begins** |

@@ -1478,6 +1478,67 @@ not tuned, the arms are not widened, the network is not enlarged, and the
 training block is not extended until it wins. This is the rule adopted at the
 7e design gate, and it binds here because this is the last gate.
 
+**Result: the right shape, the right depth, half the duration — and a third of
+the value.**
+
+The Q-network earns **42.27 per week against the better bandit's 41.37, +2.2%
+with a 95% CI of [−0.4%, +4.8%] — equivalent**, so gate 3b's first criterion is
+met (a verdict was reached) and its second is not (the gain is not material and
+does not approach the schedule). **Gate 3b does not pass.**
+
+But the direction is new, and the price path says something the profit number
+alone does not. Compared week by week against 7e-2's hand-found schedule:
+
+| | weeks 0–7 | weeks 8–15 | weeks 16–65 |
+|---|---|---|---|
+| 7e-2's schedule | 2.385 | 2.385 | 2.650 |
+| Q-network | **2.379** | **2.635** | 2.640 |
+
+**It found the investment, at almost exactly the right depth, and stopped
+halfway through.** The first eight weeks are the hand-found schedule to within
+six thousandths of a currency unit. Then it returns to the standing price at
+week 8 where the schedule holds to week 16, spends 75% of the schedule's total
+discount, and collects **31% of the available gain**. The last eight weeks of
+investment are where most of the payoff is, because a stock compounds while it
+is being fed.
+
+This is the **sacrifice-then-recover trajectory that 7d looked for and did not
+find**, appearing for the first time in the project — in the environment built
+to contain it, which is the result Phase 7e was constructed to produce. At 7d
+the same architecture on the same horizon came in at −1.3% and priced flat
+throughout; here it comes in at +2.2% and prices low early. The mechanism, not
+the learner, is what changed.
+
+**What the gate's second criterion is for.** A learner can clear a decisiveness
+test and still have found nothing, and separating the two is the reason this
+gate has two criteria where every earlier one had a single test of
+decisiveness. The thing to find was measured before the learner was built, is
+worth 2.6%, and is expressible in the policy's own state. Reaching 31% of it is
+a statement about learning, not about the market.
+
+**The stopping rule is applied, including where it costs something.** The
+interval [−0.4%, +4.8%] crosses zero, so even the direction of the +2.2% is not
+established at 30 seeds, and 300 seeds would settle it for about a minute of
+compute. The registered escalation fires only on an interval straddling the
+**materiality** boundary, which this one does not — it is decisively equivalent
+— so the escalation does not apply and is not run. The limitation is reported
+instead of repaired: **the sign of the Q-network's advantage over the bandit is
+not established.** A rule that is followed only when following it is free is
+not a rule, and this is the sub-stage the rule was written for.
+
+Nothing further is tuned. The mechanism parameters stand, the arms stand, the
+network stands, and the training block stands.
+
+**Phase 7e's answer, across all three gates.** Policy complexity became
+*valuable* — gate 2 measured an intertemporal trade-off worth 2.6% where the
+base environment had none. It did not become *learnable* at the same time:
+context stayed worthless even with an oracle (3a), and the multi-week learner
+recovered under a third of a trade-off known to exist (3b). **The market
+structure that makes a sophisticated policy worth having is not the structure
+that makes it findable**, and Phase 7's original null was understating the
+problem rather than overstating it — the base environment lacked the value, and
+this one has the value and still lacks the learnability.
+
 **Exit condition:** `git tag phase7e3b-horizon`.
 
 ---
