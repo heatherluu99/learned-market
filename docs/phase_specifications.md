@@ -3331,6 +3331,89 @@ three gates, Phase 9c amplification, and Phase 10's simulator arm `S`. **Phase
 against the human panel, not against the simulator's loyalty specification.
 
 
+### Gate A result — the interval barely binds, and the parameter does not read as registered
+
+30 seeds, 66-week seasons, 30-week burn-in, `gamma` and `rho` as registered.
+
+| `rho` \ `gamma` | 0.75 | 1.50 | 3.00 |
+|---|---|---|---|
+| **0.50** | +0.0525 ✓ | +0.0971 ✓ | +0.1561 ✓ |
+| **0.80** | +0.0253 ✓ | +0.0494 ✓ | +0.0876 ✓ |
+| **0.95** | **+0.0112 ✗** | +0.0228 ✓ | +0.0418 ✓ |
+
+M1, the streak ablation on the same market: **+0.1139**, admissible.
+
+**Eight of nine cells are admissible, and the one exclusion is at the lower
+bound.** No cell approaches the upper bound: the largest state dependence
+anywhere in the grid is +0.156 against a ceiling of +0.36, and that is the
+`gamma = 3.0` stress point, an odds ratio of 20. The stress point did what it
+was registered to do and returned a clear answer, but not the one it was
+shaped for: the question was whether even very strong causal leverage could
+reach the human-compatible region, and in fact the mechanism cannot leave it
+from below.
+
+**So the human interval constrains almost nothing here, and that is the
+finding.** Only its lower end does any work, excluding a single cell. This is a
+property of the interval rather than of the grid — it spans an order of
+magnitude because its ends are a lower and an upper bound on different
+estimands, not a confidence interval — and it means `Theta_H` is close to the
+whole parameter space. A tighter constraint needs a tighter human estimand,
+which is the Level 3 model Phase 10 already recorded as not done, not a
+different simulator grid.
+
+### The correction Gate A forced: `rho` is not a persistence knob at a single lag
+
+Excess repeat over memory-off, `gamma` held at 1.50:
+
+| `rho` | lag 1 | lag 2 | lag 4 | lag 8 | lag 16 |
+|---|---|---|---|---|---|
+| 0.50 | **+0.1005** | +0.0695 | +0.0332 | +0.0167 | +0.0141 |
+| 0.80 | +0.0531 | +0.0490 | +0.0355 | +0.0249 | +0.0179 |
+| 0.95 | +0.0251 | +0.0268 | +0.0209 | +0.0200 | **+0.0190** |
+| M1 streak | +0.1177 | +0.0798 | +0.0399 | +0.0186 | +0.0139 |
+
+**The ordering at lag 1 is the reverse of the ordering at lag 16**, crossing
+between lags 2 and 4. In `L <- rho*L + (1-rho)*I`, the same parameter sets the
+accrual weight `(1 - rho)` and the decay `rho`. At `rho = 0.95` a single
+purchase moves the stock by 0.05, so the most recent purchase barely registers
+and the one-step excess is small; the memory that does accumulate is the one
+that survives sixteen weeks. At `rho = 0.50` the last purchase dominates the
+stock and nothing survives.
+
+This is a property of the one-parameter form, not a defect in it. Folding
+`beta` into `(1 - rho)` bought interpretability and cost the ability to vary
+recency weight and persistence separately, and no single-lag statistic can
+recover the difference.
+
+**What this means for the gate as registered.** Gate A's estimand is correct
+for what it compares against — the human bracket is a one-step repeat excess,
+so a one-step simulated excess is the matching quantity, and admissibility is
+computed correctly. What does **not** follow is the sentence the gate was
+written to support, that the human evidence constrains which *persistence*
+regimes are admissible. It constrains which *one-step recency weights* are
+admissible. Those are different claims and the earlier wording conflated them.
+
+Recorded rather than repaired, and Gate B is amended rather than the estimand:
+
+- Gate A stands as an admissibility filter and its numbers are unchanged.
+- The claim it licenses is about one-step state dependence, not persistence.
+- **Gate B may not inherit Gate A's ordering.** Long-horizon dynamics are what
+  `rho` was introduced to move, and at lag 16 the ordering is reversed, so a
+  cell that looks weak in Gate A may be the strongest in Gate B. Gate B is
+  still run only inside `Theta_H`, which excludes one cell.
+- Constraining persistence against human data needs a human estimand at a
+  horizon — a lag-`k` repeat excess from the panel — which this branch does not
+  have and does not claim.
+
+**M1 tracks `rho = 0.50` at every lag** (+0.1177 vs +0.1005 at lag 1, +0.0139
+vs +0.0141 at lag 16). A three-week capped streak counter and an exponential
+stock with a one-week half-life are, on this measure, the same mechanism. That
+is a Gate C observation arriving early, and it sharpens what Gate C can find:
+if the streak model differs from admissible stock cells on path dependence, the
+difference cannot be attributed to "streak versus stock" in general, only to
+the short-memory end of the stock family — because that is where M1 sits.
+
+
 ## Phase 11 — Bias Quantification (Asset A formalizes; Asset B built)
 
 **Research question:** Is the human-AI gap systematic and predictable, and can it be corrected?
