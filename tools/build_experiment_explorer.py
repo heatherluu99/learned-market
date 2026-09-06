@@ -51,6 +51,7 @@ TITLES = {
     "phase7e2_headroom": "Intertemporal headroom (7e-2)",
     "phase7e3a_context": "Does context pay? (7e-3a)",
     "phase7e3b_horizon": "Does the horizon pay? (7e-3b)",
+    "phase8_entry_exit": "Entry, exit and market structure",
 }
 
 #: Runs whose figure was later overwritten in place by a successor writing to

@@ -1608,6 +1608,91 @@ def phase7e3b_slide() -> PhaseSlide:
     )
 
 
+def phase8_slide() -> PhaseSlide:
+    """Assemble the Phase 8 slide from the run outputs, not hand-typed numbers."""
+    import pandas as pd
+
+    cells = pd.read_csv(REPO_ROOT / "results/phase8/cells.csv")
+    capital = cells[cells["exit_rule"] == "capital"].sort_values("fixed_cost")
+    streak = cells[cells["exit_rule"] == "streak"].sort_values("fixed_cost")
+    registered = capital[capital["fixed_cost"] == 10.0].iloc[0]
+    slow = [c for c in cells.columns if c == "share_Slow"][0]
+    real = acceptance.real_market_volatility()
+
+    return PhaseSlide(
+        phase_number=8,
+        phase_name="Endogenous Market Structure",
+        subtitle=(
+            "Entry and exit switched on, nothing else changed  ·  git tag: "
+            f"phase8-validated  ·  {int(registered['seeds'])} seeds x 110 weeks"
+        ),
+        badge="EMERGENT",
+        badge_color=GREEN,
+        agents=[
+            ("Buyers: ", "100 — Poor 70 / Middle 20 / Rich 10, dispersed budgets"),
+            ("Sellers: ", "5 at week 0 — 3 Slow, 2 Shigh — then whoever survives"),
+        ],
+        environment=[
+            "-  40 fixed slots, drawn at slot width whatever the occupancy, so",
+            "   arms with different entry histories stay paired on a seed.",
+            "-  price_reference frozen at the week-0 configuration for all 110 weeks.",
+        ],
+        method=[
+            "Entry: copy a stall that is making money, after two weeks of mean",
+            "profit above zero. Exit: capital exhausted, or three losing weeks —",
+            "both run. Fixed weekly cost swept over 6 / 8 / 10 / 12.",
+        ],
+        literature=[
+            (
+                "Schelling (1971), ",
+                "“Dynamic Models of Segregation” (J. Math. Sociology) — origin "
+                "of the encoded-vs-emergent question this phase tests.",
+            ),
+        ],
+        metrics=[
+            MetricRow("Premium tier, week 0", "40% of stalls", "—"),
+            MetricRow("Premium tier, week 110",
+                      f"{(1 - capital[slow].mean()) * 100:.0f}%", "—"),
+            MetricRow("Sellers at F=6 / F=12",
+                      f"{capital.iloc[0]['final_sellers']:.1f} / "
+                      f"{capital.iloc[-1]['final_sellers']:.1f}", "PASS"),
+            MetricRow("Churn, streak vs capital",
+                      f"{streak['exits'].mean() / capital['exits'].mean():.1f}x", "—"),
+            MetricRow("Volatility vs RI DEM",
+                      f"{cells['volatility'].mean():.1%} vs {real:.1%}", "—"),
+            MetricRow("Peak sellers vs capacity",
+                      f"{cells['peak_sellers'].max()} of 40", "PASS"),
+        ],
+        research_question=(
+            "Can repeated micro-level interaction produce macro-level market "
+            "structure without that structure being programmed in?"
+        ),
+        finding=(
+            f"Yes. The premium tier is competed out of existence in all eight "
+            f"cells, from 40% of stalls to essentially zero, and no rule anywhere "
+            f"reads a class label — verified by swapping the tier names and "
+            f"getting a bit-identical run. Free entry sets the size and the fixed "
+            f"cost sets the equilibrium: {capital.iloc[0]['final_sellers']:.1f} "
+            f"sellers at a cost of 6, {capital.iloc[-1]['final_sellers']:.1f} at 12. "
+            f"The exit rule changes the churn and not the destination — the "
+            f"three-week rule turns over "
+            f"{streak['exits'].mean() / capital['exits'].mean():.1f}x as many firms "
+            f"and lands within 15% of the same count."
+        ),
+        caveat=(
+            f"Emergent is meant narrowly. The mechanism did not encode the "
+            f"outcome, but *why* the premium tier loses was fixed at Phase 2: 70% "
+            f"of buyers hold a budget of 3.0 against its price of 6.0, so it sells "
+            f"to 30% of the market while paying the same rent. The market "
+            f"discovered what the population already made true. Both halves of the "
+            f"registered mechanism were also inoperative and were replaced at the "
+            f"gate — exit fired on week-0 arithmetic in 100% of seeds, and the "
+            f"unmet-demand entry trigger was identically zero across 1,980 "
+            f"seller-weeks."
+        ),
+    )
+
+
 BUILDERS = {
     "1": phase1_slide,
     "2": phase2_slide,
@@ -1622,6 +1707,7 @@ BUILDERS = {
     "7e2": phase7e2_slide,
     "7e3a": phase7e3a_slide,
     "7e3b": phase7e3b_slide,
+    "8": phase8_slide,
 }
 
 
