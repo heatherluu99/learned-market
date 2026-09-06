@@ -135,6 +135,29 @@ class MarketConfig:
     shock_seller: int | None = None
     shock_week: int | None = None
 
+    #: Phase 8: seller entry and exit. None disables the mechanism entirely,
+    #: which is every phase through 7e. "capital" exits a seller when its
+    #: balance runs out; "streak" is the originally registered rule, exit
+    #: after `exit_loss_weeks` consecutive losing weeks. Both are run - see
+    #: docs/phase_specifications.md, Phase 8.
+    exit_rule: str | None = None
+    #: Starting capital, three weeks of fixed cost, so a seller earning nothing
+    #: survives as long as the registered streak rule would have allowed.
+    seller_endowment: float = 30.0
+    exit_loss_weeks: int = 3
+    #: Free entry: an entrant appears after this many consecutive weeks of
+    #: mean active-seller profit above zero. Above zero is the textbook
+    #: condition - entrants expect to cover their costs - and needs no
+    #: threshold parameter, so it scales across the fixed-cost sweep.
+    entry_profit_weeks: int = 2
+    #: Fixed slots. Weekly draws are taken at this width whatever the
+    #: occupancy, so two arms with different entry histories still consume the
+    #: same random stream and stay paired on a seed. A capacity, not a target:
+    #: at 20 the cheapest cells reached it and their equilibrium would have
+    #: been the cap rather than the market, and at 40 the busiest cell peaks at
+    #: 27. Checked at 60, where the answer does not move.
+    max_sellers: int = 40
+
     #: Phase 6 onward: weeks in one season. None means a single static
     #: session, which is what Phases 1-5 are.
     weeks: int | None = None
@@ -209,6 +232,10 @@ class MarketConfig:
             raise ValueError("a market needs at least one seller class")
         if self.loyalty_model not in ("streak", "stock"):
             raise ValueError(f"unknown loyalty_model {self.loyalty_model!r}")
+        if self.exit_rule not in (None, "capital", "streak"):
+            raise ValueError(f"unknown exit_rule {self.exit_rule!r}")
+        if self.has_entry_exit and self.max_sellers < self.n_sellers:
+            raise ValueError("max_sellers is below the starting seller count")
         object.__setattr__(self, "price_reference", self._initial_price_reference())
 
     def _initial_price_reference(self) -> float:
@@ -288,6 +315,15 @@ class MarketConfig:
     @property
     def has_loyalty_stock(self) -> bool:
         return self.loyalty_model == "stock"
+
+    @property
+    def has_entry_exit(self) -> bool:
+        return self.exit_rule is not None
+
+    @property
+    def n_slots(self) -> int:
+        """Draw width. Equal to the seller count unless entry/exit is on."""
+        return self.max_sellers if self.has_entry_exit else self.n_sellers
 
     @property
     def arm_half_range(self) -> float:
@@ -769,3 +805,45 @@ PHASE7E_COUNTER = dataclasses.replace(
 )
 
 PHASE7E_CELLS = tuple(phase7e_cell(rho=r) for r in PHASE7E_RETENTIONS)
+
+
+# --------------------------------------------------------------------------
+# Phase 8 — Endogenous Market Structure
+# --------------------------------------------------------------------------
+
+#: Five seasons. Whether the seller mix settles or oscillates is only visible
+#: across several season boundaries - see docs/phase_specifications.md,
+#: "Weeks and Seasons".
+PHASE8_WEEKS = 110
+
+#: The swept axis. Gross margin before fixed cost is 28.0 / 28.0 / 16.9 / 15.5
+#: / 10.0 per starting seller, so 10.0 sits exactly on the weakest one's
+#: break-even and the registered value would have decided the phase by itself.
+PHASE8_FIXED_COSTS = (6.0, 8.0, 10.0, 12.0)
+
+#: Both exit rules, run as a contrast rather than one chosen: sensitivity to
+#: the rule's own form is then a reported quantity.
+PHASE8_EXIT_RULES = ("capital", "streak")
+
+
+def phase8_cell(exit_rule: str, fixed_cost: float) -> MarketConfig:
+    """Phase 7a's fixed-price market with entry and exit switched on.
+
+    Buyer and pricing mechanics are unchanged from Phase 7, which is what
+    makes entry/exit the single changed dimension.
+    """
+    return dataclasses.replace(
+        PHASE7A_FIXED,
+        name=f"phase8_{exit_rule}_f{int(fixed_cost):02d}",
+        phase=8,
+        weeks=PHASE8_WEEKS,
+        fixed_weekly_cost=fixed_cost,
+        exit_rule=exit_rule,
+    )
+
+
+PHASE8_CELLS = tuple(
+    phase8_cell(rule, cost)
+    for rule in PHASE8_EXIT_RULES
+    for cost in PHASE8_FIXED_COSTS
+)

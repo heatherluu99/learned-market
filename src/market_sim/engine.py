@@ -359,6 +359,12 @@ class SeasonResult:
     posted_prices: np.ndarray | None = None
     #: (week, seller) profit. None before a cost model exists.
     profits: np.ndarray | None = None
+    #: (week, slot) whether that slot held a trading seller. Phase 8 only.
+    active: np.ndarray | None = None
+    #: (week, slot) which firm occupied that slot, -1 when empty. Phase 8.
+    firm_id: np.ndarray | None = None
+    #: Entry and exit events, each with week, slot, tier and reason. Phase 8.
+    events: list | None = None
     #: (week, buyer, seller) loyalty bonus in force during that week, float32.
     #: Only populated when `record_loyalty_bonus` is set - Phase 7e's gate 1
     #: is the only thing that reads a distribution rather than a summary.
@@ -460,27 +466,53 @@ def run_season(cfg: MarketConfig, seed: int, policy=None) -> SeasonResult:
     if cfg.weeks is None:
         raise ValueError(f"{cfg.name} has no week axis; use run_single")
 
-    n_buyers, n_sellers = cfg.n_buyers, cfg.n_sellers
+    n_buyers = cfg.n_buyers
+    # Phase 8: the market is a fixed set of slots, of which some are occupied.
+    # Every weekly draw is taken at slot width whatever the occupancy, so two
+    # arms whose entry histories differ still consume the same random stream
+    # and stay paired on a seed. Without entry/exit `n_slots == n_sellers` and
+    # nothing below changes for Phases 1-7.
+    n_sellers = cfg.n_slots
     rng = np.random.default_rng(seed)
     preference = rng.random((n_buyers, n_sellers))
 
     buyer_class = cfg.buyer_class_of()
-    seller_class = cfg.seller_class_of()
+    seller_class = cfg.seller_class_of() + ["" for _ in range(n_sellers - cfg.n_sellers)]
     budget0 = cfg.buyer_budgets(seed)
     alpha = np.array(
         [c.price_sensitivity for c in cfg.buyer_classes for _ in range(c.count)], dtype=float
     )
-    price0 = np.array(
-        [c.price for c in cfg.seller_classes for _ in range(c.count)], dtype=float
+    def _slots(values, dtype):
+        """Per-slot array: the configured sellers, then empty slots."""
+        filler = np.zeros(n_sellers - cfg.n_sellers, dtype=dtype)
+        return np.concatenate([np.array(values, dtype=dtype), filler])
+
+    price0 = _slots([c.price for c in cfg.seller_classes for _ in range(c.count)], float)
+    inventory0 = _slots(
+        [c.inventory for c in cfg.seller_classes for _ in range(c.count)], int
     )
-    inventory0 = np.array(
-        [c.inventory for c in cfg.seller_classes for _ in range(c.count)], dtype=int
-    )
-    visibility_prob = np.array(cfg.visibility_prob_of(), dtype=float)
+    visibility_prob = _slots(cfg.visibility_prob_of(), float)
     attendance_prob = np.array(cfg.attendance_prob_of(), dtype=float)
     price_reference = cfg.price_reference
 
-    unit_cost = np.array(cfg.unit_cost_of(), dtype=float)
+    unit_cost = _slots(cfg.unit_cost_of(), float)
+    # Phase 8 run state. `active` is all-True and never changes without
+    # entry/exit, so the branches below are inert for every earlier phase.
+    active = np.zeros(n_sellers, dtype=bool)
+    active[: cfg.n_sellers] = True
+    capital = np.where(active, cfg.seller_endowment, 0.0)
+    loss_streak = np.zeros(n_sellers, dtype=int)
+    # A slot is a seat, not a firm: an entrant can take the seat a departing
+    # seller just vacated, so `active` alone cannot tell a survivor from a
+    # replacement. `firm_id` gives each occupancy its own identity, which is
+    # also what makes a firm-lifetime distribution measurable.
+    firm_id = np.where(active, np.arange(n_sellers), -1)
+    next_firm_id = cfg.n_sellers
+    firm_hist: list[np.ndarray] = []
+    entry_rng = np.random.default_rng(30_000 + seed)
+    profitable_weeks = 0
+    active_hist: list[np.ndarray] = []
+    events: list[dict] = []
     last_seller = np.full(n_buyers, -1, dtype=int)
     streak = np.zeros(n_buyers, dtype=int)
     # Phase 7e: a stock per buyer-seller pair, updated deterministically from
@@ -608,12 +640,17 @@ def run_season(cfg: MarketConfig, seed: int, policy=None) -> SeasonResult:
         transactions: list[Transaction] = []
         bought_this_week: list[list[int]] = [[] for _ in range(n_buyers)]
 
+        n_active = int(active.sum())
         for buyer_id in range(n_buyers):
             if not attends[buyer_id]:
-                blocked[NO_PURCHASE_ABSENT] += n_sellers
+                blocked[NO_PURCHASE_ABSENT] += n_active
                 continue
             for visit_order, seller_id in enumerate(visit_orders[buyer_id]):
                 seller_id = int(seller_id)
+                if not active[seller_id]:
+                    # An empty slot is not a stall the buyer declined - it is
+                    # not there. Counting it would inflate every block reason.
+                    continue
                 if seller_id == closed:
                     blocked[NO_PURCHASE_CLOSED] += 1
                     continue
@@ -709,7 +746,10 @@ def run_season(cfg: MarketConfig, seed: int, policy=None) -> SeasonResult:
                 config_name=cfg.name,
                 seed=seed,
                 buyer_classes=buyer_class,
-                seller_classes=seller_class,
+                # Copied, not aliased: Phase 8 rewrites a slot's tier when an
+                # entrant takes it, and sharing the list would give every
+                # earlier week the final week's seller mix.
+                seller_classes=list(seller_class),
                 transactions=transactions,
                 buyer_n_purchases=buyer_n_purchases,
                 buyer_total_spent=buyer_total_spent,
@@ -725,13 +765,64 @@ def run_season(cfg: MarketConfig, seed: int, policy=None) -> SeasonResult:
             )
         )
         profit = seller_revenue - unit_cost * seller_n_sold - cfg.fixed_weekly_cost
+        profit = np.where(active, profit, 0.0)
         weeks[-1].seller_profit = profit.copy()
+        active_hist.append(active.copy())
+        firm_hist.append(firm_id.copy())
 
         chosen_hist.append(chosen)
         attended_hist.append(attends.copy())
         streak_hist.append(streak.copy())
         price_hist.append(posted_price.copy())
         profit_hist.append(profit.copy())
+
+        if cfg.has_entry_exit:
+            # Exit first, on the week just scored; then entry, on the mean
+            # profit realized by whoever actually traded that week. Reading the
+            # entry signal after exits would let removing loss-makers raise the
+            # mean and pull in an entrant on the strength of a departure.
+            traded = active.copy()
+            capital = np.where(active, capital + profit, capital)
+            loss_streak = np.where(active & (profit < 0), loss_streak + 1, 0)
+            if cfg.exit_rule == "capital":
+                leaving = active & (capital <= 0)
+                reason = "capital exhausted"
+            else:
+                leaving = active & (loss_streak >= cfg.exit_loss_weeks)
+                reason = f"{cfg.exit_loss_weeks} consecutive losing weeks"
+            for si in np.flatnonzero(leaving):
+                events.append({"week": _week, "slot": int(si),
+                               "firm": int(firm_id[si]), "event": "exit",
+                               "tier": seller_class[si], "price": float(price0[si]),
+                               "reason": reason})
+            active = active & ~leaving
+            firm_id = np.where(leaving, -1, firm_id)
+
+            mean_profit = float(profit[traded].mean()) if traded.any() else 0.0
+            profitable_weeks = profitable_weeks + 1 if mean_profit > 0 else 0
+            free = np.flatnonzero(~active)
+            if profitable_weeks >= cfg.entry_profit_weeks and len(free) and active.any():
+                # Imitation: copy a stall that is currently making money. The
+                # rule reads profit and never a class label, which is what
+                # keeps the resulting mix an outcome rather than an input.
+                model = int(entry_rng.choice(np.flatnonzero(active)))
+                slot = int(free[0])
+                price0[slot] = price0[model]
+                inventory0[slot] = inventory0[model]
+                visibility_prob[slot] = visibility_prob[model]
+                unit_cost[slot] = unit_cost[model]
+                seller_class[slot] = seller_class[model]
+                posted_price[slot] = price0[model]
+                capital[slot] = cfg.seller_endowment
+                loss_streak[slot] = 0
+                active[slot] = True
+                firm_id[slot] = next_firm_id
+                next_firm_id += 1
+                profitable_weeks = 0
+                events.append({"week": _week, "slot": slot,
+                               "firm": int(firm_id[slot]), "event": "entry",
+                               "tier": seller_class[slot], "price": float(price0[slot]),
+                               "reason": f"imitated firm {int(firm_id[model])}"})
 
         if cfg.price_rule == "policy":
             previous_profit = profit
@@ -787,6 +878,9 @@ def run_season(cfg: MarketConfig, seed: int, policy=None) -> SeasonResult:
         posted_prices=np.array(price_hist),
         profits=np.array(profit_hist) if cfg.has_costs else None,
         loyalty_bonus=np.array(bonus_hist) if bonus_hist else None,
+        active=np.array(active_hist) if cfg.has_entry_exit else None,
+        firm_id=np.array(firm_hist) if cfg.has_entry_exit else None,
+        events=events if cfg.has_entry_exit else None,
     )
 
 

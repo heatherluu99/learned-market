@@ -1297,3 +1297,106 @@ def evaluate_phase7e3b(
             "about the market.",
         ),
     ]
+
+
+# --------------------------------------------------------------------------
+# Phase 8 — endogenous market structure
+# --------------------------------------------------------------------------
+
+#: RI DEM farmers' market vendor counts, 2019-2023: 24, 31, 25, 24, 26. The
+#: season-over-season changes are +29.2%, -19.4%, -4.0%, +8.3%, so a real
+#: multi-year market of this kind moves by this much on average.
+RI_DEM_VENDOR_COUNTS = (24, 31, 25, 24, 26)
+
+
+def real_market_volatility(counts=RI_DEM_VENDOR_COUNTS) -> float:
+    """Mean absolute season-over-season change in the reference market."""
+    counts = np.asarray(counts, dtype=float)
+    return float(np.abs(np.diff(counts) / counts[:-1]).mean())
+
+
+def seller_counts_by_season(cfg: MarketConfig, seasons: list) -> np.ndarray:
+    """(seed, season) active sellers at each season boundary.
+
+    Read at the last week of each season rather than averaged over it, which
+    is what a vendor list published once a year records.
+    """
+    weeks_per_season = 22
+    n_seasons = cfg.weeks // weeks_per_season
+    out = np.zeros((len(seasons), n_seasons))
+    for i, s in enumerate(seasons):
+        for k in range(n_seasons):
+            out[i, k] = s.active[(k + 1) * weeks_per_season - 1].sum()
+    return out
+
+
+def class_mix(seasons: list) -> dict[str, float]:
+    """Share of surviving sellers in each tier at the end of the run."""
+    counts: dict[str, int] = {}
+    total = 0
+    for s in seasons:
+        final = s.weeks[-1]
+        for slot in np.flatnonzero(s.active[-1]):
+            counts[final.seller_classes[slot]] = (
+                counts.get(final.seller_classes[slot], 0) + 1
+            )
+            total += 1
+    return {k: v / total for k, v in sorted(counts.items())} if total else {}
+
+
+def evaluate_phase8(cfg: MarketConfig, seasons: list) -> list[CriterionResult]:
+    """Phase 8's validity conditions, and its one graded comparison.
+
+    Nothing here grades *which* structure appears - that is the phase's
+    observation, not its hypothesis. What is graded is that the observation is
+    of the market rather than of the implementation: that the equilibrium fits
+    inside the slot capacity, that the market does not go extinct, and that
+    the question "has it settled?" reaches a verdict.
+    """
+    counts = seller_counts_by_season(cfg, seasons)
+    peak = max(int(s.active.sum(axis=1).max()) for s in seasons)
+    extinct = sum(1 for s in seasons if s.active[-1].sum() == 0)
+    last, previous = counts[:, -1], counts[:, -2]
+    change, lo, hi = mean_difference_ci(last, previous)
+    scale = float(previous.mean())
+    verdict = equivalence_verdict(lo / scale, hi / scale, MATERIALITY_PROFIT_PCT)
+    simulated = float(np.abs(np.diff(counts, axis=1) / counts[:, :-1]).mean())
+    real = real_market_volatility()
+
+    return [
+        CriterionResult(
+            name="the equilibrium fits inside the slot capacity",
+            passed=peak < cfg.max_sellers,
+            measured=f"peak {peak} active sellers against a capacity of "
+            f"{cfg.max_sellers}",
+            threshold="strictly below the capacity",
+            note="A market that reaches the cap has measured the array size.",
+        ),
+        CriterionResult(
+            name="the market does not go extinct",
+            passed=extinct == 0,
+            measured=f"{extinct} of {len(seasons)} seeds end with no sellers",
+            threshold="no seed goes to zero",
+        ),
+        CriterionResult(
+            name="the seller count has settled by the final season",
+            passed=verdict != "inconclusive",
+            measured=f"season {counts.shape[1] - 1}: {scale:.1f} sellers -> "
+            f"season {counts.shape[1]}: {last.mean():.1f}, {change / scale:+.1%} "
+            f"95% CI [{lo / scale:+.1%}, {hi / scale:+.1%}] -> {verdict}",
+            threshold=f"CI wholly inside or wholly outside ±{MATERIALITY_PROFIT_PCT:g}%",
+            note="As since Phase 5, what is graded is that a verdict is "
+            "reached. 'Equivalent' means settled; 'material' means still "
+            "moving at the end of the run, which is also a finding.",
+        ),
+        CriterionResult(
+            name="season-to-season volatility against the reference market",
+            passed=True,
+            graded=False,
+            measured=f"simulated {simulated:.1%} per season against RI DEM's "
+            f"{real:.1%} (counts {list(RI_DEM_VENDOR_COUNTS)})",
+            threshold="reported, not graded",
+            note="A plausibility flag, not a test: the concern is a trajectory "
+            "wildly more volatile or more static than a real market ever is.",
+        ),
+    ]

@@ -1660,6 +1660,13 @@ The slot count is a capacity, not a target. Whether it ever binds is reported;
 if it does, the equilibrium is outside the measured range and the result says
 so rather than pretending the cap is a finding.
 
+**It was set by measurement, before the formal run.** At 20 slots the two
+cheapest cells reached the cap, so their equilibrium would have been the array
+size rather than the market. At **40** the busiest cell peaks at 27 and no cell
+binds; at 60 the answer does not move. 40 is used. This is removing an
+implementation artefact, not choosing an outcome — the cap is a limit of the
+representation and a result that rests on it is not a result.
+
 ### Acceptance criteria
 
 - Track active sellers per class over 110 weeks; report whether the mix
@@ -1676,6 +1683,14 @@ so rather than pretending the cap is a finding.
 - Sensitivity to the exit rule's form is **reported, not graded**: if the
   capital rule and the three-week rule produce different surviving mixes, that
   difference is a property of the rule and belongs beside the result.
+- **The 7e-3a escalation applies here too, and is stated before it is used.**
+  The settling comparison is made at 30 seeds first; if any cell's interval
+  straddles the materiality boundary, every cell is re-measured at **300 seeds**
+  — all of them, so the eight remain comparable — and the 30-seed numbers are
+  reported alongside rather than replaced. Once only. More seeds, never a
+  softer threshold, and never a longer run: 5 seasons is the length this
+  document fixed at design time, and a market still moving at week 110 is a
+  finding about the mechanism rather than a reason to keep running it.
 
 **Exit condition:** `git tag phase8-validated`. This is the last purely
 rule-based phase — no moat-relevant data is generated through Phase 8.
