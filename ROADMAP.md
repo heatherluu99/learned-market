@@ -86,7 +86,26 @@ visualization** gets, and when. Specifically:
 
 ## Current phase
 
-**Phase 8 complete; next is Phase 9a.** Every phase through 8 is tagged.
+**Phase 9a complete; next is Phase 9b.** Every phase through 9a is tagged.
+
+Phase 9a distilled the hand-written buyer into a policy that sees eight
+observable columns and not the latent taste draw, and deployed it. The gate
+passes: policy distance 0.0834 against a measured floor of 0.0832, worst
+stratum calibration 0.0157, and 0.0264 of the 0.0474 available nats.
+
+The closed-loop result is a directional confirmation and a quantitative
+rejection. `D_shadow` exceeds `D_offline` by +0.0057, CI [+0.0055, +0.0060] —
+the same student really is worse at imitating the teacher on the states *it*
+brings about, so the mechanism exists and every link is measured. But the
+amplification is 7%, the largest state drift is a Wasserstein-1 of 0.0100, and
+all six class-to-tier shares return equivalent. **The loop is real and it does
+not compound.**
+
+The reason is quantitative: the teacher's per-decision noise has an sd of
+0.475 against the student's systematic deviation of 0.083, so the bias is 17%
+of the coin-flip the market already runs on. Compounding imitation error needs
+a near-deterministic teacher — the regime a temperature-0 LLM agent occupies —
+which makes this null the reason to expect a different answer at 9b.
 
 Phase 8's entry/exit dynamics selectively eliminated the premium tier — from
 a 40% starting share to essentially zero in all eight cells — under this
@@ -200,7 +219,7 @@ Full specification: see `docs/phase_specifications.md`.
 | 7 (a, b, d) | Seller Learning | Does stateful policy learning produce market structures that myopic bandit optimization cannot? **No, in the base environment.** 7b beats the heuristic on profit but moves no class share; 7d's multi-week horizon adds nothing (equivalent). **7c skipped**: the profit-maximizing price is invariant to observable market state. | Infrastructure only |
 | 7e | Mechanism Sufficiency | Under what market structure does each level of policy complexity become *necessary*? A separate environment with persistent, price-sensitive, bounded loyalty, run as three gates: state exists → intertemporal trade-off exists → complexity pays. **Gates 1 and 2 passed** — memory reaches 2.8× further than the counter's at lag 8 with lock-in strength held equal, and a discount-then-stop schedule beats the best standing price by +2.6% while the delta = 0 control loses. **Gate 3a null** — conditioning on the state is worth −2.3% (equivalent), and an oracle says the best arm is the same at every state. **Gate 3b not passed** — the Q-network reproduces the schedule's first eight weeks and stops, collecting 31% of a gain known to exist. Complexity became valuable without becoming learnable. | Infrastructure only — gives context conditioning and stateful learning an existence condition |
 | 8 | Endogenous Market Structure | Does repeated local interaction produce macro-level structure? | Infrastructure only — **web viz: entry/exit panels** |
-| 9a | Learned Buyer Policy | How does a buyer policy trained to maximize realized surplus differ from the hand-written rule, and how far from optimal was that rule? | Infrastructure only — closes the buyer-side learning ladder |
+| 9a | Learned Buyer Policy | Can a learned policy recover the rule-based buyer's conditional behaviour, and does one-step fidelity survive closed-loop deployment? **The loop is real and does not compound** — D_shadow exceeds D_offline decisively (+0.0057, CI excludes zero) at 7%, with every trajectory quantity equivalent. | Infrastructure only — closes the buyer-side learning ladder |
 | 9b | Synthetic Agent Users | What does an LLM Agent add over a *trained* buyer policy? | First scaffolding for A — **web viz: Agent Inspector; cost/speed KPI begins** |
 | 10 | Human vs Agent | Where does synthetic behavior match/diverge from real humans? | **A begins** |
 | 11 | Bias Quantification | Can the gap be measured, mapped, and corrected? | **A formalizes; B built** |

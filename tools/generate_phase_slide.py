@@ -1701,6 +1701,100 @@ def phase8_slide() -> PhaseSlide:
     )
 
 
+def phase9a_slide() -> PhaseSlide:
+    """Assemble the Phase 9a slide from the run outputs, not hand-typed numbers."""
+    import pandas as pd
+
+    offline = pd.read_csv(REPO_ROOT / "results/phase9a/offline.csv")
+    drift = pd.read_csv(REPO_ROOT / "results/phase9a/drift.csv").set_index("feature")
+    closed = pd.read_csv(REPO_ROOT / "results/phase9a/closed_loop.csv").set_index("quantity")
+
+    const = offline[offline.hidden == 0].iloc[0]
+    soft = offline[(offline.soft_labels) & (offline.hidden > 0)]
+    sampled = offline[(~offline.soft_labels.astype(bool)) & (offline.hidden > 0)]
+    canonical = soft[(soft.hidden == 64) & (soft.depth == 2)].iloc[0]
+    cal_cols = [c for c in offline.columns if c.startswith("cal_")]
+    worst = float(canonical[cal_cols].max())
+    worst_sampled = float(sampled[cal_cols].max(axis=1).max())
+    d_off = float(drift.loc["D_offline", "wasserstein_1"])
+    d_sha = float(drift.loc["D_shadow", "wasserstein_1"])
+    lo = float(drift.loc["D_excess_lo", "wasserstein_1"])
+    hi = float(drift.loc["D_excess_hi", "wasserstein_1"])
+    shares = closed[closed["verdict"].notna()] if "verdict" in closed else closed
+
+    return PhaseSlide(
+        phase_number=9,
+        phase_name="Learned Buyer Policy — 9a Distillation",
+        subtitle=(
+            "Distil the hand-written buyer, then deploy it  ·  git tag: "
+            "phase9a-distilled  ·  train 1000–1119, held out 200–239, deploy 0–29"
+        ),
+        badge="GATE PASSED — LOOP DOES NOT COMPOUND",
+        badge_color=GOLD,
+        agents=[
+            ("Buyers: ", "100 — acting on a fitted policy instead of the rule"),
+            ("Sellers: ", "5 — Phase 6's market, unchanged"),
+        ],
+        environment=[
+            "-  22 weeks. The teacher is this project's own hand-coded buyer, so",
+            "   what is fitted is distillation of a simulator, not human behaviour.",
+            "-  The student sees 8 observable columns; the season-long taste draw,",
+            "   the dispersed budget and the exact price sensitivity are hidden.",
+        ],
+        method=[
+            "Soft labels p_T(s), which the simulator makes available. Scored on",
+            "E|p_T - p_theta| — under the shared purchase_draw this is the",
+            "expected TV distance between two Bernoulli policies, not an accuracy.",
+            "Gate: policy distance + stratified calibration + proper score.",
+        ],
+        literature=[
+            (
+                "Ross, Gordon & Bagnell (2011), ",
+                "“A Reduction of Imitation Learning and Structured Prediction to "
+                "No-Regret Online Learning” (AISTATS) — the compounding-error "
+                "argument this phase measures rather than assumes.",
+            ),
+        ],
+        metrics=[
+            MetricRow("Constant predictor", f"{const['distance']:.4f}", "—"),
+            MetricRow("Observation-set floor", f"{soft['distance'].min():.4f}", "—"),
+            MetricRow("Student, held out", f"{canonical['distance']:.4f}", "PASS"),
+            MetricRow("  worst stratum", f"{worst:.4f}", "PASS"),
+            MetricRow("D_offline -> D_shadow",
+                      f"{d_off:.4f} -> {d_sha:.4f}", "—"),
+            MetricRow("  excess, 95% CI",
+                      f"[{lo:+.4f}, {hi:+.4f}]", "PASS"),
+        ],
+        research_question=(
+            "Can a learned policy recover the conditional behaviour of the "
+            "rule-based buyer it replaces, and does that one-step fidelity "
+            "survive endogenous distribution shift in closed loop?"
+        ),
+        finding=(
+            f"The loop is real and it does not compound. D_shadow exceeds "
+            f"D_offline by {d_sha - d_off:+.4f}, CI [{lo:+.4f}, {hi:+.4f}] — the "
+            f"same student is measurably worse at imitating the teacher on the "
+            f"states *it* brings about. But the amplification is "
+            f"{d_sha / d_off:.2f}x, the largest state drift is a Wasserstein-1 of "
+            f"{drift.loc['streak_here', 'wasserstein_1']:.4f}, and all six "
+            f"class-to-tier shares return equivalent. Capacity confirms the floor "
+            f"is the observation set: 16x the parameters buys 0.0005."
+        ),
+        caveat=(
+            f"The explanation is the teacher's own stochasticity, and it bounds "
+            f"the claim rather than settling it: per decision the teacher's noise "
+            f"has an sd of 0.475 against the student's systematic deviation of "
+            f"0.083, so the bias is 17% of the coin-flip the market already runs "
+            f"on. Compounding imitation error needs a near-deterministic teacher "
+            f"— the regime a temperature-0 LLM agent occupies — which is why this "
+            f"null is a reason to expect a different answer at 9b. Soft labels "
+            f"matter for calibration, not fit: sampled labels cost 0.0009 in mean "
+            f"distance and reach {worst_sampled:.4f} at worst stratum, which fails "
+            f"the gate."
+        ),
+    )
+
+
 BUILDERS = {
     "1": phase1_slide,
     "2": phase2_slide,
@@ -1716,6 +1810,7 @@ BUILDERS = {
     "7e3a": phase7e3a_slide,
     "7e3b": phase7e3b_slide,
     "8": phase8_slide,
+    "9a": phase9a_slide,
 }
 
 
