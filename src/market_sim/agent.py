@@ -161,6 +161,36 @@ class AgentPolicy:
         return probability
 
 
+#: Published rates per million tokens, filled in by the caller. Left empty
+#: rather than hard-coded: a stale price in the cost column would make the
+#: commercial gate's headline number quietly wrong.
+def anthropic_client(model: str, input_price: float, output_price: float,
+                     max_tokens: int = 8, temperature: float = 1.0):
+    """A `client(system, prompt) -> (text, input_tokens, output_tokens)`.
+
+    Imported lazily so the rest of this module, and its tests, run with no SDK
+    installed. Temperature defaults to 1.0 rather than 0: Phases 9b and 9c
+    established that a near-deterministic policy sits at one end of an axis
+    this project measures, so making the Agent deterministic *by default* would
+    bake that regime into every comparison. Set it to 0 deliberately, as an
+    experimental condition, not as a convenience.
+    """
+    import anthropic
+
+    client = anthropic.Anthropic()
+
+    def call(system: str, prompt: str) -> tuple[str, int, int]:
+        response = client.messages.create(
+            model=model, max_tokens=max_tokens, temperature=temperature,
+            system=system, messages=[{"role": "user", "content": prompt}],
+        )
+        text = "".join(b.text for b in response.content if b.type == "text")
+        return text, response.usage.input_tokens, response.usage.output_tokens
+
+    call.pricing = (input_price, output_price)
+    return call
+
+
 class MockAgent:
     """A deterministic stand-in, so the pipeline is testable without a key.
 
