@@ -291,6 +291,9 @@ def main() -> int:
     provider = PROVIDERS[args.provider]
     model, settings = provider["model"], provider["settings"]
 
+    # Keys come from a gitignored .env, so they never pass through a shell
+    # history or a chat transcript.
+    agent.load_env()
     commit = experiment_log.git_commit(REPO_ROOT)
     RESULTS_ROOT.mkdir(parents=True, exist_ok=True)
     panel = human.load()

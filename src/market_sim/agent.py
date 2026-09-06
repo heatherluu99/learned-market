@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import pathlib
 import random
 import re
 import threading
@@ -166,6 +167,35 @@ class AgentPolicy:
 #: Published rates per million tokens, filled in by the caller. Left empty
 #: rather than hard-coded: a stale price in the cost column would make the
 #: commercial gate's headline number quietly wrong.
+def load_env(path: str | None = None) -> list[str]:
+    """Read `KEY=value` lines from a .env into the process environment.
+
+    Written here rather than pulled in as a dependency because it is nine
+    lines, and because the alternative is worse than a dependency: API keys
+    getting pasted into a terminal, a shell history, or a chat transcript. The
+    file is gitignored. Existing environment variables win, so an explicitly
+    exported key is never silently overridden by a stale file.
+
+    Returns the names it set, never the values.
+    """
+    import os
+
+    env = pathlib.Path(path or pathlib.Path(__file__).resolve().parents[2] / ".env")
+    if not env.exists():
+        return []
+    loaded = []
+    for line in env.read_text().splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        key, value = key.strip(), value.strip().strip("'\"")
+        if key and key not in os.environ:
+            os.environ[key] = value
+            loaded.append(key)
+    return loaded
+
+
 class QuotaExhausted(RuntimeError):
     """A provider limit that retrying will not get past within this run.
 
