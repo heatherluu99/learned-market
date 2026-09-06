@@ -52,6 +52,7 @@ TITLES = {
     "phase7e3a_context": "Does context pay? (7e-3a)",
     "phase7e3b_horizon": "Does the horizon pay? (7e-3b)",
     "phase8_entry_exit": "Entry, exit and market structure",
+    "phase9a_gate_evidence": "Teacher policy and the WTP decision (9a gate)",
 }
 
 #: Runs whose figure was later overwritten in place by a successor writing to
@@ -72,6 +73,7 @@ STATUS = {
     "phase7e2_headroom": "headroom",
     "phase7e3a_context": "headroom",
     "phase7e3b_horizon": "headroom",
+    "phase9a_gate_evidence": "open",
 }
 
 #: Ordered, and the order matters: "Implement Phase 7e-2: ... headroom gate"

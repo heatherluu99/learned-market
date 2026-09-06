@@ -1,0 +1,13 @@
+candidate,buyer_class,seller_tier,wtp_min,wtp_max,p_worth_buying,affordable,degenerate,prefers_premium
+A: buyer class only,Poor,Slow,1.0000013735289346,2.999993533442498,0.49826,True,False,
+A: buyer class only,Poor,Shigh,1.0000013735289346,2.999993533442498,0.0,False,False,
+A: buyer class only,Middle,Slow,1.5000020602934019,4.499990300163747,0.832275,True,False,
+A: buyer class only,Middle,Shigh,1.5000020602934019,4.499990300163747,0.0,True,True,0.0
+A: buyer class only,Rich,Slow,1.5000034338223365,6.499983833606245,0.89923,True,False,
+A: buyer class only,Rich,Shigh,1.5000034338223365,6.499983833606245,0.09871,True,False,0.01502
+B: plus a quality premium,Poor,Slow,1.0000013735289346,2.999993533442498,0.49826,True,False,
+B: plus a quality premium,Poor,Shigh,1.0000013735289346,2.999993533442498,0.0,False,False,
+B: plus a quality premium,Middle,Slow,1.5000020602934019,4.499990300163747,0.832275,True,False,
+B: plus a quality premium,Middle,Shigh,3.5000020602934017,6.499990300163747,0.16469,True,False,0.041105
+B: plus a quality premium,Rich,Slow,1.5000034338223365,6.499983833606245,0.89923,True,False,
+B: plus a quality premium,Rich,Shigh,5.000003433822337,9.999983833606244,0.799785,True,False,0.40059
