@@ -1755,8 +1755,8 @@ the final season, entry and exit both run and run at nearly the same rate:
 
 | | entries/wk | exits/wk | firms surviving the season |
 |---|---|---|---|
-| capital, F=6…12 | 0.09–0.15 | 0.08–0.12 | 85–90% |
-| streak, F=6…12 | 0.36–0.48 | 0.39–0.48 | **49–63%** |
+| capital, F=6…12 | 0.10–0.15 | 0.10–0.14 | 84–88% |
+| streak, F=6…12 | 0.37–0.47 | 0.37–0.47 | **48–62%** |
 
 Under the three-week rule roughly **half the market is replaced inside one
 season while the seller count does not move.** So what the phase produces is a
@@ -1766,7 +1766,7 @@ same fifteen stalls.
 
 **The exit rule mainly changes turnover and convergence speed, and changes the
 long-run seller count only modestly.** The three-week rule kills sellers that
-are merely unlucky, turns over about four times as many firms per week, and
+are merely unlucky, turns over **3.7×** as many firms per week, and
 eliminates the premium tier faster at every fixed cost — while landing about 15%
 lower on the count. "Changes the churn and not the destination" would be too
 strong: 15% is not nothing, and it is reported rather than rounded away. The
@@ -1776,7 +1776,7 @@ were run.
 
 ### The empirical reference, and what it can carry
 
-Simulated season-over-season change is **9.5%** (8.7–16.7% across cells) against
+Simulated season-over-season change is **12.7%** (8.7–16.7% across cells) against
 the RI DEM series' **15.2%**, computed from the vendor counts 24, 31, 25, 24, 26
 for 2019–2023 as recorded in this document's Phase 8 section from the project's
 original design notes. **The provenance beyond that is not established here** —

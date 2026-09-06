@@ -105,8 +105,8 @@ independent of the parameterization, and that distinction is kept explicit.
 Free entry endogenizes market size and the fixed cost strongly determines its
 stationary level: 24.9 sellers at a cost of 6 down to 12.4 at 12. What settles
 is a **stochastic stationary structure**, not an equilibrium — in the final
-season entry and exit both run at 0.09–0.48 firms a week, and under the
-three-week rule only 49–63% of firms survive a season while the count does not
+season entry and exit both run at 0.10–0.47 firms a week, and under the
+three-week rule only 48–62% of firms survive a season while the count does not
 move. The exit rule mainly changes turnover and convergence speed and changes
 the long-run count only modestly, by about 15%. Phases 1–6 and 7a, 7b, 7d are
 tagged validated; 7c is tagged `phase7c-skipped`; 7e-1 through 7e-3b are
