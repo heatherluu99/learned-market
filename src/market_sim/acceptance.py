@@ -1431,3 +1431,115 @@ def stationary_turnover(cfg: MarketConfig, seasons: list, from_week: int) -> dic
         "firm_survival": float(np.mean(survival)),
         "from_week": from_week,
     }
+
+
+# --------------------------------------------------------------------------
+# Phase 9a — buyer policy distillation
+# --------------------------------------------------------------------------
+
+#: Held-out policy distance may exceed the observation set's measured floor by
+#: this much. Under the shared purchase_draw it is a rate of differing
+#: decisions, not a fitting tolerance: 0.005 is half a percent of encounters.
+GATE9A_DISTANCE_SLACK = 0.005
+#: Worst-cell calibration error in any stratum. A constant predictor scores
+#: 0.0003 in aggregate and 0.3052 at its worst stratum, which is the failure
+#: this threshold exists to reject.
+GATE9A_CALIBRATION = 0.02
+#: Held-out log-loss must beat the constant predictor by this much, against a
+#: total available range of about 0.048 nats.
+GATE9A_LOGLOSS_GAIN = 0.02
+
+
+def evaluate_phase9a_offline(
+    distance: float,
+    floor: float,
+    calibration: dict[str, float],
+    log_loss: float,
+    constant_log_loss: float,
+    entropy_floor: float,
+) -> list[CriterionResult]:
+    """The distillation gate. All three must hold, on held-out states.
+
+    Each criterion catches a different failure and none is sufficient alone -
+    a model can beat the constant predictor comfortably while being
+    conditionally empty, and aggregate calibration does not notice.
+    """
+    worst = max(calibration.values())
+    worst_name = max(calibration, key=calibration.get)
+    return [
+        CriterionResult(
+            name="9a-1: the student reaches what the observation set allows",
+            passed=distance <= floor + GATE9A_DISTANCE_SLACK,
+            measured=f"E|p_T - p_theta| = {distance:.4f} against a measured "
+            f"floor of {floor:.4f} (excess {distance - floor:+.4f})",
+            threshold=f"within {GATE9A_DISTANCE_SLACK:.3f} of the floor",
+            note="Under the shared purchase_draw this is the probability that "
+            "teacher and student act differently on an encounter.",
+        ),
+        CriterionResult(
+            name="9a-2: calibrated within every stratum, not just in aggregate",
+            passed=worst <= GATE9A_CALIBRATION,
+            measured=f"worst cell {worst:.4f} in '{worst_name}'; "
+            + ", ".join(f"{k} {v:.4f}" for k, v in calibration.items()),
+            threshold=f"worst cell ≤ {GATE9A_CALIBRATION:.2f}",
+            note="A constant predictor is aggregate-calibrated to 0.0003 and "
+            "conditionally empty, with a worst stratum of 0.3052.",
+        ),
+        CriterionResult(
+            name="9a-3: the student beats the constant predictor",
+            passed=log_loss <= constant_log_loss - GATE9A_LOGLOSS_GAIN,
+            measured=f"log-loss {log_loss:.4f} against the constant "
+            f"predictor's {constant_log_loss:.4f} "
+            f"(gain {constant_log_loss - log_loss:.4f} of "
+            f"{constant_log_loss - entropy_floor:.4f} available)",
+            threshold=f"at least {GATE9A_LOGLOSS_GAIN:.2f} nats better",
+            note="The teacher's own entropy floors this at "
+            f"{entropy_floor:.4f}; no model can score below it on samples.",
+        ),
+    ]
+
+
+def trajectory_fidelity(teacher_runs: list, student_runs: list, cfg) -> dict:
+    """Closed-loop: does the deployed student reproduce the market's shape?
+
+    Paired by seed. Every quantity is one the phase has reported since it was
+    introduced, so a departure here is legible against the earlier phases
+    rather than against a metric invented for this one.
+    """
+    out = {}
+    for name, fn in (
+        ("purchase_rate", lambda s: float(s.purchase_rate().mean())),
+        ("pair_stability", lambda s: float(np.nanmean(s.pair_stability()[1:]))),
+    ):
+        a = np.array([fn(s) for s in student_runs])
+        b = np.array([fn(s) for s in teacher_runs])
+        mean, lo, hi = mean_difference_ci(a, b)
+        out[name] = {"teacher": float(b.mean()), "student": float(a.mean()),
+                     "diff": mean, "lo": lo, "hi": hi}
+    for bc in cfg.buyer_classes:
+        for sc in cfg.seller_tier_names():
+            a = np.array([s.tier_share(bc.name, sc) for s in student_runs])
+            b = np.array([s.tier_share(bc.name, sc) for s in teacher_runs])
+            mean, lo, hi = mean_difference_ci(a, b)
+            out[f"{bc.name}_to_{sc}"] = {
+                "teacher": float(np.nanmean(b)), "student": float(np.nanmean(a)),
+                "diff": mean, "lo": lo, "hi": hi,
+                "verdict": equivalence_verdict(lo, hi),
+            }
+    return out
+
+
+def state_drift(teacher_data: np.ndarray, student_data: np.ndarray,
+                columns: dict[str, int]) -> dict[str, float]:
+    """Per-feature Wasserstein-1 between the two state distributions.
+
+    Answers "how far did the student move the world", which is what separates
+    a student that got worse from one that is being asked a different question.
+    """
+    out = {}
+    for name, i in columns.items():
+        a = np.sort(teacher_data[:, i])
+        b = np.sort(student_data[:, i])
+        grid = np.linspace(0, 1, 1001)
+        out[name] = float(np.abs(np.quantile(a, grid) - np.quantile(b, grid)).mean())
+    return out

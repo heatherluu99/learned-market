@@ -131,6 +131,16 @@ class RunResult:
         return float(np.mean(self.buyer_n_purchases[mask] > 0))
 
 
+#: Column order of `SeasonResult.encounters`. Phase 9a's observation sets are
+#: subsets of this; `p_teacher` and `action` are targets, never inputs.
+ENCOUNTER_FIELDS = (
+    "week", "buyer_id", "seller_id", "buyer_class_index", "price",
+    "is_premium", "streak_here", "purchases_this_week", "spent_this_week",
+    "season_fraction", "history_rate", "p_teacher", "p_acting", "action",
+)
+BUYER_CLASS_INDEX = {"Poor": 0, "Middle": 1, "Rich": 2}
+
+
 def sigmoid(x: float | np.ndarray) -> float | np.ndarray:
     return 1.0 / (1.0 + np.exp(-x))
 
@@ -359,6 +369,10 @@ class SeasonResult:
     posted_prices: np.ndarray | None = None
     #: (week, seller) profit. None before a cost model exists.
     profits: np.ndarray | None = None
+    #: One row per buyer-seller encounter the buyer actually evaluated, as a
+    #: dict of observables plus the teacher's probability and its action.
+    #: Phase 9a only - see `ENCOUNTER_FIELDS`.
+    encounters: list | None = None
     #: (week, slot) whether that slot held a trading seller. Phase 8 only.
     active: np.ndarray | None = None
     #: (week, slot) which firm occupied that slot, -1 when empty. Phase 8.
@@ -513,6 +527,13 @@ def run_season(cfg: MarketConfig, seed: int, policy=None) -> SeasonResult:
     profitable_weeks = 0
     active_hist: list[np.ndarray] = []
     events: list[dict] = []
+    encounters: list[tuple] = []
+    # A persona proxy: how often this buyer has bought, per stall visited, so
+    # far this season. Stands in for the latent price sensitivity and budget a
+    # synthetic user would not observe directly.
+    history_rate = np.zeros(n_buyers)
+    history_bought = np.zeros(n_buyers)
+    history_seen = np.zeros(n_buyers)
     last_seller = np.full(n_buyers, -1, dtype=int)
     streak = np.zeros(n_buyers, dtype=int)
     # Phase 7e: a stock per buyer-seller pair, updated deterministically from
@@ -676,9 +697,48 @@ def run_season(cfg: MarketConfig, seed: int, policy=None) -> SeasonResult:
                     price_reference,
                     loyalty_bonus=bonus,
                 )
-                wants = p_purchase > purchase_draw[buyer_id, seller_id]
+                # The teacher's probability is computed either way. Under a
+                # deployed student it is not what acts - it is the shadow
+                # evaluation, which is only possible because the teacher is a
+                # function and stays evaluable on states it would never have
+                # produced itself.
+                p_acting = p_purchase
+                if cfg.buyer_policy is not None:
+                    p_acting = float(cfg.buyer_policy(
+                        BUYER_CLASS_INDEX[buyer_class[buyer_id]],
+                        float(p),
+                        1.0 if seller_class[seller_id] == "Shigh" else 0.0,
+                        float(streak[buyer_id]) if last_seller[buyer_id] == seller_id else 0.0,
+                        float(buyer_n_purchases[buyer_id]),
+                        float(buyer_total_spent[buyer_id]),
+                        _week / max(cfg.weeks - 1, 1),
+                        float(history_rate[buyer_id]),
+                    ))
+                # The same draw either way, so teacher and student differ on an
+                # encounter exactly when it falls between their probabilities.
+                wants = p_acting > purchase_draw[buyer_id, seller_id]
                 can_afford = p <= budget[buyer_id]
                 in_stock = inventory[seller_id] > 0
+
+                if cfg.record_encounters and can_afford:
+                    # Unaffordable encounters are excluded: the rule's
+                    # probability is never what decides them, so including
+                    # them would train a student on a constraint rather than
+                    # on a preference.
+                    encounters.append((
+                        _week, buyer_id, seller_id,
+                        BUYER_CLASS_INDEX[buyer_class[buyer_id]],
+                        float(p),
+                        1.0 if seller_class[seller_id] == "Shigh" else 0.0,
+                        float(streak[buyer_id]) if last_seller[buyer_id] == seller_id else 0.0,
+                        float(buyer_n_purchases[buyer_id]),
+                        float(buyer_total_spent[buyer_id]),
+                        _week / max(cfg.weeks - 1, 1),
+                        float(history_rate[buyer_id]),
+                        float(p_purchase),
+                        float(p_acting),
+                        1.0 if wants else 0.0,
+                    ))
 
                 if not (wants and can_afford and in_stock):
                     if not can_afford:
@@ -733,6 +793,15 @@ def run_season(cfg: MarketConfig, seed: int, policy=None) -> SeasonResult:
                 / cfg.arm_half_range,
             )
             loyalty_stock = loyalty_stock * cfg.loyalty_retention + bought * accrual
+
+        if cfg.record_encounters:
+            for b in range(n_buyers):
+                if attends[b]:
+                    history_seen[b] += n_active
+                    history_bought[b] += len(bought_this_week[b])
+            history_rate = np.divide(
+                history_bought, np.maximum(history_seen, 1.0)
+            )
 
         chosen = np.array([_choice_of_week(b) for b in bought_this_week])
         for b in range(n_buyers):
@@ -878,6 +947,7 @@ def run_season(cfg: MarketConfig, seed: int, policy=None) -> SeasonResult:
         posted_prices=np.array(price_hist),
         profits=np.array(profit_hist) if cfg.has_costs else None,
         loyalty_bonus=np.array(bonus_hist) if bonus_hist else None,
+        encounters=encounters if cfg.record_encounters else None,
         active=np.array(active_hist) if cfg.has_entry_exit else None,
         firm_id=np.array(firm_hist) if cfg.has_entry_exit else None,
         events=events if cfg.has_entry_exit else None,

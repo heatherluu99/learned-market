@@ -194,6 +194,15 @@ class MarketConfig:
     #: bonus (0.5 * 3) so the two mechanisms share a ceiling and only the path
     #: to it differs - a 7e result cannot come from stronger habit.
     loyalty_max_bonus: float = 1.5
+    #: Phase 9a: a learned buyer policy, `(observables) -> probability`. When
+    #: set, buyers act on it instead of the hand-written rule - but the rule's
+    #: own probability is still computed and recorded, so the teacher can be
+    #: shadow-evaluated on states only the student would ever reach.
+    buyer_policy: object | None = None
+    #: Phase 9a: record every buyer-seller encounter - what the buyer could
+    #: observe, the probability the hand-written rule computed, and the action
+    #: it took. Off by default; only the buyer-distillation phase reads it.
+    record_encounters: bool = False
     #: Keep the per-week (buyer, seller) bonus matrix on the SeasonResult.
     #: Off by default: only Phase 7e's calibration reads it, and it is the one
     #: run-state array whose size scales with buyers x sellers x weeks.
