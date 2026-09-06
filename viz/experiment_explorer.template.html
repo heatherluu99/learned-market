@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Millbrook Market — Experiment Explorer</title>
+<style>
+  :root{
+    --bg:#ffffff; --panel:#f6f7f9; --panel-2:#fafafb; --border:#e3e5ea;
+    --text:#1a1d24; --text-2:#5b616e; --text-3:#8b909c;
+    --accent:#3B3F8C; --accent-bg:#EEF0FA; --accent-border:#C9CDEF;
+    --ok:#1E7A4D; --ok-bg:#E8F4EE; --warn:#C9922E; --warn-bg:#FBF3E2;
+    --dead:#8b909c; --dead-bg:#f1f2f4;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    --mono:"SF Mono",SFMono-Regular,Consolas,"Liberation Mono",Menlo,monospace;
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;}
+  body{margin:0; background:var(--bg); color:var(--text); font-family:var(--sans); font-size:14px; line-height:1.5;}
+
+  header{padding:18px 24px 14px; border-bottom:1px solid var(--border);}
+  header h1{font-size:23px; font-weight:700; margin:0; letter-spacing:-0.01em;}
+  header .sub{font-size:14px; color:var(--text-2); margin:6px 0 0; max-width:760px;}
+  .stats{display:flex; gap:8px; flex-wrap:wrap; margin-top:12px;}
+  .stat{background:var(--panel); border:1px solid var(--border); border-radius:7px; padding:5px 11px;}
+  .stat b{font-family:var(--mono); font-weight:600;}
+  .stat span{color:var(--text-3); font-size:12px; margin-left:5px;}
+
+  .shell{display:grid; grid-template-columns:288px 1fr; min-height:calc(100vh - 108px);}
+  @media (max-width:900px){ .shell{grid-template-columns:1fr;} .rail{max-height:none; border-right:0; border-bottom:1px solid var(--border);} }
+
+  .rail{border-right:1px solid var(--border); padding:14px 12px 40px; overflow-y:auto; max-height:calc(100vh - 108px);}
+  .rail input{width:100%; padding:7px 10px; border:1px solid var(--border); border-radius:7px; font-family:var(--sans); font-size:13px; margin-bottom:12px; background:var(--panel-2); color:var(--text);}
+  .rail input:focus{outline:2px solid var(--accent-border); outline-offset:-1px;}
+  .grp{font-size:10.5px; font-weight:700; letter-spacing:0.05em; text-transform:uppercase; color:var(--text-3); margin:14px 0 5px 8px;}
+  .tab{display:block; width:100%; text-align:left; border:1px solid transparent; background:none; border-radius:7px; padding:7px 10px; cursor:pointer; font-family:var(--sans); font-size:13.5px; color:var(--text); margin-bottom:2px;}
+  .tab:hover{background:var(--panel);}
+  .tab.on{background:var(--accent-bg); border-color:var(--accent-border); color:var(--accent); font-weight:600;}
+  .tab .id{font-family:var(--mono); font-size:11px; color:var(--text-3); display:block; margin-top:1px;}
+  .tab.on .id{color:var(--accent);}
+  .dot{display:inline-block; width:7px; height:7px; border-radius:50%; margin-right:7px; vertical-align:1px;}
+
+  main{padding:22px 28px 60px; max-width:1000px; overflow-x:hidden;}
+  .pill{display:inline-block; font-size:11px; font-weight:700; letter-spacing:0.04em; text-transform:uppercase; border-radius:5px; padding:3px 9px; vertical-align:3px; margin-left:10px;}
+  h2{font-size:21px; margin:0; font-weight:700; letter-spacing:-0.01em;}
+  .meta{font-family:var(--mono); font-size:11.5px; color:var(--text-3); margin:7px 0 20px;}
+
+  .q{background:var(--accent-bg); border:1px solid var(--accent-border); border-left:3px solid var(--accent); border-radius:8px; padding:12px 15px; margin:0 0 20px;}
+  .q .k{font-size:10.5px; font-weight:700; letter-spacing:0.05em; text-transform:uppercase; color:var(--accent); margin-bottom:3px;}
+  .q .v{color:var(--text); font-size:14.5px;}
+
+  figure{margin:0 0 20px;}
+  figure img{width:100%; border:1px solid var(--border); border-radius:9px; display:block; background:#fff; cursor:zoom-in;}
+  figcaption{font-size:12px; color:var(--text-3); margin-top:6px; font-family:var(--mono);}
+  .noimg{background:var(--panel); border:1px dashed var(--border); border-radius:9px; padding:26px; text-align:center; color:var(--text-3); font-size:13px; margin-bottom:20px;}
+  .note{background:var(--warn-bg); border:1px solid #EBD9AE; border-left:3px solid var(--warn); border-radius:8px; padding:10px 14px; margin:-8px 0 20px; font-size:13px; color:#7A5A17;}
+
+  .block{margin-bottom:18px;}
+  .block .k{font-size:10.5px; font-weight:700; letter-spacing:0.05em; text-transform:uppercase; color:var(--text-3); margin-bottom:4px;}
+  .block .v{background:var(--panel-2); border:1px solid var(--border); border-radius:8px; padding:11px 14px;}
+
+  table.prov{width:100%; border-collapse:collapse; font-size:12.5px;}
+  table.prov td{padding:5px 10px; border-bottom:1px solid var(--border); vertical-align:top;}
+  table.prov td:first-child{color:var(--text-3); width:150px; white-space:nowrap;}
+  table.prov td:last-child{font-family:var(--mono); font-size:11.5px; word-break:break-word;}
+  table.prov tr:last-child td{border-bottom:0;}
+
+  .log{border:1px solid var(--border); border-radius:8px; overflow:hidden;}
+  .entry{border-bottom:1px solid var(--border);}
+  .entry:last-child{border-bottom:0;}
+  .entry summary{padding:10px 14px; cursor:pointer; list-style:none; background:var(--panel-2); display:flex; gap:10px; align-items:baseline;}
+  .entry summary::-webkit-details-marker{display:none;}
+  .entry summary:hover{background:var(--panel);}
+  .entry .sha{font-family:var(--mono); font-size:11px; color:var(--text-3); flex:none;}
+  .entry .subj{font-size:13.5px; flex:1;}
+  .entry .date{font-family:var(--mono); font-size:11px; color:var(--text-3); flex:none;}
+  .entry .body{padding:2px 14px 14px 14px; white-space:pre-wrap; font-size:13px; color:var(--text-2); border-top:1px solid var(--border); background:#fff;}
+  .kind{font-family:var(--mono); font-size:10px; text-transform:uppercase; letter-spacing:0.04em; border-radius:4px; padding:1px 6px; flex:none;}
+
+  #zoom{position:fixed; inset:0; background:rgba(16,18,24,.82); display:none; align-items:center; justify-content:center; z-index:50; cursor:zoom-out; padding:24px;}
+  #zoom img{max-width:100%; max-height:100%; border-radius:8px; background:#fff;}
+  .empty{color:var(--text-3); font-size:13px; padding:10px 0;}
+</style>
+</head>
+<body>
+<header>
+  <h1>Millbrook Market — Experiment Explorer</h1>
+  <p class="sub">Every run that produced a result, with the question it asked, the figure it
+  produced, and the record of what was tried and corrected on the way there. Built from
+  <code>experiment_log.csv</code> and the git history, so it is the log rather than a
+  retelling of it.</p>
+  <div class="stats" id="stats"></div>
+</header>
+
+<div class="shell">
+  <nav class="rail">
+    <input id="filter" type="search" placeholder="Filter experiments…" autocomplete="off">
+    <div id="rail"></div>
+  </nav>
+  <main id="detail"></main>
+</div>
+
+<div id="zoom"><img alt=""></div>
+
+<script>
+const DATA = /*__DATA__*/;
+
+const STATUS = {
+  validated: ["var(--ok)", "var(--ok-bg)", "validated"],
+  calibrated: ["var(--ok)", "var(--ok-bg)", "gate passed"],
+  headroom:   ["var(--ok)", "var(--ok-bg)", "gate passed"],
+  skipped:    ["var(--warn)", "var(--warn-bg)", "skipped"],
+  superseded: ["var(--dead)", "var(--dead-bg)", "superseded"],
+  open:       ["var(--dead)", "var(--dead-bg)", "in progress"],
+};
+const st = k => STATUS[k] || STATUS.open;
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+function renderStats() {
+  const runs = DATA.experiments.length;
+  const figs = DATA.experiments.reduce((n, e) => n + e.figures.length, 0);
+  document.getElementById("stats").innerHTML = [
+    [runs, "logged runs"], [figs, "figures"],
+    [DATA.meta.commits, "commits"], [DATA.meta.tags, "tags"],
+    [DATA.meta.tests, "tests passing"],
+  ].map(([v, k]) => `<div class="stat"><b>${v}</b><span>${k}</span></div>`).join("");
+}
+
+function renderRail(q = "") {
+  const rail = document.getElementById("rail");
+  const needle = q.trim().toLowerCase();
+  let html = "", group = null;
+  for (const e of DATA.experiments) {
+    const hay = (e.title + " " + e.id + " " + e.question + " " + e.result).toLowerCase();
+    if (needle && !hay.includes(needle)) continue;
+    if (e.group !== group) { group = e.group; html += `<div class="grp">Phase ${esc(group)}</div>`; }
+    const [c] = st(e.status);
+    html += `<button class="tab" data-id="${esc(e.id)}">
+      <span class="dot" style="background:${c}"></span>${esc(e.title)}
+      <span class="id">${esc(e.id)}</span></button>`;
+  }
+  rail.innerHTML = html || `<div class="empty">Nothing matches “${esc(q)}”.</div>`;
+  rail.querySelectorAll(".tab").forEach(b =>
+    b.addEventListener("click", () => select(b.dataset.id)));
+}
+
+function renderDetail(e) {
+  const [c, bg, label] = st(e.status);
+  const figs = e.figures.length
+    ? e.figures.map(f => `<figure><img src="${f.src}" alt="${esc(f.caption)}">
+        <figcaption>${esc(f.caption)}</figcaption></figure>`).join("")
+    : `<div class="noimg">This run produced tables rather than a figure.</div>`;
+
+  const prov = [
+    ["Config", e.config], ["Seeds", e.seeds], ["Commit", e.commit],
+    ["Mechanism changed", e.mechanism], ["Transactions", e.transactions],
+    ["Participation rate", e.participation], ["Leads to", e.next],
+  ].filter(([, v]) => v && v !== "N/A")
+   .map(([k, v]) => `<tr><td>${esc(k)}</td><td>${esc(v)}</td></tr>`).join("");
+
+  const log = e.commits.length ? e.commits.map(c => `
+    <details class="entry"${c.open ? " open" : ""}>
+      <summary>
+        <span class="kind" style="color:${c.kindColor};background:${c.kindBg}">${esc(c.kind)}</span>
+        <span class="subj">${esc(c.subject)}</span>
+        <span class="sha">${esc(c.sha)}</span>
+        <span class="date">${esc(c.date)}</span>
+      </summary>
+      ${c.body ? `<div class="body">${esc(c.body)}</div>` : ""}
+    </details>`).join("") : `<div class="empty">No commits matched this experiment.</div>`;
+
+  document.getElementById("detail").innerHTML = `
+    <h2>${esc(e.title)}<span class="pill" style="color:${c};background:${bg}">${esc(label)}</span></h2>
+    <div class="meta">${esc(e.id)}</div>
+    <div class="q"><div class="k">Research question</div><div class="v">${esc(e.question)}</div></div>
+    ${figs}
+    ${e.note ? `<div class="note">${esc(e.note)}</div>` : ""}
+    <div class="block"><div class="k">What it found</div><div class="v">${esc(e.result)}</div></div>
+    <div class="block"><div class="k">Provenance</div>
+      <div class="v" style="padding:2px 4px"><table class="prov">${prov}</table></div></div>
+    <div class="block"><div class="k">The record — what was tried, and what was corrected</div></div>
+    <div class="log">${log}</div>`;
+
+  document.querySelectorAll("main figure img").forEach(img =>
+    img.addEventListener("click", () => {
+      const z = document.getElementById("zoom");
+      z.querySelector("img").src = img.src;
+      z.style.display = "flex";
+    }));
+}
+
+function select(id) {
+  const e = DATA.experiments.find(x => x.id === id) || DATA.experiments[0];
+  document.querySelectorAll(".tab").forEach(b => b.classList.toggle("on", b.dataset.id === e.id));
+  renderDetail(e);
+  history.replaceState(null, "", "#" + e.id);
+  document.querySelector("main").scrollTop = 0;
+}
+
+document.getElementById("filter").addEventListener("input", ev => {
+  renderRail(ev.target.value);
+  const first = document.querySelector(".tab");
+  if (first) first.classList.add("on");
+});
+document.getElementById("zoom").addEventListener("click", ev =>
+  ev.currentTarget.style.display = "none");
+document.addEventListener("keydown", ev => {
+  if (ev.key === "Escape") document.getElementById("zoom").style.display = "none";
+  if (ev.key === "ArrowDown" || ev.key === "ArrowUp") {
+    const tabs = [...document.querySelectorAll(".tab")];
+    const i = tabs.findIndex(t => t.classList.contains("on"));
+    const next = tabs[i + (ev.key === "ArrowDown" ? 1 : -1)];
+    if (next) { ev.preventDefault(); select(next.dataset.id); next.scrollIntoView({block:"nearest"}); }
+  }
+});
+
+renderStats();
+renderRail();
+select(location.hash.slice(1) || DATA.experiments[DATA.experiments.length - 1].id);
+</script>
+</body>
+</html>

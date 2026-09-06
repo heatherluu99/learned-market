@@ -195,7 +195,7 @@ def main() -> int:
         carried_summary = "No cell passed; 7e stops here."
 
     experiment_log.append_row(LOG_PATH, {
-        "experiment_id": "phase7e_calibration", "git_commit": commit,
+        "experiment_id": "phase7e1_calibration", "git_commit": commit,
         "config_file": "src/market_sim/config.py::PHASE7E_CELLS",
         "phase": 7, "seed": "0-29 (gate 1), 0-19 (oracle sweep)",
         "n_buyers": PHASE7E_COUNTER.n_buyers, "n_sellers": PHASE7E_COUNTER.n_sellers,
