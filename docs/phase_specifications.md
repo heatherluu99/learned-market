@@ -2148,8 +2148,97 @@ simulator makes available and which remove label noise; and sampled actions
 soft-label arm carries the argument: it is the best-case imitator, so if *it*
 drifts in closed loop the cause cannot be label noise.
 
-**Exit condition:** `git tag phase9a-distilled`, with the gate's verdict and
-the three closed-loop quantities recorded.
+### Phase 9a result — the loop is real, and it does not compound
+
+**The gate passes.** On 157,222 held-out encounters, the canonical 64 × 2
+soft-label student:
+
+| criterion | measured | threshold |
+|---|---|---|
+| policy distance | `E\|p_T − p_θ\|` = **0.0834** against a floor of 0.0832 (excess **+0.0001**) | ≤ floor + 0.005 |
+| stratified calibration | worst cell **0.0157**, in loyalty streak | ≤ 0.02 |
+| proper score | log-loss **0.6643** against the constant predictor's 0.6907 — 0.0264 of the 0.0474 nats available | ≥ 0.02 nats better |
+
+The capacity sweep confirms the floor is the *observation set* and not the
+model: `E|p_T − p_θ|` sits at 0.0837 / 0.0835 / 0.0834 / 0.0832 / 0.0833 across
+16 × 1 to 256 × 3. Sixteen times the capacity buys 0.0005.
+
+**Soft labels earn their place on calibration, not on fit.** Fitting the
+sampled action rather than `p_T(s)` costs almost nothing in mean distance
+(0.0843 against 0.0834) and a great deal in stratum calibration — **0.0240
+against 0.0157**, and the 16 × 1 sampled-label student reaches **0.0338, which
+fails the gate**. Label noise does not move the average; it moves the
+conditional structure, which is what a market runs on.
+
+### The closed loop
+
+Deployed on seeds 0–29, acting against the same `purchase_draw` the teacher
+faces:
+
+```
+D_offline (the teacher's states) = 0.0828
+D_shadow  (the student's states) = 0.0886      1.07x
+excess, paired by seed           = +0.0057, 95% CI [+0.0055, +0.0060]
+```
+
+**The mechanism is real. The interval excludes zero decisively**: the same
+student is measurably worse at imitating the teacher on the states it brings
+about than on the states the teacher brings about. Policy error does
+endogenously shift the state distribution, and error is amplified there. The
+chain the phase was built to isolate is present and every link of it is
+measured.
+
+**And it does not compound to anything.** The amplification is 7%, the state
+drift that drives it is negligible — Wasserstein-1 of 0.0100 in loyalty streak,
+0.0032 in weekly spend, 0.0008 in the persona proxy, 0.0000 in weekly purchase
+count — and **every trajectory quantity is reproduced**:
+
+| | teacher | student | difference |
+|---|---|---|---|
+| purchase rate | 0.6916 | 0.6904 | −0.0012 CI [−0.0040, +0.0016] |
+| pair stability | 0.4247 | 0.4232 | −0.0014 CI [−0.0068, +0.0039] |
+| Middle → premium | 0.1968 | 0.1980 | +0.0012, **equivalent** |
+| Rich → premium | 0.2947 | 0.3018 | +0.0071, **equivalent** |
+
+All six class-to-tier shares return `equivalent`. So the phase's hypothesis —
+*high one-step conditional-policy fidelity does not guarantee closed-loop
+trajectory fidelity* — is **directionally confirmed and quantitatively rejected
+in this environment.** The loop exists; it is too weak to matter.
+
+### Why, and what it says about where the hypothesis should be tested
+
+The teacher is near-maximally stochastic, and that is the whole explanation:
+
+```
+teacher's own per-decision noise   sqrt(E[p(1-p)]) = 0.475
+student's systematic deviation     E|p_T - p_theta| = 0.083
+                                   systematic / stochastic = 17%
+```
+
+At 0.928 bits of entropy per decision, the market is noise-dominated. A
+systematic deviation one-sixth the size of the teacher's own coin-flip cannot
+steer a trajectory, because the trajectory was never determined by any single
+decision to begin with. Add the market's stabilizers — a hard budget wall and a
+season-long fixed preference draw, both of which pull a wandering buyer back —
+and the compounding loop has nothing to grip.
+
+**This bounds the claim rather than settling it.** Compounding imitation error
+is a real failure mode; what this phase shows is that it requires a teacher
+whose decisions are *nearly deterministic*, so that a small systematic error is
+large relative to the environment's own noise. That is exactly the regime an
+LLM agent occupies — a temperature-0 agent is a deterministic policy — which
+makes this the right measurement to carry into **Phase 9b**, and makes 9a's
+null the reason to expect a different answer there rather than a reason to stop
+looking.
+
+**A design consequence worth recording.** The encounter sets of teacher and
+student diverge *inside the first week*: budgets deplete within a week, so one
+differing purchase changes what is affordable at the next stall. Coupling is
+therefore exact only at each buyer's first encounter of week 0, which is where
+the test that pins `one-step agreement = E|p_T − p_θ|` has to measure it. The
+divergence being immediate is the phenomenon, not an obstacle to it.
+
+**Exit condition:** `git tag phase9a-distilled`.
 
 ### The reward problem, and why a new primitive is needed
 
