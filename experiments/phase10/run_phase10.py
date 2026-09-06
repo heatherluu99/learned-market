@@ -95,6 +95,9 @@ def occasions(panel: pd.DataFrame) -> list[dict]:
 #: shared token budget paces the calls and a few workers hide the round trip.
 WORKERS = 4
 TOKENS_PER_MINUTE = 8000
+#: The one that actually binds: 30 requests a minute against a token ceiling
+#: that would allow about 28, so the run is request-paced.
+REQUESTS_PER_MINUTE = 30
 
 
 def agent_distributions(records, client, usage) -> tuple[np.ndarray, int]:
@@ -112,8 +115,8 @@ def agent_distributions(records, client, usage) -> tuple[np.ndarray, int]:
     usage.cached = len(prompts) - len(distinct)
     print(f"    {len(prompts):,} occasions -> {len(distinct):,} distinct prompts "
           f"({usage.cached / len(prompts):.1%} deduplicated)", flush=True)
-    print(f"    throughput-bound at {TOKENS_PER_MINUTE:,} tokens/min: expect about "
-          f"{len(distinct) * 220 / TOKENS_PER_MINUTE:.0f} minutes", flush=True)
+    print(f"    request-paced at {REQUESTS_PER_MINUTE}/min: expect about "
+          f"{len(distinct) / (REQUESTS_PER_MINUTE * 0.85):.0f} minutes", flush=True)
 
     done = {"n": 0}
 
@@ -245,6 +248,7 @@ def main() -> int:
     # ---- A: the Agent ------------------------------------------------------
     usage = agent.Usage()
     client = agent.groq_client(MODEL, tokens_per_minute=TOKENS_PER_MINUTE,
+                               requests_per_minute=REQUESTS_PER_MINUTE,
                                **AGENT_SETTINGS)
     print("  Querying the Agent (cached on the bucketed prompt)...", flush=True)
     a, unparsed = agent_distributions(records, client, usage)

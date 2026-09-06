@@ -194,12 +194,18 @@ def anthropic_client(model: str, input_price: float, output_price: float,
 
 
 class TokenBudget:
-    """A thread-safe token-per-minute budget, shared across workers.
+    """A thread-safe rolling per-minute budget, shared across workers.
 
-    The provider's free tier caps tokens per minute, not requests, so
-    concurrency buys nothing once the cap binds and simply converts throughput
-    into 429s. Callers reserve their estimated cost before issuing a request
-    and the budget blocks until the rolling window has room.
+    Used for both of the provider's caps, because there are two and missing
+    either produces the same 429. Tokens per minute is the obvious one;
+    **requests per minute is separate and binds first here** - 30 RPM against
+    an 8,000 TPM ceiling at ~285 tokens a call means requests run out at 30 a
+    minute while tokens would allow 28. Pacing tokens alone still fails, which
+    is how the second full attempt died.
+
+    Callers reserve before issuing, and the budget blocks until the rolling
+    window has room, so concurrency hides the round trip without exceeding
+    either cap.
     """
 
     def __init__(self, tokens_per_minute: int, headroom: float = 0.85):
@@ -222,7 +228,8 @@ class TokenBudget:
 def groq_client(model: str, input_price: float = 0.0, output_price: float = 0.0,
                 max_tokens: int = 512, temperature: float = 0.0,
                 reasoning_effort: str | None = "low",
-                tokens_per_minute: int | None = None, retries: int = 6):
+                tokens_per_minute: int | None = None,
+                requests_per_minute: int | None = None, retries: int = 8):
     """A Groq-hosted client, same callable shape as the others.
 
     Two settings here are experimental conditions and not conveniences.
@@ -247,6 +254,7 @@ def groq_client(model: str, input_price: float = 0.0, output_price: float = 0.0,
 
     client = Groq()
     budget = TokenBudget(tokens_per_minute) if tokens_per_minute else None
+    requests = TokenBudget(requests_per_minute) if requests_per_minute else None
 
     def call(system: str, prompt: str) -> tuple[str, int, int]:
         kwargs = {"reasoning_effort": reasoning_effort} if reasoning_effort else {}
@@ -254,6 +262,8 @@ def groq_client(model: str, input_price: float = 0.0, output_price: float = 0.0,
         # keep the rolling window under the cap.
         if budget is not None:
             budget.reserve(len(system + prompt) // 3 + 60)
+        if requests is not None:
+            requests.reserve(1)
         for attempt in range(retries):
             try:
                 response = client.chat.completions.create(
@@ -266,7 +276,10 @@ def groq_client(model: str, input_price: float = 0.0, output_price: float = 0.0,
             except groq.RateLimitError:
                 if attempt == retries - 1:
                     raise
-                time.sleep(min(60, 2 ** attempt) + random.random())
+                # The windows are a minute long, so a backoff that tops out
+                # below 60s can never outlast one - which is what exhausted
+                # the retries on the second attempt.
+                time.sleep(min(75, 2 ** attempt) + random.random() * 2)
         message = response.choices[0].message
         return (message.content or ""), response.usage.prompt_tokens, response.usage.completion_tokens
 
