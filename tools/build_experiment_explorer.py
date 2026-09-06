@@ -170,7 +170,21 @@ def main() -> int:
     tags = subprocess.run(["git", "tag"], cwd=REPO_ROOT, capture_output=True,
                           text=True, check=True).stdout.split()
 
+    def sort_key(identifier: str):
+        """Order by phase, then sub-stage, so a group's header appears once.
+
+        The rail starts a new heading whenever the group changes, so rows left
+        in log order put the same phase under two headings as soon as one of
+        its experiments is re-run and lands at the end of the file.
+        """
+        group = group_of(identifier)
+        digits = "".join(c for c in group if c.isdigit() and group.index(c) < 2)
+        number = int(digits) if digits else 99
+        return (number, group, identifier)
+
     experiments = []
+    log = log.iloc[sorted(range(len(log)),
+                          key=lambda i: sort_key(str(log.iloc[i]["experiment_id"])))]
     for _, row in log.iterrows():
         identifier = str(row["experiment_id"])
         group = group_of(identifier)

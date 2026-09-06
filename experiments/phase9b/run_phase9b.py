@@ -165,6 +165,15 @@ def main() -> int:
             "purchase_rate_diff": fidelity["purchase_rate"]["diff"],
             "pair_stability_diff": fidelity["pair_stability"]["diff"],
             "shares_equivalent": sum(v["verdict"] == "equivalent" for v in shares.values()),
+            "shares_material": sum(v["verdict"] == "material" for v in shares.values()),
+            "shares_inconclusive": sum(v["verdict"] == "inconclusive" for v in shares.values()),
+            # Which share, and its verdict - "4 of 6 equivalent" does not say
+            # whether the other two crossed the margin or merely failed to
+            # decide, and those are different results.
+            "non_equivalent": "; ".join(
+                f"{k} {v['diff'] * 100:+.2f}pp {v['verdict']}"
+                for k, v in shares.items() if v["verdict"] != "equivalent"
+            ) or "none",
             "n_shares": len(shares),
         })
         r = rows[-1]

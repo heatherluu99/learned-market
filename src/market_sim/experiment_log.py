@@ -96,9 +96,27 @@ def append_row(log_path: Path, row: dict[str, object]) -> None:
         raise ValueError(f"experiment_log row has unknown columns: {sorted(unexpected)}")
 
     log_path.parent.mkdir(parents=True, exist_ok=True)
-    write_header = not log_path.exists()
-    with log_path.open("a", newline="") as handle:
+    # An experiment id identifies an experiment, so re-running one *replaces*
+    # its row rather than appending a second. Appending left the log with 31
+    # rows for 27 experiments and the Experiment Explorer showing a phase
+    # twice, because every re-run at a cleaner commit added a row instead of
+    # superseding the one it was redoing. Position is kept, so the log stays in
+    # the order the experiments were first run.
+    existing: list[dict[str, object]] = []
+    if log_path.exists():
+        with log_path.open(newline="") as handle:
+            existing = list(csv.DictReader(handle))
+
+    replaced = False
+    for i, previous in enumerate(existing):
+        if previous.get("experiment_id") == row.get("experiment_id"):
+            existing[i] = {k: row[k] for k in COLUMNS}
+            replaced = True
+            break
+    if not replaced:
+        existing.append({k: row[k] for k in COLUMNS})
+
+    with log_path.open("w", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=COLUMNS)
-        if write_header:
-            writer.writeheader()
-        writer.writerow(row)
+        writer.writeheader()
+        writer.writerows(existing)
