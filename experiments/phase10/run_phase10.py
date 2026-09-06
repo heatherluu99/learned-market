@@ -295,7 +295,11 @@ def main() -> int:
     # history or a chat transcript.
     agent.load_env()
     commit = experiment_log.git_commit(REPO_ROOT)
-    RESULTS_ROOT.mkdir(parents=True, exist_ok=True)
+    # Each Agent arm writes into its own directory. Sharing one would have the
+    # second run silently overwrite the first's table and figure, leaving two
+    # arms declared in the spec and one arm's evidence on disk.
+    out = RESULTS_ROOT / args.provider
+    out.mkdir(parents=True, exist_ok=True)
     panel = human.load()
     records = occasions(panel)
     if args.limit:
@@ -349,12 +353,14 @@ def main() -> int:
     print(f"\n  human contrasts: "
           + "  ".join(f"{k} {v:+.4f}" for k, v in human_contrasts.items()))
     frame = pd.DataFrame(rows)
-    frame.to_csv(RESULTS_ROOT / "arms.csv", index=False)
+    frame.to_csv(out / "arms.csv", index=False)
+    # The human contrasts are a property of the panel, not of the run, so they
+    # stay at the top level rather than being copied under each provider.
     pd.DataFrame([{"metric": k, "human": v} for k, v in human_contrasts.items()]).to_csv(
         RESULTS_ROOT / "human_contrasts.csv", index=False)
     pd.DataFrame([usage.as_row() | {"model": model, **settings}]).to_csv(
-        RESULTS_ROOT / "agent_usage.csv", index=False)
-    plot(frame, human_contrasts)
+        out / "agent_usage.csv", index=False)
+    plot(frame, human_contrasts, out, model)
 
     best = frame.loc[frame["weighted_js"].idxmin()]
     experiment_log.append_row(LOG_PATH, {
@@ -385,11 +391,11 @@ def main() -> int:
         "decision_implication": "N/A - first external comparison, no decision yet",
         "next_experiment": "Phase 10 free-running closed loop",
     })
-    print(f"\n  Wrote {RESULTS_ROOT}\n")
+    print(f"\n  Wrote {out}\n")
     return 0
 
 
-def plot(frame, human_contrasts) -> None:
+def plot(frame, human_contrasts, out, model: str) -> None:
     fig, axes = plt.subplots(1, 2, figsize=(12.5, 4.4))
     ax = axes[0]
     ax.barh(range(len(frame)), frame["weighted_js"],
@@ -419,10 +425,10 @@ def plot(frame, human_contrasts) -> None:
     ax.set_title("Mechanism direction: sign must match before magnitude", fontsize=10)
     ax.legend(fontsize=7)
 
-    fig.suptitle("Phase 10 — same choice sets, same history, different policies",
-                 fontsize=12)
-    fig.tight_layout(rect=(0, 0, 1, 0.94))
-    fig.savefig(RESULTS_ROOT / "human_vs_agent.png", dpi=150)
+    fig.suptitle(f"Phase 10 — same choice sets, same history, different policies"
+                 f"\nAgent: {model}", fontsize=12)
+    fig.tight_layout(rect=(0, 0, 1, 0.90))
+    fig.savefig(out / "human_vs_agent.png", dpi=150)
     plt.close(fig)
 
 

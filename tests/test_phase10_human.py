@@ -201,3 +201,38 @@ def test_both_providers_are_declared_arms_with_frozen_settings():
         assert settings["temperature"] == 0.0, name
         assert "reasoning_effort" in settings or "thinking_budget" in settings, name
         assert provider["limits"]["requests_per_minute"] > 0, name
+
+
+def test_each_agent_arm_writes_into_its_own_directory(tmp_path):
+    """The figure lands where it is told and carries the model's name.
+
+    Both arms produce structurally identical charts. Written to one shared
+    path the second would overwrite the first, leaving two arms declared in
+    the spec and one arm's evidence on disk; written unlabelled, the surviving
+    file would not say which model made it.
+    """
+    import importlib.util
+
+    import pandas as pd
+
+    spec = importlib.util.spec_from_file_location(
+        "run_phase10", ROOT / "experiments" / "phase10" / "run_phase10.py")
+    run = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(run)
+
+    contrasts = {"price": -0.16, "display": 0.18, "feature": 0.30, "repeat": 0.62}
+    frame = pd.DataFrame([
+        {"arm": name, "weighted_js": js,
+         **{f"contrast_{k}": v for k, v in contrasts.items()}}
+        for name, js in [("B0", 0.17), ("B1", 0.06), ("A agent", 0.29)]
+    ])
+
+    for provider, model in [("groq", "openai/gpt-oss-120b"),
+                            ("gemini", "gemini-2.5-flash")]:
+        out = tmp_path / provider
+        out.mkdir()
+        run.plot(frame, contrasts, out, model)
+        assert (out / "human_vs_agent.png").exists()
+
+    assert not (tmp_path / "human_vs_agent.png").exists()
+    assert len(list(tmp_path.glob("*/human_vs_agent.png"))) == 2
