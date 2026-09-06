@@ -305,3 +305,45 @@ def test_the_agent_prompt_is_pinned():
         "Last trip it bought nabisco. Over its recent trips it bought "
         "nabisco most often (100% of the time)."
     )
+
+
+def test_alternating_split_makes_the_lag_estimate_depend_on_parity():
+    """The artifact that A2b had to remove, pinned so it cannot come back silently.
+
+    Held-out occasions are the odd ones, so an antecedent an odd number of
+    occasions back is always a training occasion and an even one is always
+    held out. The household intercepts have therefore already absorbed the
+    odd-lag antecedent's own choice, and the measured excess alternates. The
+    bias is a function of the lag, which is what makes it fatal for a shape
+    comparison rather than merely a level one.
+    """
+    panel = human.load()
+    fit = human.fit_memoryless_choice(panel, l2=0.03, split="alternating")
+    excess = [human._repeat_at_lag(panel, fit, k)["conditional_excess"]
+              for k in range(1, 9)]
+    odd, even = excess[0::2], excess[1::2]
+    # Every even lag exceeds every odd lag - a clean separation, not a trend.
+    assert min(even) > max(odd), (odd, even)
+
+
+def test_contiguous_split_removes_the_parity_dependence():
+    """And holds the sample fixed across lags, so shape is not confounded."""
+    panel = human.load()
+    fit = human.fit_memoryless_choice(panel, l2=0.03, split="contiguous")
+    rows = [human._repeat_at_lag(panel, fit, k) for k in range(1, 9)]
+    excess = [r["conditional_excess"] for r in rows]
+    odd, even = excess[0::2], excess[1::2]
+    assert not (min(even) > max(odd)), "parity separation should be gone"
+
+    counts = [r["n_held_out"] for r in rows]
+    # Under the alternating split this falls from 1611 to 1068 across lags, so
+    # long lags are measured on longer-panel households.
+    assert max(counts) - min(counts) < 0.05 * max(counts), counts
+
+
+def test_phase10_split_is_still_the_default():
+    """Phase 10 is frozen, so its baseline must not move under this branch."""
+    panel = human.load()
+    d = human.conditional_repeat_baseline(panel, l2=0.03, lag=1)
+    assert d["conditional_excess"] == pytest.approx(0.0209, abs=5e-4)
+    assert d["marginal_excess"] == pytest.approx(0.3592, abs=5e-4)

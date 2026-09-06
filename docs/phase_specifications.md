@@ -3414,6 +3414,148 @@ difference cannot be attributed to "streak versus stock" in general, only to
 the short-memory end of the stock family — because that is where M1 sits.
 
 
+### Gate A1 — one-step admissibility (frozen)
+
+The 3x3 result above stands as recorded and is not re-run. Its claim is narrow
+and is now stated that way: **eight of nine cells produce a one-step state
+dependence inside the one-step human bracket.** It does not identify long-run
+persistence, and the cell it excludes is excluded on a one-step criterion only.
+
+### Gate A2a — the raw lag profile, as a diagnostic
+
+Observed repeat over the marginal-share baseline, which removes brand-share
+concentration and nothing else:
+
+| lag | 1 | 2 | 4 | 8 |
+|---|---|---|---|---|
+| raw excess | +0.3592 | +0.3707 | +0.3645 | +0.3573 |
+
+**Repeat-choice excess remains approximately stable through eight purchase
+occasions.** That is the whole claim. **This diagnostic does not separately
+identify persistent preference heterogeneity from true state dependence**, and
+on its own it is as consistent with a household that always buys Nabisco as
+with any memory at all.
+
+### Gate A2b — the B1-adjusted lag profile
+
+The conditional control is Phase 10's B1: `alpha_brand + u[household, brand] +
+beta . (relative_price, display, feature)`, **no previous-choice term by
+construction**, scored out of sample. The estimand is
+
+```
+residual SD(k) = observed repeat at lag k - B1's expected repeat at lag k
+```
+
+— what knowing the choice `k` occasions back still predicts, given what this
+household generally likes and what it faces today.
+
+**A split artifact had to be removed before this could be read.** Under the
+alternating split B1 was fitted with — held-out occasions are the odd ones — an
+antecedent an *odd* number of occasions back is always a **training** occasion
+and an even one is always held out. The household intercepts have therefore
+already absorbed the odd-lag antecedent's own choice, and the measured excess
+alternates with parity:
+
+| lag | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 |
+|---|---|---|---|---|---|---|---|---|
+| antecedent | train | held out | train | held out | train | held out | train | held out |
+| excess | +0.0209 | +0.0375 | +0.0109 | +0.0351 | +0.0183 | +0.0287 | +0.0151 | +0.0280 |
+
+Odd lags average **+0.016**, even lags **+0.032**, with no exception in eight
+lags. That is the split, not the behaviour, and it is fatal for a shape
+comparison because the bias is a function of the lag.
+
+A **contiguous** split — each household's first half trains, its second half
+scores — has no such dependence: no small-lag antecedent inside the scored half
+is in the training data. It also holds the sample fixed. Under the alternating
+split `n` falls from 1611 at lag 1 to 1068 at lag 8, so the lags are measured on
+progressively longer-panel households; under the contiguous split it is 1613,
+1613, 1613, 1602. The shape is therefore not confounded with composition either.
+
+**Result, contiguous split, 300 household-level bootstrap replicates.**
+Households are the resampling unit because occasions within one are dependent,
+which is the subject of the measurement; differences against lag 1 are taken
+within replicate, since the four lags come from the same households.
+
+| lag | residual SD | 95% CI | vs lag 1 | 95% CI of difference |
+|---|---|---|---|---|
+| 1 | **+0.0469** | [+0.0280, +0.0706] | — | — |
+| 2 | +0.0301 | [+0.0089, +0.0513] | −0.0168 | **[−0.0306, −0.0030]** |
+| 4 | +0.0195 | [−0.0010, +0.0415] | −0.0273 | **[−0.0462, −0.0111]** |
+| 8 | +0.0120 | [−0.0095, +0.0309] | −0.0349 | **[−0.0547, −0.0179]** |
+
+**Residual state dependence decays, and the decay is significant at every
+lag.** By lag 4 the level itself is no longer distinguishable from zero. The
+decay ratio is **0.255**, 95% CI **[-0.273, 0.591]**, against 1.337
+[0.450, 4.858] under the alternating split.
+
+The interval is wide and its lower end is uninformative — it runs negative only
+because the lag-8 level is itself indistinguishable from zero, and a negative
+ratio has no reading as a decaying memory. What the interval does establish is
+its **upper** end: ratios above 0.591 are excluded.
+
+### What this changes
+
+**It reverses the reading the alternating profile invited.** A flat profile
+would have been the signature of long memory and would have supported
+`rho = 0.95`; the parity-free profile decays fast, and the simulator ratios it
+sits among are
+
+| | decay ratio (lag 8 / lag 1) |
+|---|---|
+| `rho = 0.50` cells | 0.177 – 0.208 |
+| `rho = 0.80` cells | 0.463 – 0.590 |
+| `rho = 0.95` cells | 0.829 – 0.999 |
+| M1 streak | 0.165 |
+| **human, contiguous** | **0.255** |
+
+So human residual state dependence is **short-lived** — between `rho = 0.50`
+and `rho = 0.80`, nearer the former, with a half-life on the order of one to
+two purchase occasions. `rho = 0.95` is the regime the human trajectory
+excludes, not the one it supports.
+
+**Both splits are biased, in different ways, and only one of them is fatal
+here.** The alternating split's bias depends on the lag, which destroys the
+shape. The contiguous split estimates household intercepts on one time period
+and scores them on another, so any drift in preference inflates the residual —
+a bias on the **level**, roughly common across lags. Since the quantity that
+constrains `rho` is the shape, the contiguous split is the right instrument
+even though its level is the less trustworthy of the two. Neither is a clean
+estimate of the level, and no level claim is made from this section.
+
+**Phase 10's `+0.0209` is not withdrawn and not re-run.** It is qualified: it
+is a lag-1 estimate under the alternating split, which is the *low* phase of
+the parity oscillation documented above. The bracket `[+0.02, +0.36]` and every
+conclusion drawn from it in Phase 10 stand as recorded, under that split.
+
+### Consequence for Gate B — all nine cells, not eight
+
+Gate B runs **the full grid**. Gate A1's exclusion of `(rho = 0.95,
+gamma = 0.75)` says only that its one-step effect falls below the one-step
+bracket's lower end, and A1 has now been shown not to identify long-run
+persistence. Dropping that cell would discard the longest-memory behaviour in
+the grid on a criterion that cannot see long memory. The cost of nine over
+eight is one cell.
+
+Cells consistent with the A2b decay shape are marked as the **primary region**,
+fixed here before Gate B runs rather than after seeing its dynamics. Against
+the ratio interval `[-0.273, 0.591]`:
+
+| `rho` | cell ratios | verdict |
+|---|---|---|
+| 0.50 | 0.177, 0.181, 0.208 | **primary** |
+| 0.80 | 0.463, 0.557, 0.590 | **primary** |
+| 0.95 | 0.829, 0.930, 0.999 | outside — run and reported, not primary |
+
+**Six of nine cells are primary, and the excluded row is `rho = 0.95`.** Gate
+A1 had excluded one cell of that row on a one-step level criterion; the shape
+criterion excludes all three, for a reason A1 could not have supplied. The two
+gates agree in direction, but only A2b is entitled to the conclusion.
+
+An earlier reading of the alternating-split profile — that its flatness
+favoured `rho = 0.95` — was the parity artifact and is withdrawn.
+
+
 ## Phase 11 — Bias Quantification (Asset A formalizes; Asset B built)
 
 **Research question:** Is the human-AI gap systematic and predictable, and can it be corrected?
