@@ -1692,60 +1692,110 @@ representation and a result that rests on it is not a result.
   document fixed at design time, and a market still moving at week 110 is a
   finding about the mechanism rather than a reason to keep running it.
 
-### Phase 8 result — structure emerges, and it is the population's structure
+### Phase 8 result — differential survival, not competition
 
 **Every graded criterion passes in all eight cells**, at 300 seeds. Four of the
 eight were inconclusive at 30 and the registered escalation was applied once, to
 every cell so the eight stay comparable.
 
-**The premium tier is competed out of existence, everywhere.** The market starts
-at 3 Slow and 2 Shigh — 40% premium — and converges to essentially 100% Slow in
-every cell. Nothing in the entry, exit or pricing rule reads a class label, and
-that is verified behaviourally rather than asserted: swapping the tier *names*
-while holding every numeric parameter leaves the run identical to the last slot,
-same entries, same exits, same profits. The label is **emergent**.
+**Entry/exit dynamics selectively eliminate the premium tier, under this
+population, these budgets and this cost structure.** The market starts at 3 Slow
+and 2 Shigh — 40% premium — and converges to essentially 100% Slow in every cell.
 
-**Free entry sets the market's size, and the fixed cost sets the equilibrium.**
-Both rules produce logistic growth from 5 sellers to a plateau, and the plateau
-is monotone in the fixed cost:
+The phrasing matters, because the obvious summary ("competition eliminated the
+premium tier") claims something the run does not show. Shigh's disadvantage was
+not created here. It was fixed at Phase 2, where 70% of buyers were given a
+budget of 3.0 against a premium price of 6.0, and by a cost model in which
+`F_Shigh = F_Slow`: a premium stall can address 30% of the market while paying
+the same rent. What Phase 8 supplies is the selection mechanism that turns a
+standing fitness difference into a composition:
+
+```
+existing fitness difference -> profit differences -> differential survival
+                            -> market composition
+```
+
+Each arrow is measured here; the first term is inherited.
+
+### Two distinct senses of "not encoded", and which one this is
+
+The label-swap test is strong but specific. Swapping the tier *names* while
+holding every numeric parameter produces a bit-identical run — same entries,
+same exits, same profits, to the last slot. What that establishes is exactly:
+
+> **the outcome is label-invariant.** No rule contains anything of the form
+> `if seller.class == "Shigh": exit(...)`.
+
+It does **not** establish that the resulting composition is independent of the
+parameterization, and it cannot. Two things are worth naming separately:
+
+| | what it means | is this result that? |
+|---|---|---|
+| **label-encoded outcome** | a decision rule reads a class and acts on it | **no** — proven by the swap test |
+| **parameter-induced endogenous selection** | the composition follows from exogenously chosen buyer affordability and seller economics, through rules that never see a class | **yes** |
+
+So the claim this phase supports, stated fully: **the result is emergent with
+respect to the decision rules, but conditional on exogenously specified buyer
+affordability and seller economics.** Anything stronger — that a different
+population would produce a different mix through the same rules — is untested,
+and is what Phase 15's reference-scale run exists to probe.
+
+### Stochastic stationarity, not equilibrium
+
+Free entry **endogenizes market size**, and the fixed cost **strongly determines
+its stationary level**:
 
 | fixed cost | 6 | 8 | 10 | 12 |
 |---|---|---|---|---|
 | exit on capital | 24.9 | 18.8 | 15.1 | 12.4 |
 | exit on streak | 21.2 | 16.4 | 13.2 | 10.8 |
 
-The registered value of 10.0 gives a 13–15 seller market. Had it been left as a
-single point, that number would have looked like a finding rather than a
-parameter, which is what the sweep was for.
+A flat count is not a static market, and here it is emphatically not one. Over
+the final season, entry and exit both run and run at nearly the same rate:
 
-**The exit rule changes the churn, not the destination.** The three-week rule
-kills sellers that are merely unlucky, so it turns over two to two and a half
-times as many firms — 43.6 to 53.7 entries and 37.5 to 39.2 exits per run,
-against 22.4 to 36.6 and 15.1 to 16.7 for the capital rule — and it eliminates
-the premium tier faster at every fixed cost. It still lands within about 15% of
-the same seller count. **Market structure is robust to the form of the exit
-rule; turnover is not**, and reporting one without the other would have made an
-arbitrary modelling choice look like a property of the market.
+| | entries/wk | exits/wk | firms surviving the season |
+|---|---|---|---|
+| capital, F=6…12 | 0.09–0.15 | 0.08–0.12 | 85–90% |
+| streak, F=6…12 | 0.36–0.48 | 0.39–0.48 | **49–63%** |
 
-**Plausibility against the reference market.** Simulated season-over-season
-change is **9.5%** against RI DEM's **15.2%** (24, 31, 25, 24, 26): the same
-order, slightly more static than a real market. Per cell it runs 8.7% to 16.7%,
-and the cheapest capital cell — 24.9 sellers moving 16.7% a season — sits
-inside the real market's range on both counts. That is a coincidence worth
-recording and not a validation: nothing was calibrated toward it, and one cell
-of eight matching a five-point reference series is what a spread of eight cells
-does.
+Under the three-week rule roughly **half the market is replaced inside one
+season while the seller count does not move.** So what the phase produces is a
+**stochastic stationary market structure** — a stationary seller count with
+continuing turnover — not a static equilibrium, and `N_t ≈ 15` does not mean the
+same fifteen stalls.
 
-**What "emergent" does and does not claim here.** The mechanism did not encode
-the outcome: no rule reads a tier, and imitation copies whatever is making
-money. But *why* Shigh loses money was fixed at Phase 2 — 70% of buyers hold a
-budget of 3.0 and a premium stall charges 6.0, so it can only ever sell to 30%
-of the market while paying the same rent. The market did not discover something
-about itself; it discovered what the population already made true. Emergent
-means the structure was not programmed into the entry and exit rules, and it
-should be read that narrowly. The interesting question the phase cannot answer —
-whether a *different* population would produce a different mix through the same
-rules — is exactly what Phase 15's reference-scale run is for.
+**The exit rule mainly changes turnover and convergence speed, and changes the
+long-run seller count only modestly.** The three-week rule kills sellers that
+are merely unlucky, turns over about four times as many firms per week, and
+eliminates the premium tier faster at every fixed cost — while landing about 15%
+lower on the count. "Changes the churn and not the destination" would be too
+strong: 15% is not nothing, and it is reported rather than rounded away. The
+point that survives is that a modelling choice with a fourfold effect on
+turnover has a modest effect on structure, which is only visible because both
+were run.
+
+### The empirical reference, and what it can carry
+
+Simulated season-over-season change is **9.5%** (8.7–16.7% across cells) against
+the RI DEM series' **15.2%**, computed from the vendor counts 24, 31, 25, 24, 26
+for 2019–2023 as recorded in this document's Phase 8 section from the project's
+original design notes. **The provenance beyond that is not established here** —
+which market or set of markets, what counts as a vendor, and how entry and exit
+were defined in that series are not documented in this repository, and no
+citation is claimed.
+
+Consequently this comparison supports only:
+
+> simulated turnover is of a **comparable order of magnitude** to the chosen
+> empirical reference.
+
+It does **not** support "the simulation reproduces real market turnover". The
+time interval, the denominator, the definition of a seller, the definition of
+entry and exit, and the population are all either different or unverified. That
+one cell of eight lands inside the reference's range on both count and
+volatility is a coincidence to record, not a validation: nothing was calibrated
+toward it, and eight cells spread across a range will produce such a match by
+construction.
 
 **Exit condition:** `git tag phase8-validated`. Last purely rule-based phase; no
 moat-relevant data is generated through Phase 8.
@@ -1769,7 +1819,74 @@ Extends the Phase 6 page (same underlying artifact, not a rebuild). Adds:
 
 The problem is sharper than "we skipped a rung". **No buyer parameter in Phases 1–8 was ever fitted to anything.** `intercept` 1.0, `budget_coef` 0.05, `preference_coef` 1.5, α 0.85/0.5/0.2, the loyalty bonus 0.5 and its cap of 3 — every one is hand-chosen, several of them chosen during this project's own design review gates. So the Phase 9 control group is not "an interpretable model" but *an unfitted model*, and an LLM beating it would establish only that an LLM outperforms a set of numbers someone picked. That is not a finding.
 
-**Research question:** How does a buyer policy trained to actually maximize buyer welfare differ from the hand-written rule, and how far from optimal was the hand-written rule?
+**Research question:** Can a learned policy recover and generalize the behaviour of the rule-based buyer it replaces — and, separately, how far from optimal was that rule once a surplus measure exists to score it against? These are two questions with two arms, and the section below pins why they must not be reported as one.
+
+### What the teacher is, and what that lets 9a claim
+
+Pinned before implementation, because the phase's name invites a claim it
+cannot support. The training trajectories are generated by **this project's own
+hand-coded buyer**, so a policy fitted to them is doing:
+
+```
+hand-coded buyer -> (s, a) trajectories -> fitted neural policy
+```
+
+which is **policy distillation / behavioural cloning of a simulator**, not
+learning of human behaviour. The teacher is a formula written during this
+project's design gates. So the question 9a asks is:
+
+> **Can a learned policy recover and generalize the behaviour of the
+> rule-based buyer it replaces?**
+
+and emphatically not "can learned buyers reproduce humans?". Nothing in Phases
+1–9 contains a single human decision. That question begins at **Phase 10**,
+where real human trajectories enter, and any wording in this phase that drifts
+toward it is wrong. The distinction matters for the whole synthetic-user line:
+a clone of a simulator is a *pipeline check*, and its fidelity says nothing
+about realism.
+
+The surplus-maximizing arm is a different object and is not distillation — it
+optimizes realized `WTP − price` rather than imitating the teacher, which is
+why it can be *better* than its teacher rather than merely close to it. The two
+arms answer two questions and must not be reported as one.
+
+### Staging: offline fidelity before closed-loop deployment
+
+The phase runs in three stages, in this order, and the second gates the third:
+
+```
+offline fit  ->  held-out behavioural fidelity  ->  closed-loop deployment
+```
+
+**Stage 1 — offline.** Fit `pi_theta(a | s)` on trajectories from the rule-based
+buyer and score it on **held-out states the fit never saw**: does it reproduce
+the rule's action?
+
+**Stage 2 — the gate.** Only a policy that reproduces the rule offline is put
+back into the market. A model that cannot match its teacher on the teacher's own
+state distribution has nothing to say about what happens when it changes that
+distribution.
+
+**Stage 3 — closed loop, and the quantity worth measuring.** Offline accuracy
+does not transfer, and the reason is a feedback loop rather than noise:
+
+```
+small policy error -> different action -> different trajectory
+                   -> states the fit never saw -> larger policy error
+```
+
+A policy that is 95% accurate offline does not make 5% fewer good decisions in
+the market; it makes 5% different decisions, which move the state distribution
+it then faces out of the distribution it was fitted on, where its error is no
+longer 5%. **The headline measurement of 9a is therefore the gap between
+offline held-out accuracy and closed-loop trajectory fidelity**, together with
+how far the closed-loop state distribution drifts from the offline one. This is
+one of the central problems in synthetic-user and generative-agent work, it is
+measurable here exactly because the teacher is available for comparison at every
+step, and it would be invisible if the loop were closed immediately.
+
+Concrete metrics, thresholds and the arm design are set at Phase 9a's own design
+review gate, not here.
 
 ### The reward problem, and why a new primitive is needed
 

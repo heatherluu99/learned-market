@@ -174,3 +174,65 @@ def test_phase8_criteria_grade_validity_not_direction():
     assert sum(1 for c in criteria if not c.graded) == 1  # the plausibility flag
     settled = next(c for c in criteria if c.name.startswith("the seller count"))
     assert "verdict is reached" in settled.note
+
+
+def test_a_seats_exogenous_draws_do_not_depend_on_who_else_exists():
+    """The common-random-numbers guarantee, which the fixed seats exist for.
+
+    If the engine drew per *active* seller, two arms whose entry histories
+    diverge would consume different numbers of values from the same generator
+    and every paired-seed comparison in this project would silently stop being
+    paired. Fixed seats mean seat s always reads the same draws on a given
+    seed, whatever the occupancy elsewhere.
+
+    Tested through `seller_noticed`, which is the one observable that depends
+    only on a seat's own draws: it counts attending buyers whose visibility
+    draw for that seat clears that seat's own probability, and nothing about
+    any other stall enters it. Two cells with different fixed costs have
+    visibly different occupancy - so if the streams had drifted, these counts
+    would differ.
+    """
+    cheap, dear = phase8_cell("capital", 6.0), phase8_cell("capital", 12.0)
+    a, b = run_season(cheap, 0), run_season(dear, 0)
+
+    # Compared on the founding seats only, and only while their founding firm
+    # is still in place. A seat refilled by an entrant carries whatever stall
+    # that entrant imitated - the same tier name can mean a different position
+    # and so a different visibility - and the comparison would then be between
+    # two different stalls rather than between two draw streams.
+    founders = PHASE7A_FIXED.n_sellers
+    diverged = False
+    compared = 0
+    for week in range(a.n_weeks):
+        if a.active[week].sum() != b.active[week].sum():
+            diverged = True
+        for slot in range(founders):
+            if a.firm_id[week][slot] != slot or b.firm_id[week][slot] != slot:
+                continue
+            assert (a.weeks[week].seller_noticed[slot]
+                    == b.weeks[week].seller_noticed[slot]), (week, slot)
+            compared += 1
+    assert diverged, "the two cells must actually differ in occupancy"
+    assert compared > 250, compared  # not vacuous: the founders trade for most of the run
+
+
+def test_the_starting_seats_share_their_draws_across_every_cell():
+    """The five founding stalls exist in every cell, so week 0 must be identical."""
+    seasons = [run_season(cfg, 3) for cfg in PHASE8_CELLS]
+    first = seasons[0].weeks[0]
+    for s in seasons[1:]:
+        assert np.array_equal(s.weeks[0].seller_noticed, first.seller_noticed)
+        assert np.array_equal(s.weeks[0].seller_n_sold, first.seller_n_sold)
+        assert np.array_equal(s.chosen_seller[0], seasons[0].chosen_seller[0])
+
+
+def test_stationary_turnover_separates_a_flat_count_from_a_static_market():
+    cfg = phase8_cell("streak", 10.0)
+    seasons = [run_season(cfg, s) for s in range(8)]
+    t = acceptance.stationary_turnover(cfg, seasons, cfg.weeks - 22)
+    # entry and exit both running, and roughly balanced - the definition of a
+    # stochastically stationary structure rather than a settled one
+    assert t["entries_per_week"] > 0.1
+    assert t["exits_per_week"] > 0.1
+    assert abs(t["entries_per_week"] - t["exits_per_week"]) < 0.15
+    assert 0.0 < t["firm_survival"] < 1.0

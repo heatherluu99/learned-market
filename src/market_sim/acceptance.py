@@ -1400,3 +1400,34 @@ def evaluate_phase8(cfg: MarketConfig, seasons: list) -> list[CriterionResult]:
             "wildly more volatile or more static than a real market ever is.",
         ),
     ]
+
+
+def stationary_turnover(cfg: MarketConfig, seasons: list, from_week: int) -> dict:
+    """Entry, exit and firm survival over the final stretch of the run.
+
+    A flat seller count is not a static market. If entry and exit rates are
+    equal and positive, the structure is *stochastically stationary*: the
+    number of stalls is constant and the stalls themselves are not. Reading
+    only the count would report a settled market where firms are in fact
+    turning over, so both are measured.
+    """
+    weeks = cfg.weeks - from_week
+    entries = np.mean([
+        sum(1 for e in s.events if e["event"] == "entry" and e["week"] >= from_week)
+        for s in seasons
+    ])
+    exits = np.mean([
+        sum(1 for e in s.events if e["event"] == "exit" and e["week"] >= from_week)
+        for s in seasons
+    ])
+    survival = []
+    for s in seasons:
+        start = set(s.firm_id[from_week][s.active[from_week]].tolist())
+        end = set(s.firm_id[-1][s.active[-1]].tolist())
+        survival.append(len(start & end) / max(len(start), 1))
+    return {
+        "entries_per_week": float(entries / weeks),
+        "exits_per_week": float(exits / weeks),
+        "firm_survival": float(np.mean(survival)),
+        "from_week": from_week,
+    }

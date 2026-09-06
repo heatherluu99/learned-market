@@ -1626,7 +1626,7 @@ def phase8_slide() -> PhaseSlide:
             "Entry and exit switched on, nothing else changed  ·  git tag: "
             f"phase8-validated  ·  {int(registered['seeds'])} seeds x 110 weeks"
         ),
-        badge="EMERGENT",
+        badge="DIFFERENTIAL SURVIVAL",
         badge_color=GREEN,
         agents=[
             ("Buyers: ", "100 — Poor 70 / Middle 20 / Rich 10, dispersed budgets"),
@@ -1650,16 +1650,20 @@ def phase8_slide() -> PhaseSlide:
             ),
         ],
         metrics=[
-            MetricRow("Premium tier, week 0", "40% of stalls", "—"),
-            MetricRow("Premium tier, week 110",
-                      f"{(1 - capital[slow].mean()) * 100:.0f}%", "—"),
-            MetricRow("Sellers at F=6 / F=12",
+            MetricRow("Premium tier, week 0 -> 110",
+                      f"40% -> {(1 - capital[slow].mean()) * 100:.0f}%", "—"),
+            MetricRow("Stationary count, F=6 / F=12",
                       f"{capital.iloc[0]['final_sellers']:.1f} / "
                       f"{capital.iloc[-1]['final_sellers']:.1f}", "PASS"),
-            MetricRow("Churn, streak vs capital",
-                      f"{streak['exits'].mean() / capital['exits'].mean():.1f}x", "—"),
-            MetricRow("Volatility vs RI DEM",
-                      f"{cells['volatility'].mean():.1%} vs {real:.1%}", "—"),
+            MetricRow("Final-season entry / exit",
+                      f"{cells['final_season_entries_per_week'].min():.2f}"
+                      f"-{cells['final_season_entries_per_week'].max():.2f} per wk",
+                      "—"),
+            MetricRow("  firms surviving a season",
+                      f"{cells['final_season_firm_survival'].min():.0%}"
+                      f"-{cells['final_season_firm_survival'].max():.0%}", "—"),
+            MetricRow("Turnover, streak vs capital",
+                      f"{streak['final_season_exits_per_week'].mean() / capital['final_season_exits_per_week'].mean():.1f}x", "—"),
             MetricRow("Peak sellers vs capacity",
                       f"{cells['peak_sellers'].max()} of 40", "PASS"),
         ],
@@ -1668,27 +1672,31 @@ def phase8_slide() -> PhaseSlide:
             "structure without that structure being programmed in?"
         ),
         finding=(
-            f"Yes. The premium tier is competed out of existence in all eight "
-            f"cells, from 40% of stalls to essentially zero, and no rule anywhere "
-            f"reads a class label — verified by swapping the tier names and "
-            f"getting a bit-identical run. Free entry sets the size and the fixed "
-            f"cost sets the equilibrium: {capital.iloc[0]['final_sellers']:.1f} "
-            f"sellers at a cost of 6, {capital.iloc[-1]['final_sellers']:.1f} at 12. "
-            f"The exit rule changes the churn and not the destination — the "
-            f"three-week rule turns over "
-            f"{streak['exits'].mean() / capital['exits'].mean():.1f}x as many firms "
-            f"and lands within 15% of the same count."
+            f"Entry/exit dynamics selectively eliminate the premium tier — 40% of "
+            f"stalls to essentially zero in all eight cells — under this "
+            f"population and cost structure. Free entry endogenizes market size "
+            f"and the fixed cost strongly determines its stationary level: "
+            f"{capital.iloc[0]['final_sellers']:.1f} sellers at a cost of 6, "
+            f"{capital.iloc[-1]['final_sellers']:.1f} at 12. What settles is a "
+            f"*stochastic stationary* structure, not an equilibrium: in the final "
+            f"season entry and exit both run, and under the three-week rule only "
+            f"{cells[cells['exit_rule'] == 'streak']['final_season_firm_survival'].min():.0%}"
+            f"-{cells[cells['exit_rule'] == 'streak']['final_season_firm_survival'].max():.0%} "
+            f"of firms survive a season while the count does not move."
         ),
         caveat=(
-            f"Emergent is meant narrowly. The mechanism did not encode the "
-            f"outcome, but *why* the premium tier loses was fixed at Phase 2: 70% "
-            f"of buyers hold a budget of 3.0 against its price of 6.0, so it sells "
-            f"to 30% of the market while paying the same rent. The market "
-            f"discovered what the population already made true. Both halves of the "
-            f"registered mechanism were also inoperative and were replaced at the "
-            f"gate — exit fired on week-0 arithmetic in 100% of seeds, and the "
-            f"unmet-demand entry trigger was identically zero across 1,980 "
-            f"seller-weeks."
+            f"Emergent with respect to the decision *rules*, conditional on "
+            f"exogenously specified buyer affordability and seller economics. "
+            f"Swapping the tier names gives a bit-identical run, which proves the "
+            f"outcome is label-invariant — no rule reads a class — but not that "
+            f"the composition is independent of the parameterization: Phase 2 gave "
+            f"70% of buyers a budget of 3.0 against a premium price of 6.0, and "
+            f"both tiers pay the same rent. The exit rule mainly changes turnover "
+            f"and convergence speed, and the long-run count only modestly (~15%). "
+            f"Season-over-season change {cells['volatility'].mean():.1%} against "
+            f"the RI DEM reference's {real:.1%} supports a comparable order of "
+            f"magnitude only — provenance, seller definition and entry/exit "
+            f"definition are unverified, so it is not a reproduction claim."
         ),
     )
 

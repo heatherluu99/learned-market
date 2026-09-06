@@ -62,6 +62,9 @@ def collect(cfg, rows, trajectories, criteria_by_cell, premium_shares) -> None:
     exits = float(np.mean([sum(e["event"] == "exit" for e in s.events)
                            for s in seasons]))
     volatility = float(np.abs(np.diff(counts, axis=1) / counts[:, :-1]).mean())
+    # A flat count is not a static market: measure whether firms are still
+    # turning over once the count has stopped moving.
+    turnover = acceptance.stationary_turnover(cfg, seasons, cfg.weeks - 22)
     # Share of active sellers in the premium tier, week by week. The endpoint
     # alone is four identical full bars; what the phase found is the path from
     # 40% to nothing, and when it happens.
@@ -77,7 +80,8 @@ def collect(cfg, rows, trajectories, criteria_by_cell, premium_shares) -> None:
     criteria_by_cell[label] = criteria
 
     print(f"  {label:22s} {active[:, -1].mean():5.1f} {active.max():5d} "
-          f"{entries:8.1f} {exits:7.1f} {volatility:10.1%}   "
+          f"{entries:8.1f} {exits:7.1f} {volatility:10.1%} "
+          f"{turnover['firm_survival']:8.0%}   "
           + "  ".join(f"{k} {v:.0%}" for k, v in mix.items()))
     rows.append({
         "cell": cfg.name, "exit_rule": cfg.exit_rule,
@@ -85,6 +89,7 @@ def collect(cfg, rows, trajectories, criteria_by_cell, premium_shares) -> None:
         "final_sellers": float(active[:, -1].mean()),
         "peak_sellers": int(active.max()),
         "entries": entries, "exits": exits, "volatility": volatility,
+        **{f"final_season_{k}": v for k, v in turnover.items()},
         **{f"share_{k}": v for k, v in mix.items()},
         "passed": all(c.passed for c in criteria if c.graded),
     })
@@ -120,7 +125,7 @@ def main() -> int:
 
     rows, trajectories, criteria_by_cell, premium_shares = [], {}, {}, {}
     print(f"  {'cell':22s} {'end':>5s} {'peak':>5s} {'entries':>8s} {'exits':>7s} "
-          f"{'volatility':>11s}  class mix at the end")
+          f"{'volatility':>11s} {'survive':>8s}   class mix at the end")
     cells = PHASE8_CELLS
     seed_block = cells[0].seeds
     for cfg in cells:
@@ -138,7 +143,7 @@ def main() -> int:
         seed_block = RESOLUTION_SEEDS
         rows, trajectories, criteria_by_cell, premium_shares = [], {}, {}, {}
         print(f"  {'cell':22s} {'end':>5s} {'peak':>5s} {'entries':>8s} "
-              f"{'exits':>7s} {'volatility':>11s}  class mix at the end")
+              f"{'exits':>7s} {'volatility':>11s} {'survive':>8s}   class mix at the end")
         for cfg in cells:
             cfg = dataclasses.replace(cfg, seeds=RESOLUTION_SEEDS)
             collect(cfg, rows, trajectories, criteria_by_cell, premium_shares)
@@ -182,10 +187,15 @@ def main() -> int:
                 f"{r['exit_rule']} F={r['fixed_cost']:g} -> {r['final_sellers']:.1f}"
                 for r in rows
             )
-            + f". Volatility {frame['volatility'].mean():.1%} per season against "
-            f"RI DEM's {acceptance.real_market_volatility():.1%}. "
-            f"{sum(c.passed for c in settled)}/{len(settled)} cells settled by "
-            f"the final season."
+            + f". Stationary rather than static: in the final season entry and "
+            f"exit run at {frame['final_season_entries_per_week'].min():.2f}-"
+            f"{frame['final_season_entries_per_week'].max():.2f} firms a week and "
+            f"{frame['final_season_firm_survival'].min():.0%}-"
+            f"{frame['final_season_firm_survival'].max():.0%} of firms survive it. "
+            f"Season-over-season change {frame['volatility'].mean():.1%} against the "
+            f"RI DEM reference series' {acceptance.real_market_volatility():.1%} - a "
+            f"comparable order of magnitude only, the two are not like-for-like. "
+            f"{sum(c.passed for c in settled)}/{len(settled)} cells decided."
         ),
         "decision_implication": "N/A - infrastructure phase, no business decision",
         "next_experiment": "Phase 9a — learned buyer policy",
