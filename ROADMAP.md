@@ -86,7 +86,20 @@ visualization** gets, and when. Specifically:
 
 ## Current phase
 
-**Phase 8 in progress** (design gate confirmed). Phase 7e is complete. Phases 1–6 and 7a, 7b, 7d are
+**Phase 8 complete; next is Phase 9a.** Every phase through 8 is tagged.
+
+Phase 8 found the premium tier competed out of existence in all eight cells,
+from a 40% starting share to essentially zero, with no rule anywhere reading a
+class label — verified by swapping the tier names and getting a bit-identical
+run. Free entry sets the market's size and the fixed cost sets the
+equilibrium, monotonically: 24.9 sellers at a fixed cost of 6 down to 12.4 at
+12. The exit rule changes the churn and not the destination — the three-week
+rule turns over 2.5× as many firms and lands within 15% of the same count.
+
+"Emergent" is meant narrowly. The mechanism did not encode the outcome, but
+*why* the premium tier loses was fixed at Phase 2: 70% of buyers cannot afford
+it and it pays the same rent. The market discovered what the population
+already made true. Phases 1–6 and 7a, 7b, 7d are
 tagged validated; 7c is tagged `phase7c-skipped`; 7e-1 through 7e-3b are
 tagged `phase7e1-calibrated`, `phase7e2-headroom`, `phase7e3a-context` and
 `phase7e3b-horizon`.

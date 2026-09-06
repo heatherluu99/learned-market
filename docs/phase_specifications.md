@@ -1692,8 +1692,63 @@ representation and a result that rests on it is not a result.
   document fixed at design time, and a market still moving at week 110 is a
   finding about the mechanism rather than a reason to keep running it.
 
-**Exit condition:** `git tag phase8-validated`. This is the last purely
-rule-based phase — no moat-relevant data is generated through Phase 8.
+### Phase 8 result — structure emerges, and it is the population's structure
+
+**Every graded criterion passes in all eight cells**, at 300 seeds. Four of the
+eight were inconclusive at 30 and the registered escalation was applied once, to
+every cell so the eight stay comparable.
+
+**The premium tier is competed out of existence, everywhere.** The market starts
+at 3 Slow and 2 Shigh — 40% premium — and converges to essentially 100% Slow in
+every cell. Nothing in the entry, exit or pricing rule reads a class label, and
+that is verified behaviourally rather than asserted: swapping the tier *names*
+while holding every numeric parameter leaves the run identical to the last slot,
+same entries, same exits, same profits. The label is **emergent**.
+
+**Free entry sets the market's size, and the fixed cost sets the equilibrium.**
+Both rules produce logistic growth from 5 sellers to a plateau, and the plateau
+is monotone in the fixed cost:
+
+| fixed cost | 6 | 8 | 10 | 12 |
+|---|---|---|---|---|
+| exit on capital | 24.9 | 18.8 | 15.1 | 12.4 |
+| exit on streak | 21.2 | 16.4 | 13.2 | 10.8 |
+
+The registered value of 10.0 gives a 13–15 seller market. Had it been left as a
+single point, that number would have looked like a finding rather than a
+parameter, which is what the sweep was for.
+
+**The exit rule changes the churn, not the destination.** The three-week rule
+kills sellers that are merely unlucky, so it turns over two to two and a half
+times as many firms — 43.6 to 53.7 entries and 37.5 to 39.2 exits per run,
+against 22.4 to 36.6 and 15.1 to 16.7 for the capital rule — and it eliminates
+the premium tier faster at every fixed cost. It still lands within about 15% of
+the same seller count. **Market structure is robust to the form of the exit
+rule; turnover is not**, and reporting one without the other would have made an
+arbitrary modelling choice look like a property of the market.
+
+**Plausibility against the reference market.** Simulated season-over-season
+change is **9.5%** against RI DEM's **15.2%** (24, 31, 25, 24, 26): the same
+order, slightly more static than a real market. Per cell it runs 8.7% to 16.7%,
+and the cheapest capital cell — 24.9 sellers moving 16.7% a season — sits
+inside the real market's range on both counts. That is a coincidence worth
+recording and not a validation: nothing was calibrated toward it, and one cell
+of eight matching a five-point reference series is what a spread of eight cells
+does.
+
+**What "emergent" does and does not claim here.** The mechanism did not encode
+the outcome: no rule reads a tier, and imitation copies whatever is making
+money. But *why* Shigh loses money was fixed at Phase 2 — 70% of buyers hold a
+budget of 3.0 and a premium stall charges 6.0, so it can only ever sell to 30%
+of the market while paying the same rent. The market did not discover something
+about itself; it discovered what the population already made true. Emergent
+means the structure was not programmed into the entry and exit rules, and it
+should be read that narrowly. The interesting question the phase cannot answer —
+whether a *different* population would produce a different mix through the same
+rules — is exactly what Phase 15's reference-scale run is for.
+
+**Exit condition:** `git tag phase8-validated`. Last purely rule-based phase; no
+moat-relevant data is generated through Phase 8.
 
 ### Web Visualization Extension — Entry/Exit Panels
 
