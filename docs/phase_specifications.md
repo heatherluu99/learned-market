@@ -2065,6 +2065,92 @@ measure of how much the hand-written rule leaves on the table — not a fidelity
 score. Reporting the two under one heading would make an improvement in one
 look like an improvement in the other.
 
+### Phase 9a design gate — the observation set, and what "successfully distilled" means
+
+**The student does not see what the teacher sees, and that is the phase.** A
+synthetic user conditions on observable behavioural context, not on the latent
+draws a simulator happens to hold. Giving the student the teacher's own inputs
+would make distillation a solved arithmetic problem — the teacher is a
+deterministic function of them — and there would be nothing to measure.
+
+**Observed** (8 columns, buyer segment one-hot so its index is not read as a
+magnitude):
+
+```
+buyer_class_index   price          is_premium      streak_here
+purchases_this_week spent_this_week season_fraction history_rate
+```
+
+`history_rate` is a persona proxy — how often this buyer has bought per stall
+seen so far this season — standing in for latent traits a real synthetic user
+would infer rather than read.
+
+**Hidden**, and the reason the floor is not zero: `preference[b, s]` (the
+season-long taste draw), the buyer's own dispersed `budget_remaining`, and its
+exact `price_sensitivity`.
+
+**The floor is measured, not assumed.** A capacity sweep on held-out encounters:
+
+| model | `E\|p_T − p_θ\|` | log-loss (nats) |
+|---|---|---|
+| constant predictor | 0.1241 | 0.6904 |
+| 16 × 1 | 0.0853 | 0.6627 |
+| 32 × 2 | 0.0843 | 0.6625 |
+| **64 × 2** | **0.0840** | **0.6625** |
+| 128 × 3 | 0.0840 | 0.6626 |
+| 256 × 3 | 0.0840 | 0.6625 |
+| *teacher's own entropy* | *0* | *0.6424* |
+
+Quadrupling capacity past 64 × 2 buys nothing, so **≈ 0.0840 is the irreducible
+floor for this observation set**. The hidden taste draw accounts for it: the
+observation set removes only about a third of the constant predictor's error.
+
+### Gate 9a — all three, on held-out states, or the student is not deployed
+
+| # | criterion | threshold | what it catches |
+|---|---|---|---|
+| 1 | policy distance | `E\|p_T − p_θ\| ≤ floor + 0.005` | learned *something* but not everything the observation set allows |
+| 2 | stratified calibration | worst cell `\|mean p_θ − mean p_T\| ≤ 0.02` | learned the marginal but not the conditional |
+| 3 | proper score | held-out log-loss ≤ constant predictor's − 0.02 nats | learned nothing at all |
+
+**Criterion 2 is the one with teeth, and its threshold comes from the failure it
+rejects.** A constant predictor emitting the market's mean rate has an
+*aggregate* calibration error of **0.0003** — it passes an unstratified check
+outright — while its worst stratum is **0.3052**, in loyalty streak. Measured
+per stratum for that predictor:
+
+| stratum | worst cell error |
+|---|---|
+| **loyalty streak** | **0.3052** |
+| seller tier | 0.0545 |
+| buyer class | 0.0378 |
+| spend so far | 0.0148 |
+| season third | 0.0145 |
+
+A threshold of 0.02 sits an order of magnitude below the failure and three
+times above a fitted model's observed 0.0060. Strata: buyer class, seller tier,
+loyalty streak, season third, and spend-so-far — behaviourally meaningful cuts,
+each with a 50-encounter minimum so a thin cell cannot fail the gate on noise.
+
+**Criterion 1's 0.005 is a decision rate, not a fitting tolerance.** Under the
+shared `purchase_draw`, `E|p_T − p_θ|` *is* the probability that teacher and
+student act differently on an encounter, so 0.005 means the student takes a
+different action on half a percent more encounters than the best model with the
+same information — under one extra differing decision per buyer-season.
+
+**Criterion 3's 0.02 nats against a 0.0480-nat available range** (constant
+0.6904 down to the teacher's entropy 0.6424) requires capturing over 40% of the
+reduction that exists at all.
+
+**Both label regimes are fitted.** Soft labels `(s, p_T(s))`, which the
+simulator makes available and which remove label noise; and sampled actions
+`(s, a_T)`, which is what ordinary behavioural cloning would have. The
+soft-label arm carries the argument: it is the best-case imitator, so if *it*
+drifts in closed loop the cause cannot be label noise.
+
+**Exit condition:** `git tag phase9a-distilled`, with the gate's verdict and
+the three closed-loop quantities recorded.
+
 ### The reward problem, and why a new primitive is needed
 
 Sellers can be given reinforcement learning without difficulty because their objective — profit — is external and uncontroversial. Buyers have no such objective. The obvious answer, "maximize utility", is circular: utility *is* the hand-written formula, so a policy trained on it optimizes the very model this phase exists to move past.
