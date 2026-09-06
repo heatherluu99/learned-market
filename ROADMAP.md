@@ -86,9 +86,9 @@ visualization** gets, and when. Specifically:
 
 ## Current phase
 
-**Phase 7e-2 complete; next is 7e-3.** Phases 1–6 and 7a, 7b, 7d are
-tagged validated; 7c is tagged `phase7c-skipped`; 7e-1 and 7e-2 are tagged
-`phase7e1-calibrated` and `phase7e2-headroom`.
+**Phase 7e-3a complete; next is 7e-3b.** Phases 1–6 and 7a, 7b, 7d are
+tagged validated; 7c is tagged `phase7c-skipped`; 7e-1, 7e-2 and 7e-3a are
+tagged `phase7e1-calibrated`, `phase7e2-headroom` and `phase7e3a-context`.
 
 Phase 7 answered its headline question in the negative, twice over. A
 context-blind bandit beats the heuristic on profit (+10.3%) while leaving
@@ -130,6 +130,17 @@ acquisition, not extraction: every schedule that ever charges above the
 standing price loses, and so does every cycle. Both arms of gate 3 are
 licensed, and 7e-3 runs the contextual bandit and the Q-network.
 
+**Gate 3a returned a null, and 7c's finding survived the mechanism change.**
+Conditioning on the loyalty state is worth −2.3%, CI [−3.0%, −1.5%] at 300
+seeds — equivalent, and slightly costly rather than merely useless. An oracle
+diagnostic run alongside it says why: over 460 seller-weeks split at the
+median loyalty state, the profit-maximizing arm is the same on both sides. A
+seller with a loyal base and one without want the same price, even here. And
+it connects back to 7e-2 — no *one-week* deviation pays at any state, but a
+*sixteen-week* one pays 2.6%, so the exploitable structure is a sustained
+commitment rather than a weekly state-contingent choice, and a contextual
+bandit is the wrong instrument for it by construction.
+
 Full specification: see `docs/phase_specifications.md`.
 
 ## Full phase list (summary)
@@ -143,7 +154,7 @@ Full specification: see `docs/phase_specifications.md`.
 | 5 | Nonlinear Behavior | Do nonlinear/interaction effects change conclusions vs. linear baseline? | Infrastructure only |
 | 6 | Repeated Interaction | Does history/memory change future behavior? ("weeks" become real here) | Infrastructure only — **web viz introduced** |
 | 7 (a, b, d) | Seller Learning | Does stateful policy learning produce market structures that myopic bandit optimization cannot? **No, in the base environment.** 7b beats the heuristic on profit but moves no class share; 7d's multi-week horizon adds nothing (equivalent). **7c skipped**: the profit-maximizing price is invariant to observable market state. | Infrastructure only |
-| 7e | Mechanism Sufficiency | Under what market structure does each level of policy complexity become *necessary*? A separate environment with persistent, price-sensitive, bounded loyalty, run as three gates: state exists → intertemporal trade-off exists → complexity pays. **Gates 1 and 2 passed** — memory reaches 2.8× further than the counter's at lag 8 with lock-in strength held equal, and a discount-then-stop schedule beats the best standing price by +2.6% while the delta = 0 control loses. | Infrastructure only — gives context conditioning and stateful learning an existence condition |
+| 7e | Mechanism Sufficiency | Under what market structure does each level of policy complexity become *necessary*? A separate environment with persistent, price-sensitive, bounded loyalty, run as three gates: state exists → intertemporal trade-off exists → complexity pays. **Gates 1 and 2 passed** — memory reaches 2.8× further than the counter's at lag 8 with lock-in strength held equal, and a discount-then-stop schedule beats the best standing price by +2.6% while the delta = 0 control loses. **Gate 3a null** — conditioning on the state is worth −2.3% (equivalent), and an oracle says the best arm is the same at every state. | Infrastructure only — gives context conditioning and stateful learning an existence condition |
 | 8 | Endogenous Market Structure | Does repeated local interaction produce macro-level structure? | Infrastructure only — **web viz: entry/exit panels** |
 | 9a | Learned Buyer Policy | How does a buyer policy trained to maximize realized surplus differ from the hand-written rule, and how far from optimal was that rule? | Infrastructure only — closes the buyer-side learning ladder |
 | 9b | Synthetic Agent Users | What does an LLM Agent add over a *trained* buyer policy? | First scaffolding for A — **web viz: Agent Inspector; cost/speed KPI begins** |
