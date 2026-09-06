@@ -39,7 +39,7 @@ RESULTS_ROOT = REPO_ROOT / "results" / "phase9b"
 LOG_PATH = REPO_ROOT / "experiment_log.csv"
 
 BASE = PHASE6_MAIN
-TEMPERATURES = (2.0, 1.0, 0.5, 0.25, 0.1)
+TEMPERATURES = (2.0, 1.0, 0.5, 0.25, 0.1, 0.05, 0.02, 0.01)
 TRAIN_SEEDS = tuple(range(1000, 1060))
 HELD_OUT_SEEDS = tuple(range(200, 224))
 EVAL_SEEDS = tuple(range(30))

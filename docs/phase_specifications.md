@@ -2572,6 +2572,40 @@ now trained up its own capacity ladder and the **smallest student that clears
 the gate** is the one deployed, so every point on the curve is a fair student
 measured against its own regime's floor.
 
+### 9b extended — the deterministic limit
+
+**Registered before running.** The sweep as first run stopped at `tau` = 0.1,
+where amplification reached 1.67× and behavioural divergence 2.49 pp — still
+inside the ±5 pp margin. That leaves the phase's central question open: the
+response curve is established but **the transition to material divergence, if
+there is one, is outside the range measured.**
+
+The sweep is therefore extended to `tau` ∈ {0.05, 0.02, 0.01}, approaching a
+step function at `utility = offset`. This is not a new mechanism and not a new
+phase — it is the same experiment over more of its own axis, and the reason to
+run it is that **a near-deterministic policy is the regime an LLM agent
+occupies**, which is what Phase 9d would otherwise be the first to test.
+
+Two things are expected to behave differently at the limit and are stated now
+rather than explained afterwards:
+
+- **`R` diverges.** The student's error stays finite while the teacher's own
+  noise goes to zero, so the ratio grows without bound. `R` therefore stops
+  being a useful ordinate near the limit; **entropy remains the axis** and `R`
+  is reported as a derived quantity.
+- **The floor rises sharply.** Which side of the step a buyer falls on is
+  decided by the hidden preference draw, so an observation set that excludes it
+  cannot predict a near-deterministic teacher at all. A rising floor is the
+  observation set failing, not the student, and Gate 9a's floor-relative
+  criterion is what keeps the two apart.
+
+**What the extension can conclude.** If behavioural divergence crosses ±5 pp,
+the phase transition exists and its location is measured. If it does not even
+at `tau` = 0.01, the finding is stronger and narrower than "imitation error
+compounds": **in this market, one-step imitation error never becomes materially
+visible at the trajectory level, at any teacher entropy.** Either is reported;
+neither is chased.
+
 **Exit condition:** `git tag phase9b-entropy`.
 
 ---
