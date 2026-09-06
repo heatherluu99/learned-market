@@ -1424,6 +1424,62 @@ every learner in it.
 
 **Exit condition:** `git tag phase7e3a-context`.
 
+### Phase 7e-3b — Does the horizon pay? (the arm gate 2 licensed)
+
+**Question:** 7e-2 established that a sustained investment schedule beats the
+best standing price by 2.6%, and that the same path with the investment channel
+off loses money. The schedule was found by hand, from a search of 36. **Can a
+learner find it?**
+
+That is a sharper test than 7d's. At 7d the question was whether an
+intertemporal trade-off existed at all, and the answer was that it did not; a
+null there was consistent with "there was nothing to find". Here the thing to
+find is known to exist, is known to be worth 2.6%, and is known to be
+expressible in the policy's own state — `season_fraction` alone is enough to
+encode "discount early, stop later". A null here is therefore a statement about
+**learning**, not about the market.
+
+**Environment:** identical to 7e-3a — the cell carried from 7e-2, standing price
+2.65, arms at ±20%, one seller learning against an otherwise flat market.
+
+**Method:** the Phase 7d Q-network, on a ten-week discounted return
+(`gamma` = 0.9), with the loyalty stock added to its four self-observed
+features. Trained on **seeds 1000–1119**, disjoint from both the 2000–2059
+tuning block and the 0–299 evaluation block. 7d's module is reused rather than
+rewritten, parameterized so 7d itself still trains on exactly the four features
+it was validated with.
+
+**Gate 3b passes** if the Q-network beats the better bandit by a **material**
+margin under the standard ±5% relative test, on the evaluation seeds. As since
+Phase 5, what is graded is that the comparison reaches a verdict. The 30-seed
+block is used first and the same escalation as 7e-3a applies, once, if the
+interval straddles the boundary.
+
+**The reference ladder is what makes the result legible**, and every rung is
+already measured:
+
+| | profit/week | found by |
+|---|---|---|
+| 7e-2's schedule | 44.32 | a hand search of 36 |
+| flat at the oracle price | 43.36 | exhaustive sweep, hindsight |
+| LinUCB, context-blind | 40.64 | learned online, 66 weeks |
+| UCB1 | 37.49 | learned online, 66 weeks |
+
+Two of those are unattainable by a learner and bound the comparison rather than
+entering it. The one that matters is the schedule: it is attainable, it is
+inside the policy class, and a Q-network that does not reach it has failed at
+something possible.
+
+**Stopping rule, and this is where it binds.** If gate 3b returns anything but
+a material gain, the finding is recorded as it stands: *in a market built to
+contain an intertemporal trade-off, with the trade-off measured and its value
+known, a multi-week learner did not recover it.* The mechanism parameters are
+not tuned, the arms are not widened, the network is not enlarged, and the
+training block is not extended until it wins. This is the rule adopted at the
+7e design gate, and it binds here because this is the last gate.
+
+**Exit condition:** `git tag phase7e3b-horizon`.
+
 ---
 
 ## Phase 8 — Endogenous Market Structure
