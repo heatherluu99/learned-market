@@ -2599,6 +2599,12 @@ rather than explained afterwards:
   observation set failing, not the student, and Gate 9a's floor-relative
   criterion is what keeps the two apart.
 
+**The deployment block is 120 seeds, not 30.** At `tau` = 0.05 the first run
+returned two *inconclusive* share comparisons — Middle's split between tiers, at
+±3.66 pp with intervals straddling the ±5 pp boundary. That is a failure to
+measure, and the registered response since 7e-3a is more seeds and never a
+softer threshold, applied to every regime so they stay comparable.
+
 **What the extension can conclude.** If behavioural divergence crosses ±5 pp,
 the phase transition exists and its location is measured. If it does not even
 at `tau` = 0.01, the finding is stronger and narrower than "imitation error

@@ -42,7 +42,12 @@ BASE = PHASE6_MAIN
 TEMPERATURES = (2.0, 1.0, 0.5, 0.25, 0.1, 0.05, 0.02, 0.01)
 TRAIN_SEEDS = tuple(range(1000, 1060))
 HELD_OUT_SEEDS = tuple(range(200, 224))
-EVAL_SEEDS = tuple(range(30))
+#: Widened from 30 after the tau = 0.05 regime returned two *inconclusive*
+#: share comparisons - intervals straddling the materiality boundary, which is
+#: a failure to measure rather than a finding. The registered response, applied
+#: at 7e-3a and Phase 8, is more seeds and never a softer threshold, and it is
+#: applied to every regime so the eight stay comparable.
+EVAL_SEEDS = tuple(range(120))
 CALIBRATION_SEEDS = tuple(range(300, 306))
 #: Tried in order, per regime, and the smallest student that clears Gate 9a is
 #: the one deployed. Holding the architecture fixed across regimes would
