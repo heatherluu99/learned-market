@@ -535,6 +535,14 @@ def run_season(cfg: MarketConfig, seed: int, policy=None) -> SeasonResult:
                 loyal = int(((last_seller == si) & (streak >= 2)).sum())
                 chosen_arm[si] = int(policy(si, {
                     "loyal_fraction": loyal / n_buyers,
+                    # Phase 7e: the mechanism's own state, as the mean bonus
+                    # this seller's buyers hold toward it, normalized to [0, 1).
+                    # Appended rather than replacing loyal_fraction so 7d's
+                    # feature list still reads the same four names.
+                    "loyalty_stock": (
+                        float(np.tanh(loyalty_stock[:, si] / cfg.loyalty_saturation).mean())
+                        if loyalty_stock is not None else 0.0
+                    ),
                     "last_arm": int(chosen_arm[si]),
                     "last_profit": float(previous_profit[si]) if previous_profit is not None else 0.0,
                     "season_fraction": _week / max(cfg.weeks - 1, 1),

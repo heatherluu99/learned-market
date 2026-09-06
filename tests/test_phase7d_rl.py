@@ -37,7 +37,14 @@ def test_policy_rule_requires_a_policy():
 
 
 def test_the_policy_sees_only_the_sellers_own_state():
-    """Phase 7c found no external state worth conditioning on, so none is given."""
+    """Phase 7c found no external state worth conditioning on, so none is given.
+
+    `loyalty_stock` was added for Phase 7e and does not weaken the claim: it is
+    how much loyalty this seller's own buyers hold *toward it*, which is as
+    private to a seller as its own last price. What must never appear here is a
+    rival's price, a rival's sales, or any market aggregate - a policy given
+    those would be solving a different problem from the one 7c ruled out.
+    """
     seen = []
 
     def spy(seller_id, state):
@@ -47,8 +54,16 @@ def test_the_policy_sees_only_the_sellers_own_state():
     run_season(PHASE7D, 0, policy=spy)
     assert seen
     for keys in seen:
-        assert keys == {"loyal_fraction", "last_arm", "last_profit",
-                        "season_fraction", "n_arms"}
+        assert keys == {"loyal_fraction", "loyalty_stock", "last_arm",
+                        "last_profit", "season_fraction", "n_arms"}
+
+
+def test_the_stock_context_is_zero_when_there_is_no_stock():
+    """Under the counter mechanism the new feature must carry no information."""
+    seen = []
+    run_season(PHASE7D, 0, policy=lambda s, st: (seen.append(st["loyalty_stock"]), 0)[1])
+    assert not PHASE7D.has_loyalty_stock
+    assert set(seen) == {0.0}
 
 
 def test_a_constant_policy_pins_the_price_to_its_arm():

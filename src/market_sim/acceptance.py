@@ -1211,3 +1211,44 @@ def evaluate_phase7e2(
             "maximum over ~170 comparisons is significant by construction.",
         ),
     ]
+
+
+def evaluate_phase7e3a(
+    context: np.ndarray, blind: np.ndarray, ucb: np.ndarray, flat: np.ndarray
+) -> list[CriterionResult]:
+    """Gate 3a: the contextual policy against the identical policy without it.
+
+    The control is the same algorithm with the context removed, not UCB1 -
+    comparing across algorithms confounds context with exploration mechanics,
+    which a first measurement of this gate did by +11.7%. UCB1 and flat pricing
+    are reported alongside as reference points, ungraded.
+    """
+    gain, lo, hi = mean_difference_ci(context, blind)
+    scale = float(blind.mean())
+    verdict = equivalence_verdict(
+        lo / scale, hi / scale, MATERIALITY_PROFIT_PCT
+    )
+    return [
+        CriterionResult(
+            name="gate 3a: the context comparison reaches a verdict",
+            passed=verdict != "inconclusive",
+            measured=f"{scale:.2f} -> {context.mean():.2f} per week, "
+            f"{gain / scale:+.1%}, 95% CI [{lo / scale:+.1%}, {hi / scale:+.1%}] "
+            f"-> {verdict}",
+            threshold=f"CI wholly inside or wholly outside ±{MATERIALITY_PROFIT_PCT:g}%",
+            note="As since Phase 5, what is graded is that a verdict is reached. "
+            "An equivalent verdict says context does not pay and is a finding.",
+        ),
+        CriterionResult(
+            name="reference: learners against the price they are hunting",
+            passed=True,
+            graded=False,
+            measured=f"flat at the oracle price {flat.mean():.2f}, UCB1 "
+            f"{ucb.mean():.2f}, blind {blind.mean():.2f}, context "
+            f"{context.mean():.2f} per week",
+            threshold="reported, not graded",
+            note="Flat pricing at the oracle optimum is not attainable by a "
+            "learner - it is measured by exhaustive sweep with hindsight - so it "
+            "bounds the comparison rather than entering it.",
+        ),
+    ]
