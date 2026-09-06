@@ -1819,7 +1819,7 @@ Extends the Phase 6 page (same underlying artifact, not a rebuild). Adds:
 
 The problem is sharper than "we skipped a rung". **No buyer parameter in Phases 1–8 was ever fitted to anything.** `intercept` 1.0, `budget_coef` 0.05, `preference_coef` 1.5, α 0.85/0.5/0.2, the loyalty bonus 0.5 and its cap of 3 — every one is hand-chosen, several of them chosen during this project's own design review gates. So the Phase 9 control group is not "an interpretable model" but *an unfitted model*, and an LLM beating it would establish only that an LLM outperforms a set of numbers someone picked. That is not a finding.
 
-**Research question:** Can a learned policy recover and generalize the behaviour of the rule-based buyer it replaces — and, separately, how far from optimal was that rule once a surplus measure exists to score it against? These are two questions with two arms, and the section below pins why they must not be reported as one.
+**Research question:** Can a learned policy recover the conditional behaviour of the rule-based buyer it replaces, and does that one-step fidelity survive endogenous distribution shift when the learned policy is deployed in closed loop? Separately and with its own arm: how far from optimal was that rule, once a surplus measure exists to score it against? Two questions, two arms, and the sections below pin why they must not be reported as one.
 
 ### What the teacher is, and what that lets 9a claim
 
@@ -1850,43 +1850,127 @@ optimizes realized `WTP − price` rather than imitating the teacher, which is
 why it can be *better* than its teacher rather than merely close to it. The two
 arms answer two questions and must not be reported as one.
 
-### Staging: offline fidelity before closed-loop deployment
+### The teacher is stochastic, so this is policy-distribution matching
 
-The phase runs in three stages, in this order, and the second gates the third:
+Pinned before the gate, because it decides whether every number 9a produces
+means anything. The hand-coded buyer is **not** a function from state to
+action. It is a Bernoulli policy:
 
 ```
-offline fit  ->  held-out behavioural fidelity  ->  closed-loop deployment
+p(s) = sigmoid(utility(s) - offset)      pi_teacher(a = buy | s) = p(s)
 ```
 
-**Stage 1 — offline.** Fit `pi_theta(a | s)` on trajectories from the rule-based
-buyer and score it on **held-out states the fit never saw**: does it reproduce
-the rule's action?
+and the action recorded in a trajectory is a *draw* from it. Fitting `(s, a)`
+pairs and scoring with classification accuracy would therefore be measuring
+the wrong thing, and measuring it in a direction that actively rewards the
+wrong policy. Over 14,160 decisions from the standing configuration:
 
-**Stage 2 — the gate.** Only a policy that reproduces the rule offline is put
-back into the market. A model that cannot match its teacher on the teacher's own
-state distribution has nothing to say about what happens when it changes that
+| | value |
+|---|---|
+| mean purchase probability | **0.409** |
+| decisions with `p` in [0.2, 0.8] | **99.6%** |
+| teacher's mean binary entropy | **0.938 bits** of 1.0 |
+| **accuracy ceiling of *any* deterministic policy** | **0.619** |
+| accuracy of a policy that recovers `p` exactly and samples | **0.541** |
+
+Three things follow, and each is a trap this phase would otherwise walk into.
+
+1. **A "62% accurate" classifier is perfect.** The ceiling is
+   `E[max(p, 1-p)] = 0.619`, not 1.0, because the teacher itself is undecided
+   on almost every decision. Any accuracy figure reported in this phase must be
+   read against that ceiling, and it is reported alongside every time.
+2. **Accuracy ranks the wrong policy first.** A policy that recovers `p`
+   exactly and samples from it scores **0.541** — *below* the deterministic
+   argmax policy's 0.619 — while being the only one that reproduces the
+   teacher's behaviour. Optimizing accuracy therefore pushes the fit toward a
+   deterministic policy that is wrong in exactly the way that matters.
+3. **The aggregate consequence is large, not marginal.** The argmax policy
+   buys on 23.8% of decisions against the teacher's 40.9% — **17.1 percentage
+   points** — so a market run on it would have a different participation rate,
+   a different revenue level, a different loyalty distribution, and a different
+   entry/exit trajectory in Phase 8's mechanism. The "more accurate" policy
+   produces a visibly different market.
+
+So 9a's offline objective and its offline metrics are **distributional**:
+fit with a proper scoring rule (log-loss or Brier, both minimized by the true
+`p` and neither by argmax), and score with calibration against `p_teacher(s)`
+rather than with agreement against a sampled action. **At deployment the
+learned policy samples; it does not take an argmax.** A student in a different
+policy class from its teacher is not being compared to it.
+
+**One consequence of this project's existing draw discipline is worth stating,
+because it makes the right metric the natural one.** The engine draws
+`purchase_draw[b, s]` once per encounter, and the learned policy is compared
+against that *same* draw. Teacher and student then differ on an encounter
+exactly when the shared uniform `u` falls between their two probabilities, so
+
+```
+P(actions differ) = |p_teacher(s) - p_theta(s)|
+one-step agreement = 1 - E|p_teacher - p_theta|
+```
+
+Under common random numbers, one-step agreement **is** a policy-distribution
+distance — mean absolute probability error — rather than an accuracy. The
+measurement design converts the naive metric into a proper one, and this is
+the reason to keep the shared draw rather than giving the student its own
+stream.
+
+### Staging: four measurements, with a gate between the second and the third
+
+```
+offline conditional-policy fidelity
+  -> held-out calibration / generalization
+  -> [GATE]
+  -> closed-loop trajectory fidelity
+  -> state-distribution drift
+```
+
+**1 — Offline conditional-policy fidelity.** Does `pi_theta(. | s)` match
+`pi_teacher(. | s)` on the teacher's own state distribution? Scored on
+calibration and mean absolute probability error, never on bare accuracy.
+
+**2 — Held-out calibration and generalization.** The same, on states the fit
+never saw. Calibration is what has to generalize; a model can be sharp and
+miscalibrated, and a miscalibrated policy is a differently-behaving one.
+
+**3 — The gate.** Only a policy that is calibrated on held-out states is
+deployed. A model that cannot match its teacher on the teacher's own state
+distribution has nothing to say about what happens when it changes that
 distribution.
 
-**Stage 3 — closed loop, and the quantity worth measuring.** Offline accuracy
-does not transfer, and the reason is a feedback loop rather than noise:
+**4 — Closed-loop trajectory fidelity.** Deployed inside the market, does it
+reproduce the trajectory — participation, class-to-tier shares, pair
+stability, and under Phase 8's mechanism the entry/exit path?
+
+**5 — State-distribution drift.** How far does the state distribution the
+policy faces in closed loop move from the one it was fitted on? This is the
+mechanism behind any degradation between stage 2 and stage 4, and measuring it
+separates "the policy is worse" from "the policy is being asked a different
+question".
+
+**Research question, in full:**
+
+> Can a learned policy recover the conditional behaviour of the rule-based
+> buyer it replaces, and does that one-step fidelity survive endogenous
+> distribution shift when the learned policy is deployed in closed loop?
+
+The gap between stages 2 and 4 is the phase's headline quantity, and the claim
+it tests is:
+
+> **A model can imitate decisions offline without reproducing behaviour
+> dynamically.**
 
 ```
 small policy error -> different action -> different trajectory
                    -> states the fit never saw -> larger policy error
 ```
 
-A policy that is 95% accurate offline does not make 5% fewer good decisions in
-the market; it makes 5% different decisions, which move the state distribution
-it then faces out of the distribution it was fitted on, where its error is no
-longer 5%. **The headline measurement of 9a is therefore the gap between
-offline held-out accuracy and closed-loop trajectory fidelity**, together with
-how far the closed-loop state distribution drifts from the offline one. This is
-one of the central problems in synthetic-user and generative-agent work, it is
-measurable here exactly because the teacher is available for comparison at every
-step, and it would be invisible if the loop were closed immediately.
-
-Concrete metrics, thresholds and the arm design are set at Phase 9a's own design
-review gate, not here.
+A policy 95% faithful offline does not make 5% fewer good decisions in the
+market; it makes 5% *different* ones, which move the state distribution it then
+faces out of the distribution it was fitted on, where its error is no longer
+5%. This is measurable here precisely because the teacher remains available for
+comparison at every step, and it would be invisible if the loop were closed
+immediately.
 
 ### The reward problem, and why a new primitive is needed
 
