@@ -2079,7 +2079,84 @@ willingness_to_pay[b, s] = wtp_base[class] + wtp_spread[class] * preference[b, s
 
 The hand-written rule continues to see only `preference` — its proxy for value. The learned policy is evaluated on surplus — the value itself. Both act in one market, on identical seeds and identical draws, exactly as every paired comparison in Phases 1–6 has done.
 
-`wtp_base` and `wtp_spread` are set at this phase's own design review gate, not here, and must be checked against the existing prices (2 and 6) and budgets (3, 7, 10) so that buying is neither always nor never worthwhile.
+**Two primitives, not one premium, and the WTP model belongs to the surplus arm
+alone.**
+
+`wtp_base` and `wtp_spread` are the buyer-side heterogeneity above. Whether a
+premium stall is *worth* its premium requires something Phases 1–8 never had,
+and it must be written as **two** things rather than one:
+
+```
+WTP[i,j] = b_c(i) + s_c(i) * preference[i,j] + beta_c(i) * q_j
+```
+
+- `q_j` — a **seller/product quality attribute**. `q = 0` for Slow, `q = 1`
+  for Shigh.
+- `beta_c` — a **buyer class's monetary valuation of one unit of quality**.
+
+Collapsing these into a single "premium for the premium tier" would state the
+model as *"to make Rich prefer Shigh, give Rich +3.5"*, which is outcome
+encoding wearing a parameter's clothes. Split, it states that **Rich values the
+same observable quality increment more highly than Middle does** — a different
+and falsifiable claim about the population, not about the desired result.
+
+**This is a new economic counterfactual, not a fix to the earlier model.** The
+tier difference in Phases 1–8 is a *behavioural and affordability* structure —
+a price gap of 4 against a budget wall at 3.0 — and not a *price–quality*
+structure. To study a surplus-maximizing buyer at all, whether products are
+quality-differentiated has to be stated explicitly, because "buy the cheapest
+affordable stall you like" is the correct answer when they are not. Phase 9a
+therefore compares two specifications rather than adopting one:
+
+| specification | WTP mechanism | what it asks |
+|---|---|---|
+| **price-only surplus** | `b_c + s_c * pref` (`q_j = 0` for all `j`) | with no quality difference, is the premium tier simply dominated on price? |
+| **quality-adjusted surplus** | `b_c + s_c * pref + beta_c * q_j` | with an explicit quality difference, does welfare-optimal behaviour produce different tier matching? |
+
+**And the WTP specification does not touch the distillation arm.** The teacher
+is the hand-written buyer, whose policy is `p_T(s) = sigmoid(U(s) - offset)`
+and which never consults WTP. Behavioural cloning fits `pi_T(a | s)`, so
+changing `q_j` or `beta_c` changes nothing it learns. Any claim of the form
+"the quality premium changed distillation fidelity by X" would be false unless
+WTP were also fed into the teacher's own policy — which would redefine the
+environment and change the research question. **The two specifications are a
+counterfactual within the surplus arm only.**
+
+### Calibrating `beta_c`: mechanism, then admissible region, then a parameter
+
+Choosing `beta_M = 2.0` because it makes Middle prefer value is picking a
+parameter to obtain a wanted outcome. The order is inverted instead:
+**constraints are written first, the admissible region is found without
+reference to what a surplus policy would do with it, and a canonical point is
+taken from that region.**
+
+Admissibility constraints, each a property of the WTP specification itself:
+
+1. no affordable class × tier cell is effectively deterministic —
+   `0.02 < P(WTP > price) < 0.98`
+2. Middle values premium quality positively — `beta_M > 0`
+3. Rich values the same increment more highly — `beta_R > beta_M`
+4. quality does not swamp seller-specific preference — `beta_c <= s_c`
+5. the premium tier is not a dominant choice for Middle
+
+`beta_Poor` is **unidentified rather than estimated**: Poor cannot afford the
+premium tier at any value of it, so no constraint bears on it. Fixed at 0 and
+labelled as such.
+
+Swept over `beta_M ∈ [0, 3.0] × beta_R ∈ [0, 5.0]` at 0.1, **300 of 1,581 grid
+points are admissible**, giving `beta_M ∈ [1.6, 3.0]` and
+`beta_R ∈ [1.7, 4.3]`. Constraints 4 and 5 are satisfied everywhere on the grid
+and do no work; the region is set by constraint 1 (42% of the grid) and
+constraint 3 (69%). The canonical point is the region's **centroid rounded to
+the nearest half — `beta_M = 2.0`, `beta_R = 3.5`**.
+
+Those are the same two numbers an earlier hand-picked candidate used, which is
+worth stating plainly rather than presenting as confirmation: the constraints
+were written from the design review's own list and the agreement is after the
+fact. What changed is that they are now derived from stated admissibility
+conditions and reproducible from
+`experiments/phase9a/measure_teacher.py`, rather than chosen because of the
+behaviour they produce.
 
 **A consequence worth stating: this makes the hand-written rule falsifiable.** With a surplus measure defined, "how much surplus does the hand-written rule leave on the table relative to a policy that optimizes it?" becomes an answerable question, and its answer is a result in its own right — the first time in this project that the rule-based model can be scored against anything other than itself.
 

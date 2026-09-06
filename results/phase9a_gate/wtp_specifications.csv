@@ -1,0 +1,13 @@
+specification,buyer_class,seller_tier,beta,quality,wtp_min,wtp_max,p_worth_buying,affordable,degenerate,prefers_premium
+price-only surplus,Poor,Slow,0.0,0.0,1.0000013735289346,2.999993533442498,0.49826,True,False,
+price-only surplus,Poor,Shigh,0.0,1.0,1.0000013735289346,2.999993533442498,0.0,False,False,
+price-only surplus,Middle,Slow,0.0,0.0,1.5000020602934019,4.499990300163747,0.832275,True,False,
+price-only surplus,Middle,Shigh,0.0,1.0,1.5000020602934019,4.499990300163747,0.0,True,True,0.0
+price-only surplus,Rich,Slow,0.0,0.0,1.5000034338223365,6.499983833606245,0.89923,True,False,
+price-only surplus,Rich,Shigh,0.0,1.0,1.5000034338223365,6.499983833606245,0.09871,True,False,0.01502
+quality-adjusted surplus,Poor,Slow,0.0,0.0,1.0000013735289346,2.999993533442498,0.49826,True,False,
+quality-adjusted surplus,Poor,Shigh,0.0,1.0,1.0000013735289346,2.999993533442498,0.0,False,False,
+quality-adjusted surplus,Middle,Slow,2.0,0.0,1.5000020602934019,4.499990300163747,0.832275,True,False,
+quality-adjusted surplus,Middle,Shigh,2.0,1.0,3.5000020602934017,6.499990300163747,0.16469,True,False,0.041105
+quality-adjusted surplus,Rich,Slow,3.5,0.0,1.5000034338223365,6.499983833606245,0.89923,True,False,
+quality-adjusted surplus,Rich,Shigh,3.5,1.0,5.000003433822337,9.999983833606244,0.799785,True,False,0.40059

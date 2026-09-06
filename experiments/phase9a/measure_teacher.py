@@ -40,28 +40,43 @@ SEEDS = tuple(range(6))
 #: bracket every state the teacher can be in on that axis.
 STREAKS = (0, 3)
 
-#: Candidate WTP parameterizations for the design review. A depends on the
-#: buyer only, which is what the spec currently writes; B adds a class-specific
-#: quality premium for the premium tier, which is a new primitive.
-CANDIDATES = {
-    "A: buyer class only": {
-        "base": {"Poor": 1.0, "Middle": 1.5, "Rich": 1.5},
-        "spread": {"Poor": 2.0, "Middle": 3.0, "Rich": 5.0},
-        "premium": {"Poor": 0.0, "Middle": 0.0, "Rich": 0.0},
-    },
-    "B: plus a quality premium": {
-        "base": {"Poor": 1.0, "Middle": 1.5, "Rich": 1.5},
-        "spread": {"Poor": 2.0, "Middle": 3.0, "Rich": 5.0},
-        "premium": {"Poor": 0.0, "Middle": 2.0, "Rich": 3.5},
-    },
-}
+#: The economic utility model, as two separate primitives rather than one
+#: hand-tuned premium:
+#:
+#:     WTP[i,j] = b_c + s_c * preference[i,j] + beta_c * q_j
+#:
+#: `q_j` is a seller/product quality attribute and `beta_c` is a buyer class's
+#: monetary valuation of one unit of it. Collapsing them into a single
+#: "premium for the premium tier" would say "to make Rich prefer Shigh, give
+#: Rich +3.5", which is outcome encoding. Split, it says Rich values the same
+#: observable quality increment more highly - a different claim.
+QUALITY = {"Slow": 0.0, "Shigh": 1.0}
+#: Buyer-side WTP heterogeneity, unchanged from the spec.
+WTP_BASE = {"Poor": 1.0, "Middle": 1.5, "Rich": 1.5}
+WTP_SPREAD = {"Poor": 2.0, "Middle": 3.0, "Rich": 5.0}
+#: Poor cannot afford the premium tier at any beta, so its valuation is
+#: unidentified rather than measured. Fixed at zero and labelled as such.
+BETA_POOR = 0.0
+
+#: Admissible-region constraints, written before any parameter is chosen and
+#: evaluated without reference to what a trained surplus policy would do. Each
+#: is a property of the WTP specification itself.
+#:   1. no affordable class x tier cell is effectively deterministic
+#:   2. Middle values premium quality positively
+#:   3. Rich values the same quality increment more highly than Middle
+#:   4. quality does not swamp seller-specific preference: beta_c <= s_c
+#:   5. the premium tier is not a dominant choice for Middle
+DETERMINISTIC_MARGIN = 0.02
+MIDDLE_DOMINANCE_CAP = 0.50
+
+#: The standing configuration the specification has to be admissible against.
 PRICES = {"Slow": 2.0, "Shigh": 6.0}
 BUDGETS = {"Poor": 3.0, "Middle": 7.0, "Rich": 10.0}
 
 RESEARCH_QUESTION = (
-    "What does the hand-coded buyer's policy distribution look like, and does a "
-    "candidate WTP parameterization leave buying neither always nor never "
-    "worthwhile?"
+    "What does the hand-coded buyer's policy distribution look like, and which "
+    "quality-valuation parameters satisfy the WTP specification's admissibility "
+    "constraints?"
 )
 
 
@@ -125,34 +140,67 @@ def summarize(frame: pd.DataFrame, by) -> pd.DataFrame:
     return frame.groupby(by, dropna=False).apply(stats, include_groups=False).reset_index()
 
 
-def wtp_sanity(name: str, params: dict, draws: int = 200_000) -> pd.DataFrame:
-    """Is buying ever, and not always, worthwhile - per class and tier?"""
-    pref = np.random.default_rng(0).random(draws)
+def wtp_cells(betas: dict, pref: np.ndarray) -> pd.DataFrame:
+    """Per class x tier: is buying ever, and not always, worthwhile?"""
     rows = []
     for cls in ("Poor", "Middle", "Rich"):
         surplus = {}
         for tier, price in PRICES.items():
-            wtp = (params["base"][cls] + params["spread"][cls] * pref
-                   + params["premium"][cls] * (tier == "Shigh"))
+            wtp = (WTP_BASE[cls] + WTP_SPREAD[cls] * pref
+                   + betas[cls] * QUALITY[tier])
             surplus[tier] = wtp - price
             affordable = price <= BUDGETS[cls]
+            share = float(np.mean(wtp > price))
             rows.append({
-                "candidate": name, "buyer_class": cls, "seller_tier": tier,
-                "wtp_min": wtp.min(), "wtp_max": wtp.max(),
-                "p_worth_buying": float(np.mean(wtp > price)),
-                "affordable": affordable,
-                # Degenerate either way round: a cell that is never worth
-                # buying carries no decision, and one that is always worth
-                # buying carries no trade-off.
-                "degenerate": affordable and (
-                    np.mean(wtp > price) < 0.01 or np.mean(wtp > price) > 0.99
-                ),
+                "buyer_class": cls, "seller_tier": tier,
+                "beta": betas[cls], "quality": QUALITY[tier],
+                "wtp_min": float(wtp.min()), "wtp_max": float(wtp.max()),
+                "p_worth_buying": share, "affordable": affordable,
+                # Degenerate either way round: a cell never worth buying
+                # carries no decision, one always worth buying no trade-off.
+                "degenerate": bool(affordable and not (
+                    DETERMINISTIC_MARGIN < share < 1 - DETERMINISTIC_MARGIN
+                )),
+                "prefers_premium": np.nan,
             })
         if PRICES["Shigh"] <= BUDGETS[cls]:
             # Independent draws, as the engine gives each (buyer, seller) pair
             # its own preference.
             a, b = surplus["Slow"], surplus["Shigh"][::-1]
             rows[-1]["prefers_premium"] = float(np.mean((b > a) & (b > 0)))
+    return pd.DataFrame(rows)
+
+
+def admissible_region(pref: np.ndarray, step: float = 0.1) -> pd.DataFrame:
+    """Every (beta_Middle, beta_Rich) satisfying the constraints above.
+
+    Mechanism, then admissible region, then a parameter - in that order. The
+    constraints are properties of the WTP specification and are evaluated
+    without reference to what a surplus-maximizing policy would do with them,
+    so the chosen point is calibrated rather than reverse-engineered from a
+    wanted outcome.
+    """
+    rows = []
+    for bm in np.round(np.arange(0.0, WTP_SPREAD["Middle"] + 1e-9, step), 2):
+        for br in np.round(np.arange(0.0, WTP_SPREAD["Rich"] + 1e-9, step), 2):
+            betas = {"Poor": BETA_POOR, "Middle": float(bm), "Rich": float(br)}
+            cells = wtp_cells(betas, pref)
+            middle_premium = float(
+                cells[(cells.buyer_class == "Middle")
+                      & (cells.seller_tier == "Shigh")]["prefers_premium"].iloc[0]
+            )
+            checks = {
+                "no_degenerate_cell": not cells["degenerate"].any(),
+                "middle_values_quality": bm > 0,
+                "rich_values_it_more": br > bm,
+                "quality_below_preference": (
+                    bm <= WTP_SPREAD["Middle"] and br <= WTP_SPREAD["Rich"]
+                ),
+                "premium_not_dominant_for_middle": middle_premium < MIDDLE_DOMINANCE_CAP,
+            }
+            rows.append({"beta_middle": float(bm), "beta_rich": float(br),
+                         "middle_prefers_premium": middle_premium,
+                         **checks, "admissible": all(checks.values())})
     return pd.DataFrame(rows)
 
 
@@ -191,27 +239,68 @@ def main() -> int:
           "against a\n  sampled action. Under the shared purchase_draw a student "
           "that recovers p\n  exactly agrees 100%. The two must not be compared.")
 
-    sanity = pd.concat([wtp_sanity(n, p_) for n, p_ in CANDIDATES.items()])
-    print("\n  WTP candidates — is buying ever, and not always, worthwhile?")
-    for name in CANDIDATES:
-        sub = sanity[sanity["candidate"] == name]
-        bad = sub[sub["degenerate"]]
-        print(f"\n    {name}")
-        for _, r in sub.iterrows():
-            note = ""
-            if not r["affordable"]:
-                note = "unaffordable"
-            elif r["degenerate"]:
-                note = "DEGENERATE"
-            elif not np.isnan(r.get("prefers_premium", np.nan)):
-                note = f"prefers premium {r['prefers_premium']:.1%}"
+    pref = np.random.default_rng(0).random(200_000)
+    region = admissible_region(pref)
+    ok = region[region["admissible"]]
+
+    print("\n  WTP specification — mechanism, then admissible region, then a "
+          "parameter.")
+    print("    WTP[i,j] = b_c + s_c * preference[i,j] + beta_c * q_j")
+    print(f"    q = {QUALITY}, beta_Poor = {BETA_POOR} (unidentified: Poor "
+          f"cannot afford the premium tier)")
+    print("\n    Constraints, all properties of the specification and none of "
+          "them\n    referring to what a surplus policy would do:")
+    for name in ("no_degenerate_cell", "middle_values_quality",
+                 "rich_values_it_more", "quality_below_preference",
+                 "premium_not_dominant_for_middle"):
+        print(f"      - {name.replace('_', ' ')}: "
+              f"{region[name].mean():.0%} of the grid satisfies it")
+
+    if ok.empty:
+        print("\n    No admissible parameters. The constraints are jointly "
+              "unsatisfiable and one of them has to give.")
+        canonical = None
+    else:
+        print(f"\n    Admissible region: {len(ok)} of {len(region)} grid points."
+              f"\n      beta_Middle in [{ok.beta_middle.min():.1f}, "
+              f"{ok.beta_middle.max():.1f}]   "
+              f"beta_Rich in [{ok.beta_rich.min():.1f}, {ok.beta_rich.max():.1f}]")
+        # The centroid, rounded to the grid: a principled interior point rather
+        # than a hand-picked one.
+        canonical = {
+            "Poor": BETA_POOR,
+            "Middle": float(np.round(ok.beta_middle.mean() * 2) / 2),
+            "Rich": float(np.round(ok.beta_rich.mean() * 2) / 2),
+        }
+        print(f"      centroid, rounded to the half: beta_Middle "
+              f"{canonical['Middle']:.1f}, beta_Rich {canonical['Rich']:.1f}")
+
+    print("\n  The two economic specifications 9a compares (neither is the "
+          "teacher):")
+    specs = {
+        "price-only surplus": {"Poor": 0.0, "Middle": 0.0, "Rich": 0.0},
+        "quality-adjusted surplus": canonical or {"Poor": 0.0, "Middle": 2.0,
+                                                  "Rich": 3.5},
+    }
+    sanity = []
+    for name, betas in specs.items():
+        cells = wtp_cells(betas, pref)
+        cells.insert(0, "specification", name)
+        sanity.append(cells)
+        print(f"\n    {name}  (beta = {betas})")
+        for _, r in cells.iterrows():
+            note = ("unaffordable" if not r["affordable"]
+                    else "DEGENERATE" if r["degenerate"]
+                    else ("" if np.isnan(r["prefers_premium"])
+                          else f"prefers premium {r['prefers_premium']:.1%}"))
             print(f"      {r['buyer_class']:7s} {r['seller_tier']:6s} "
                   f"WTP {r['wtp_min']:5.2f}-{r['wtp_max']:<5.2f} "
                   f"P(worth buying) {r['p_worth_buying']:6.1%}  {note}")
-        print(f"      -> {len(bad)} degenerate cell(s)")
+    sanity = pd.concat(sanity)
+    region.to_csv(RESULTS_ROOT / "wtp_admissible_region.csv", index=False)
 
     pd.concat(tables).to_csv(RESULTS_ROOT / "teacher_policy.csv", index=False)
-    sanity.to_csv(RESULTS_ROOT / "wtp_candidates.csv", index=False)
+    sanity.to_csv(RESULTS_ROOT / "wtp_specifications.csv", index=False)
     plot(teacher, sanity)
 
     experiment_log.append_row(LOG_PATH, {
@@ -232,10 +321,13 @@ def main() -> int:
             f"the conditional structure (streak 0: "
             f"{teacher[teacher.streak == 0]['p'].mean():.3f}, streak 3: "
             f"{teacher[teacher.streak == 3]['p'].mean():.3f}) while class and tier "
-            f"move the mean by under 0.08. WTP candidate A leaves "
-            f"{int(sanity[(sanity.candidate.str.startswith('A')) & sanity.degenerate].shape[0])} "
-            f"degenerate cells, candidate B "
-            f"{int(sanity[(sanity.candidate.str.startswith('B')) & sanity.degenerate].shape[0])}."
+            f"move the mean by under 0.08. WTP is specified as "
+            f"b_c + s_c*pref + beta_c*q_j; the constraint grid leaves "
+            f"{int(region['admissible'].sum())} admissible (beta_M, beta_R) "
+            f"points, and the price-only specification leaves "
+            f"{int(sanity[(sanity.specification == 'price-only surplus') & sanity.degenerate].shape[0])} "
+            f"degenerate cells against the quality-adjusted one's "
+            f"{int(sanity[(sanity.specification == 'quality-adjusted surplus') & sanity.degenerate].shape[0])}."
         ),
         "decision_implication": "Sets Phase 9a's gate strata and WTP parameterization",
         "next_experiment": "Phase 9a gate definition, once A or B is chosen",
@@ -280,8 +372,8 @@ def plot(teacher: pd.DataFrame, sanity: pd.DataFrame) -> None:
     ax = axes[2]
     width = 0.36
     labels = []
-    for i, (name, marker) in enumerate(zip(CANDIDATES, ("A", "B"))):
-        sub = sanity[(sanity["candidate"] == name) & sanity["affordable"]]
+    for i, name in enumerate(sanity["specification"].unique()):
+        sub = sanity[(sanity["specification"] == name) & sanity["affordable"]]
         x = np.arange(len(sub)) + (i - 0.5) * width
         ax.bar(x, sub["p_worth_buying"], width, label=name,
                color=["tab:orange", "tab:blue"][i],
@@ -294,8 +386,8 @@ def plot(teacher: pd.DataFrame, sanity: pd.DataFrame) -> None:
     ax.set_xticklabels(labels, fontsize=7.5)
     ax.set_ylim(0, 1.12)
     ax.set_ylabel("P(WTP > price)")
-    ax.set_title("WTP candidates: red edge = degenerate cell", fontsize=10)
-    ax.legend(fontsize=7.5, loc="lower left")
+    ax.set_title("Surplus specifications: red edge = degenerate", fontsize=10)
+    ax.legend(fontsize=7, loc="lower left")
 
     fig.suptitle("Phase 9a design-review evidence — the teacher, and the WTP decision",
                  fontsize=12)
