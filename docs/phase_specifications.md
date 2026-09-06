@@ -1562,6 +1562,124 @@ this one has the value and still lacks the learnability.
 - **Real-data plausibility check:** compare the simulated season-to-season active-seller-count trajectory against RI DEM's actual 2019–2023 vendor counts (24, 31, 25, 24, 26) — not as a strict pass/fail, but to flag if the simulated trajectory is wildly more volatile or more static than a real multi-year market ever was
 - Explicitly label any resulting stratification as **emergent** only if class information was not used anywhere in the seller entry/exit or pricing rule — otherwise label it **encoded** (per the project's own encoded-vs-emergent discipline)
 
+### Phase 8 design gate — two diagnostics, and what they changed
+
+Both halves of the mechanism as originally written are inoperative, and the
+diagnostics that show it were run before any implementation code, which is what
+the gate is for.
+
+**Exit would fire on arithmetic rather than on interaction.** Per-seller weekly
+profit under the registered cost model, 30 seeds × 66 weeks of Phase 7a's
+fixed-price arm:
+
+| seller | tier | mean | P(loss) | worst losing streak |
+|---|---|---|---|---|
+| 0, 1 | Slow, near | 18.0 | 0.3% | 1 wk |
+| 2 | Slow, far | 6.9 | 6.0% | 3 wk |
+| 3 | Shigh, near | 5.5 | 21.2% | 6 wk |
+| **4** | **Shigh, far** | **−0.02** | **58.8%** | **13 wk** |
+
+Seller 4 reaches a three-week losing run in **100% of seeds**. Under "exit if
+profit is below threshold for 3 consecutive weeks" it dies in every run, early,
+for reasons fully determined at week 0: a Shigh stall needs 3.33 units a week
+to clear a fixed cost of 10, and 70% of buyers cannot afford its price at all.
+Any stratification that followed would be **encoded**, in this document's own
+sense, and the phase would be measuring its cost parameters.
+
+**Entry would never fire at all.** The registered trigger is unmet demand, and
+inventory never binds: **zero sellouts in 1,980 seller-weeks**, with the
+tightest stall ending on 57 of 130 units. Blocked encounters are budget
+(33.6%), declined on utility (18.9%) and not noticed (15.2%) — no excess
+demand anywhere in the market. As written, Phase 8 is a countdown: exit fires
+deterministically, entry never does, and the market shrinks monotonically to
+its three Slow stalls.
+
+### The mechanism, as confirmed at the gate
+
+**Exit — both rules, run as a contrast.** The registered three-consecutive-week
+trigger is kept, and a **capital balance** is added alongside it: each seller
+holds an endowment of 30 (three weeks of fixed cost, so the registered rule's
+spirit is preserved), adds its weekly profit, and exits when the balance
+reaches zero. The capital rule lets a marginal seller die slowly rather than on
+week 3, which makes *when* it dies a measurement rather than a constant.
+Running both makes the sensitivity to the exit rule's own form a reported
+quantity instead of an assumption — the same reason Phase 5 built both readings
+of the budget cliff and Phase 7b ran both bandits.
+
+**Entry — free entry by imitation, and it never reads a class label.** When the
+mean profit of active sellers is above zero for two consecutive weeks,
+one entrant appears, **copying a randomly chosen incumbent's price, position and
+inventory**. Mean profit above zero is the textbook free-entry condition: it
+says entrants expect to cover their costs, it needs no threshold parameter, and
+it scales automatically across the fixed-cost sweep below.
+
+Imitation is what keeps the emergent label available. The registered rule
+assigns an entrant's class from per-class excess demand, which is a class label
+read directly into the mechanism; any resulting mix would then be **encoded**.
+Copying whatever configuration is currently making money reads profit only, so
+the class mix that emerges is an outcome of the market rather than an input to
+it. If Slow stalls earn and Shigh stalls do not, entrants become Slow stalls
+without the rule ever knowing what a Slow stall is.
+
+**Fixed weekly cost — a swept axis, not a guess.** This document has said since
+Phase 7 that the cost figures "must be revisited at Phase 8's gate, which is
+where they actually bite". They are. Gross margin before fixed cost is 28.0 /
+28.0 / 16.9 / 15.5 / **10.0** per seller, so the registered value of 10.0 sits
+exactly on the weakest seller's break-even and the phase's whole result would
+turn on a parameter chosen three phases earlier for a different reason. It is
+therefore swept over **{6, 8, 10, 12}**, which runs from "every stall viable" to
+"the far premium stall structurally doomed", with 10.0 as one point on it.
+Nothing is discarded and the conclusion carries a stated domain.
+
+**Everything else is Phase 7's**, unchanged: the same 100 buyers, the same five
+starting sellers, the same arms and costs, and `price_reference` frozen at the
+week-0 configuration for all 110 weeks as this document's normalization
+convention requires — entry and exit are the mechanism under test, so the scale
+of utility cannot drift with them.
+
+**Run length: 110 weeks, five seasons**, the top of the range the Weeks and
+Seasons section allows, because whether the seller mix stabilizes or oscillates
+is only visible across several season boundaries.
+
+### Random draws under a changing seller set
+
+Entry and exit change how many sellers exist, and every weekly draw — visit
+order, purchase, visibility — is shaped by that number. Drawn naively, two arms
+whose entry histories differ would consume different random streams and could
+not be compared on a seed, which would break every paired test this project
+uses.
+
+So the market allocates **`max_sellers` = 20 fixed slots** and draws at that
+width every week regardless of how many are occupied. Sellers occupy slots;
+entry activates the lowest free one and exit releases it. A buyer walks the
+permutation of all slots and skips the inactive ones, so the relative order of
+the active stalls is unchanged by which others happen to be active. The draw
+stream then depends only on the seed, and arms stay paired.
+
+The slot count is a capacity, not a target. Whether it ever binds is reported;
+if it does, the equilibrium is outside the measured range and the result says
+so rather than pretending the cap is a finding.
+
+### Acceptance criteria
+
+- Track active sellers per class over 110 weeks; report whether the mix
+  converges, oscillates, or is still moving at the end.
+- **Real-data plausibility.** RI DEM vendor counts for 2019–2023 are 24, 31,
+  25, 24, 26 — season-over-season changes of +29.2%, −19.4%, −4.0%, +8.3%, a
+  mean absolute change of **15.2%**. The simulated season-over-season change is
+  compared against that. Not a pass/fail: a flag if the simulated trajectory is
+  wildly more volatile or more static than a real multi-year market ever was.
+- **The stratification is labelled `emergent` only if no class information
+  enters the entry, exit or pricing rule**, and `encoded` otherwise. Under the
+  confirmed mechanism nothing reads a class label, so the label available is
+  `emergent` — but it is checked against the code rather than asserted.
+- Sensitivity to the exit rule's form is **reported, not graded**: if the
+  capital rule and the three-week rule produce different surviving mixes, that
+  difference is a property of the rule and belongs beside the result.
+
+**Exit condition:** `git tag phase8-validated`. This is the last purely
+rule-based phase — no moat-relevant data is generated through Phase 8.
+
 ### Web Visualization Extension — Entry/Exit Panels
 
 Extends the Phase 6 page (same underlying artifact, not a rebuild). Adds:

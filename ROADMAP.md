@@ -86,7 +86,7 @@ visualization** gets, and when. Specifically:
 
 ## Current phase
 
-**Phase 7e complete; next is Phase 8.** Phases 1–6 and 7a, 7b, 7d are
+**Phase 8 in progress** (design gate confirmed). Phase 7e is complete. Phases 1–6 and 7a, 7b, 7d are
 tagged validated; 7c is tagged `phase7c-skipped`; 7e-1 through 7e-3b are
 tagged `phase7e1-calibrated`, `phase7e2-headroom`, `phase7e3a-context` and
 `phase7e3b-horizon`.
