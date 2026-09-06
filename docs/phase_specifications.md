@@ -184,7 +184,7 @@ Everything else in the table below is used once, for the phase it's listed under
 | Phase | Methodology | Independent variable(s) | Dependent variable(s) | How difference is judged |
 |---|---|---|---|---|
 | 9a | Learned buyer policy; behavior cloning as a pipeline check, surplus-maximizing policy as the baseline | Buyer decision mechanism (hand-written rule vs. trained policy) | Realized consumer surplus, class shares | Paired against the Phase 8 rule on identical seeds; clone arm expected **equivalent**, policy arm required to raise surplus with CI excluding zero |
-| 9b | Substitution experiment; Agent decisions replace **trained-policy** decisions for a subset (within-run control group) | Decision mechanism (rule / trained policy / Agent), holding everything else fixed | Choice distribution, `synthetic_cost_usd`, latency | Agent subgroup vs. rule-based subgroup within the same run; cost/speed ratio against `human_baseline.csv` |
+| 9d | Substitution experiment; Agent decisions replace **trained-policy** decisions for a subset (within-run control group) | Decision mechanism (rule / trained policy / Agent), holding everything else fixed | Choice distribution, `synthetic_cost_usd`, latency | Agent subgroup vs. rule-based subgroup within the same run; cost/speed ratio against `human_baseline.csv` |
 | 10 | Distributional comparison against real (published) human data | Data source (N=100 Agent responses vs. an existing published human benchmark) | Per-scenario choice distribution | **Jensen-Shannon divergence** + directional agreement (same top choice or not) |
 | 11 | Structured bias mapping + correction-function fitting | Category × demographic × context × model (four-way grid) | Phase 10's gap metric, aggregated per cell | Fit a correction function on a training subset; check error reduction on a **held-out** subset never used to fit it |
 | 12 | Variance decomposition (ANOVA-style) | Model family (GPT/Claude/etc.), seed, prompt, environment | Output distribution from repeating Phase 10 scenarios | Share of total outcome variance attributable to each factor |
@@ -1813,6 +1813,35 @@ Extends the Phase 6 page (same underlying artifact, not a rebuild). Adds:
 
 ---
 
+## Phase 9 — When does one-step imitation error compound into trajectory-level divergence?
+
+**The phase's question was rewritten after 9a, because 9a answered a narrower
+one than it was asked.** "Does imitation error compound?" invites a yes/no, and
+9a's answer to it — the mechanism is present and the effect is negligible —
+turns out to be a statement about *this environment* rather than about
+imitation. The question that survives the result is the conditional one, and it
+is the question the rest of Phase 9 is built to answer.
+
+9a identified the quantity that appears to govern it:
+
+```
+R = systematic imitation error / intrinsic teacher stochasticity
+  = E|p_T - p_theta| / sqrt(E[p(1-p)])
+  = 0.083 / 0.475 = 17%
+```
+
+**9a is frozen. Its environment is not retuned to rescue the hypothesis** — a
+result that only appears after the conditions are adjusted until it does is not
+a result. What follows changes the conditions *as the experiment*, sweeping and
+reporting them rather than searching them for a favourable point.
+
+| sub-stage | what varies | question |
+|---|---|---|
+| **9a** ✅ | nothing — the standing environment | does a distilled policy reproduce the rule, offline and in closed loop? |
+| **9b** | teacher policy entropy `H(pi_T)` | does `R` govern the strength of the amplification? |
+| **9c** | the environment's stabilizers, factorially | which environment characteristics suppress divergence? |
+| **9d** | the decision mechanism (LLM agent) | what does an Agent add over a trained policy? |
+
 ## Phase 9a — Learned Buyer Policy (no LLM)
 
 **Why this phase exists.** Phases 1–8 give sellers a four-rung learning ladder (7a heuristic → 7b bandit → 7c contextual bandit → 7d RL) but give buyers a single step from a hand-written formula straight to an LLM. That asymmetry weakens the question Phase 9b is supposed to answer.
@@ -2200,10 +2229,18 @@ count — and **every trajectory quantity is reproduced**:
 | Middle → premium | 0.1968 | 0.1980 | +0.0012, **equivalent** |
 | Rich → premium | 0.2947 | 0.3018 | +0.0071, **equivalent** |
 
-All six class-to-tier shares return `equivalent`. So the phase's hypothesis —
-*high one-step conditional-policy fidelity does not guarantee closed-loop
-trajectory fidelity* — is **directionally confirmed and quantitatively rejected
-in this environment.** The loop exists; it is too weak to matter.
+All six class-to-tier shares return `equivalent`.
+
+**The conclusion, stated with its conditions and frozen there:**
+
+> Under this stochastic teacher and these stabilizing market dynamics,
+> imitation error produces a measurable **endogenous distribution shift** but
+> **not an economically meaningful trajectory divergence.**
+
+Not "imitation error does not compound" — that generalizes past what a single
+environment can support, and the two clauses are separately true and separately
+important. The mechanism is confirmed; its magnitude is a property of the
+conditions, and the conditions are what 9b and 9c vary.
 
 ### Why, and what it says about where the hypothesis should be tested
 
@@ -2339,13 +2376,13 @@ behaviour they produce.
 
 A generative agent is not a single learning algorithm, and writing this phase as
 "representation learning → policy learning → LLM" would misdescribe what
-Phases 9a and 9b together build. The structure is a closed loop:
+Phases 9a and 9d together build. The structure is a closed loop:
 
 ```
 behavioural trajectories (Phases 1-8 runs; real human data from Phase 10)
   -> representation learning        z_t = f(x, h_t)      latent buyer state
   -> policy / behaviour model       pi(a_t | z_t, e_t)   state -> action
-  -> generative model               concrete decisions   (Phase 9b only)
+  -> generative model               concrete decisions   (Phase 9d only)
   -> environment + memory update    h_{t+1}
   -> back to the top
 ```
@@ -2386,7 +2423,121 @@ it is tested the same way rather than assumed.
 
 ---
 
-## Phase 9b — Synthetic Agent Users
+## Phase 9b — Teacher Entropy Sweep
+
+**Research question:** does the ratio of systematic policy error to intrinsic
+teacher stochasticity govern whether one-step imitation error compounds into
+trajectory divergence?
+
+**Single changed dimension:** the teacher's policy entropy. Everything else —
+the market, the observation set, the student architecture, the fitting
+protocol, the seed blocks — is 9a's, unchanged.
+
+### The mechanism, and the confound a naive sweep would carry
+
+Temperature on the logit, which sharpens the same preference ordering rather
+than changing it:
+
+```
+p_T(s) = sigmoid( (U(s) - offset) / tau )
+```
+
+`tau = 1` is 9a. `tau -> 0` approaches a step function at `U = offset`;
+`tau > 1` flattens toward a coin flip.
+
+**But temperature moves the purchase rate as well as the entropy**, because
+`E[sigmoid((U-offset)/tau)]` is not constant in `tau`. Swept naively, a low-tau
+regime would be a different market — different volumes, different loyalty,
+different seller profits — and any divergence measured in it would be
+confounded with the market having changed. So **the offset is re-solved at every
+temperature to hold the mean purchase probability at 9a's value**, by bisection
+on `E[p_T]`. Entropy then varies and the level does not, and the sweep is a
+sweep of one thing.
+
+Regimes: `tau ∈ {2.0, 1.0, 0.5, 0.25, 0.1}`, spanning noisier than 9a to nearly
+deterministic. **Not a jump to `tau = 0`.** A single deterministic point next to
+a single stochastic one supports "the hypothesis becomes true when the noise is
+removed", which is a description of the parameter choice rather than a finding.
+A monotone response across five regimes is a different claim.
+
+### What is measured, per regime
+
+The whole chain, exactly as 9a measured it, plus the axis:
+
+```
+H(pi_T)  ->  R = E|p_T - p_theta| / sqrt(E[p(1-p)])
+         ->  D_shadow / D_offline          amplification
+         ->  W_1( state_teacher , state_student )   state drift
+         ->  behavioural divergence        purchase rate, pair stability, shares
+```
+
+Three response curves, and the result is their **shape**, not any single point:
+
+1. `H(pi_T)` against `D_shadow / D_offline`
+2. `H(pi_T)` against state drift
+3. `H(pi_T)` against downstream behavioural divergence
+
+**Acceptance criteria.**
+
+- Each regime's student must clear **Gate 9a** on its own held-out states —
+  policy distance within 0.005 of that regime's own measured floor, worst
+  stratum calibration ≤ 0.02, and a proper-score gain ≥ 0.02 nats. A regime
+  whose student is simply undertrained cannot be read as a regime where
+  imitation fails, and this is what separates the two.
+- The offset calibration must hold the mean purchase probability within
+  **0.005** of 9a's across every regime, or the sweep is not of one variable.
+- **Graded on decisiveness, as since Phase 5:** what is required is that the
+  monotonicity of each curve returns a verdict — Spearman correlation across
+  regimes with a bootstrap interval — not that it comes out positive. A flat
+  response is a finding: it would say entropy does not govern amplification and
+  send the search to 9c's environment characteristics instead.
+
+**Literature basis:** Ross, Gordon & Bagnell (2011), "A Reduction of Imitation
+Learning and Structured Prediction to No-Regret Online Learning" (AISTATS) —
+the compounding-error argument, whose bound is driven by the per-step error
+rate and is silent on the environment's own stochasticity. This phase measures
+what that bound leaves open.
+
+**Exit condition:** `git tag phase9b-entropy`.
+
+---
+
+## Phase 9c — Stabilizer Ablation
+
+**Research question:** which environment characteristics suppress trajectory
+divergence, and by how much?
+
+9a named two suspects and could not separate them: a **hard budget wall** —
+70% of buyers cannot afford the premium tier, so a large part of the action
+space is closed regardless of policy — and **season-long fixed preference**,
+which pulls a wandering buyer back toward the same stalls week after week.
+Both are stabilizers, and removing both at once would confound them.
+
+**A factorial ablation, at two entropy levels**, so the interaction between
+policy noise and environment feedback is visible rather than assumed:
+
+| # | teacher entropy | budget wall | fixed preference |
+|---|---|---|---|
+| 1 | high (9a's) | on | on |
+| 2 | low | on | on |
+| 3 | low | **off** | on |
+| 4 | low | on | **off** |
+| 5 | low | **off** | **off** |
+
+Removing the budget wall means raising Poor's budget so the premium tier is
+affordable; removing fixed preference means redrawing `preference[b, s]` weekly
+rather than once per season. Both are single, stated changes.
+
+The framework the phase is assembling, and which 9c completes:
+
+```
+policy error  x  teacher stochasticity  x  environment feedback strength
+              x  state persistence      ->  trajectory divergence
+```
+
+**Exit condition:** `git tag phase9c-stabilizers`.
+
+## Phase 9d — Synthetic Agent Users
 
 **Research question:** What does replacing the buyer decision function with an LLM-driven Agent change, holding the rest of the simulation fixed? This is a scaffolding phase, not yet a human comparison.
 

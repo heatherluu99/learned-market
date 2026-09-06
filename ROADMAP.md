@@ -54,12 +54,12 @@ later, rather than requiring a schema migration.
 
 Alongside reliability (Asset D), the simulation must be demonstrably
 **cheaper and faster than a real human research panel** — this is not a
-side benefit but a required gate. From **Phase 9b** onward, every run logs
+side benefit but a required gate. From **Phase 9d** onward, every run logs
 `synthetic_cost_usd` and `synthetic_latency_seconds`, compared against a
 sourced `human_baseline.csv` reference table (industry figures for panel
-cost/turnaround, introduced in Phase 9b). **Phase 15**'s reference-scale run
+cost/turnaround, introduced in Phase 9d). **Phase 15**'s reference-scale run
 should still hold this ratio favorable, even without a real client
-involved — see `docs/phase_specifications.md`, Phase 9b and Phase 15.
+involved — see `docs/phase_specifications.md`, Phase 9d and Phase 15.
 
 ## Dual purpose: commercial roadmap + CS/generative-agent portfolio piece
 
@@ -74,7 +74,7 @@ visualization** gets, and when. Specifically:
   prototype `market_bonds_prototype.html`), because it is expected to
   double as demo/portfolio material from early on.
 - The same visualization artifact is **extended incrementally** at Phase 8
-  (entry/exit panels) and Phase 9b (the "Agent Inspector" — see
+  (entry/exit panels) and Phase 9d (the "Agent Inspector" — see
   `docs/phase_specifications.md`), rather than rebuilt from scratch, so the
   finished demo tells a visible story of increasing sophistication —
   itself a differentiator versus a demo that jumps straight to a flashy
@@ -105,7 +105,7 @@ The reason is quantitative: the teacher's per-decision noise has an sd of
 0.475 against the student's systematic deviation of 0.083, so the bias is 17%
 of the coin-flip the market already runs on. Compounding imitation error needs
 a near-deterministic teacher — the regime a temperature-0 LLM agent occupies —
-which makes this null the reason to expect a different answer at 9b.
+which makes this the axis Phase 9b sweeps.
 
 Phase 8's entry/exit dynamics selectively eliminated the premium tier — from
 a 40% starting share to essentially zero in all eight cells — under this
@@ -220,7 +220,9 @@ Full specification: see `docs/phase_specifications.md`.
 | 7e | Mechanism Sufficiency | Under what market structure does each level of policy complexity become *necessary*? A separate environment with persistent, price-sensitive, bounded loyalty, run as three gates: state exists → intertemporal trade-off exists → complexity pays. **Gates 1 and 2 passed** — memory reaches 2.8× further than the counter's at lag 8 with lock-in strength held equal, and a discount-then-stop schedule beats the best standing price by +2.6% while the delta = 0 control loses. **Gate 3a null** — conditioning on the state is worth −2.3% (equivalent), and an oracle says the best arm is the same at every state. **Gate 3b not passed** — the Q-network reproduces the schedule's first eight weeks and stops, collecting 31% of a gain known to exist. Complexity became valuable without becoming learnable. | Infrastructure only — gives context conditioning and stateful learning an existence condition |
 | 8 | Endogenous Market Structure | Does repeated local interaction produce macro-level structure? | Infrastructure only — **web viz: entry/exit panels** |
 | 9a | Learned Buyer Policy | Can a learned policy recover the rule-based buyer's conditional behaviour, and does one-step fidelity survive closed-loop deployment? **The loop is real and does not compound** — D_shadow exceeds D_offline decisively (+0.0057, CI excludes zero) at 7%, with every trajectory quantity equivalent. | Infrastructure only — closes the buyer-side learning ladder |
-| 9b | Synthetic Agent Users | What does an LLM Agent add over a *trained* buyer policy? | First scaffolding for A — **web viz: Agent Inspector; cost/speed KPI begins** |
+| 9b | Teacher Entropy Sweep | Does the ratio of systematic policy error to intrinsic teacher stochasticity govern whether one-step error compounds? | Infrastructure only |
+| 9c | Stabilizer Ablation | Which environment characteristics — the budget wall, season-long fixed preference — suppress trajectory divergence? | Infrastructure only |
+| 9d | Synthetic Agent Users | What does an LLM Agent add over a *trained* buyer policy? | First scaffolding for A — **web viz: Agent Inspector; cost/speed KPI begins** |
 | 10 | Human vs Agent | Where does synthetic behavior match/diverge from real humans? | **A begins** |
 | 11 | Bias Quantification | Can the gap be measured, mapped, and corrected? | **A formalizes; B built** |
 | 12 | Cross-Model Comparison | Do different foundation models yield different conclusions? | **C begins** |
@@ -231,7 +233,7 @@ Full specification: see `docs/phase_specifications.md`.
 
 ## Hard constraints (apply until this file is explicitly edited)
 
-- No Agent/LLM calls in agent decision logic before Phase 9b (Phase 9a is classical ML only)
+- No Agent/LLM calls in agent decision logic before Phase 9d (Phase 9a is classical ML only)
 - No adaptive/learning pricing before Phase 7
 - No cross-run memory/history before Phase 6
 - No web frontend before Phase 6 (when "weeks" first become a real mechanism). From Phase 6 on, the web visualization is built with portfolio-grade presentation quality (see "Dual purpose" section above), extended incrementally at Phase 8 and Phase 9 — not rebuilt from scratch each time
