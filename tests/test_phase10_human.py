@@ -8,10 +8,14 @@ quantity the data does not contain.
 
 from __future__ import annotations
 
+import pathlib
+
 import numpy as np
 import pytest
 
 from market_sim import human
+
+ROOT = pathlib.Path(__file__).resolve().parents[1]
 
 
 @pytest.fixture(scope="module")
@@ -152,3 +156,48 @@ def test_provenance_is_recorded_rather_than_assumed():
     assert p["source_url"].startswith("https://")
     assert "Jain" in p["citation"] and "1994" in p["citation"]
     assert p["retrieved"] == "2026-09-06"
+
+
+def test_agent_cache_cannot_serve_one_model_s_answers_for_another(tmp_path, monkeypatch):
+    """The cache is keyed on (model, prompt), not the prompt alone.
+
+    Keyed on the prompt alone, pointing the run at a second provider would
+    return the first provider's answers under the second's name: an arm that
+    never ran, reported as though it had. That is the failure this guards.
+    """
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        "run_phase10", ROOT / "experiments" / "phase10" / "run_phase10.py")
+    run = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(run)
+    monkeypatch.setattr(run, "CACHE_PATH", tmp_path / "agent_cache.json")
+
+    run.save_cache("model-a", {"a prompt": [1.0, 0.0]})
+    run.save_cache("model-b", {"a prompt": [0.0, 1.0]})
+
+    assert run.load_cache("model-a") == {"a prompt": [1.0, 0.0]}
+    assert run.load_cache("model-b") == {"a prompt": [0.0, 1.0]}
+    # A model that has never run has no answers, rather than inheriting them.
+    assert run.load_cache("model-never-queried") == {}
+
+
+def test_both_providers_are_declared_arms_with_frozen_settings():
+    """Both providers carry a recorded thinking budget.
+
+    It changes the answer, so a provider entry that omitted it would leave the
+    condition to the SDK's default and out of the run's provenance.
+    """
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        "run_phase10", ROOT / "experiments" / "phase10" / "run_phase10.py")
+    run = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(run)
+
+    assert set(run.PROVIDERS) == {"groq", "gemini"}
+    for name, provider in run.PROVIDERS.items():
+        settings = provider["settings"]
+        assert settings["temperature"] == 0.0, name
+        assert "reasoning_effort" in settings or "thinking_budget" in settings, name
+        assert provider["limits"]["requests_per_minute"] > 0, name

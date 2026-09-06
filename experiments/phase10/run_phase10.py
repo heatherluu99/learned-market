@@ -37,11 +37,35 @@ from market_sim import agent, experiment_log, human  # noqa: E402
 RESULTS_ROOT = REPO_ROOT / "results" / "phase10"
 LOG_PATH = REPO_ROOT / "experiment_log.csv"
 
-MODEL = "openai/gpt-oss-120b"
-#: Frozen before any comparison. reasoning_effort changes the answer - the same
-#: prompt returns 35 at the default budget and 45 at "low" - so it is a
-#: condition of the experiment and is recorded, not a convenience.
-AGENT_SETTINGS = {"temperature": 0.0, "reasoning_effort": "low", "max_tokens": 512}
+#: Two providers, because their free tiers cap different things and only one
+#: shape of cap this phase can actually finish under. Groq's binds on tokens
+#: per day and this prompt set costs about three days of it; Gemini's binds on
+#: requests per day, and this phase is a fixed number of short requests.
+#:
+#: Both are listed as **arms**, not as alternatives to pick between after
+#: seeing a result. Which model is queried is chosen on the command line and
+#: recorded in every row the run writes; the cache is namespaced by model so
+#: one provider's answers can never be served for another's.
+#:
+#: Each settings block is frozen before any comparison. The thinking budget -
+#: `reasoning_effort` on Groq, `thinking_budget` on Gemini - changes the
+#: answer: the same prompt returns 35 at gpt-oss's default budget and 45 at
+#: "low". It is a condition of the experiment and is recorded, not a
+#: convenience.
+PROVIDERS = {
+    "groq": {
+        "model": "openai/gpt-oss-120b",
+        "settings": {"temperature": 0.0, "reasoning_effort": "low",
+                     "max_tokens": 512},
+        "limits": {"tokens_per_minute": 8000, "requests_per_minute": 30},
+    },
+    "gemini": {
+        "model": "gemini-2.5-flash",
+        "settings": {"temperature": 0.0, "thinking_budget": 0,
+                     "max_tokens": 512},
+        "limits": {"requests_per_minute": 10},
+    },
+}
 BRANDS = tuple(sorted(human.BRANDS))
 
 RESEARCH_QUESTION = (
@@ -94,34 +118,36 @@ def occasions(panel: pd.DataFrame) -> list[dict]:
 #: are. Concurrency past a handful only converts throughput into 429s, so a
 #: shared token budget paces the calls and a few workers hide the round trip.
 WORKERS = 4
-TOKENS_PER_MINUTE = 8000
-#: The one that actually binds: 30 requests a minute against a token ceiling
-#: that would allow about 28, so the run is request-paced.
-REQUESTS_PER_MINUTE = 30
 
 
-#: Answers are cached on disk between runs. The provider's free tier also caps
-#: *tokens per day* at 200,000 - about 700 calls - so this phase's 2,212
-#: distinct prompts are a three-day job, and a run that started from zero each
-#: day could never finish. The cache is keyed on the prompt, so it is also
-#: invalidated automatically if the prompt construction changes.
+#: Answers are cached on disk between runs, because every free tier caps some
+#: quantity per day and this phase's 2,212 distinct prompts can exceed a day's
+#: worth of it. A run that started from zero each day could never finish.
+#:
+#: Keyed on **(model, prompt)**, not on the prompt alone. Keyed on the prompt
+#: alone, pointing the run at a second model would silently serve the first
+#: model's answers under the second model's name - an arm that never ran,
+#: reported as though it had. The prompt half also invalidates the cache for
+#: free if prompt construction changes.
 CACHE_PATH = RESULTS_ROOT / "agent_cache.json"
 
 
-def load_cache() -> dict[str, list[float]]:
+def load_cache(model: str) -> dict[str, list[float]]:
     import json
     if CACHE_PATH.exists():
-        return json.loads(CACHE_PATH.read_text())
+        return json.loads(CACHE_PATH.read_text()).get(model, {})
     return {}
 
 
-def save_cache(cache: dict[str, list[float]]) -> None:
+def save_cache(model: str, answers: dict[str, list[float]]) -> None:
     import json
     CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
-    CACHE_PATH.write_text(json.dumps(cache))
+    everything = json.loads(CACHE_PATH.read_text()) if CACHE_PATH.exists() else {}
+    everything[model] = answers
+    CACHE_PATH.write_text(json.dumps(everything))
 
 
-def agent_distributions(records, client, usage) -> tuple[np.ndarray, int]:
+def agent_distributions(records, client, usage, model: str, rpm: int) -> tuple[np.ndarray, int]:
     """One distribution per occasion, querying each distinct prompt once.
 
     Deduplicated *before* querying rather than cached during it, so the work is
@@ -131,12 +157,10 @@ def agent_distributions(records, client, usage) -> tuple[np.ndarray, int]:
     import time
     from concurrent.futures import ThreadPoolExecutor
 
-    import groq
-
     prompts = [agent.describe_choice(r["alternatives"], r["history"]) for r in records]
     distinct = list(dict.fromkeys(prompts))
     usage.cached = len(prompts) - len(distinct)
-    cache = load_cache()
+    cache = load_cache(model)
     todo = [p for p in distinct if p not in cache]
     if cache:
         print(f"    {len(cache):,} answers already on disk; {len(todo):,} to fetch",
@@ -144,8 +168,8 @@ def agent_distributions(records, client, usage) -> tuple[np.ndarray, int]:
     distinct = todo
     print(f"    {len(prompts):,} occasions -> {len(distinct):,} distinct prompts "
           f"({usage.cached / len(prompts):.1%} deduplicated)", flush=True)
-    print(f"    request-paced at {REQUESTS_PER_MINUTE}/min: expect about "
-          f"{len(distinct) / (REQUESTS_PER_MINUTE * 0.85):.0f} minutes", flush=True)
+    print(f"    request-paced at {rpm}/min: expect about "
+          f"{len(distinct) / (rpm * 0.85):.0f} minutes", flush=True)
 
     done = {"n": 0}
 
@@ -164,7 +188,7 @@ def agent_distributions(records, client, usage) -> tuple[np.ndarray, int]:
         with ThreadPoolExecutor(max_workers=WORKERS) as pool:
             for result in pool.map(query, distinct):
                 results.append(result)
-    except groq.RateLimitError as error:
+    except agent.QuotaExhausted as error:
         # The daily cap is not something to retry through. Keep what was paid
         # for, say so, and let the next run resume from the cache.
         exhausted = str(error)
@@ -182,7 +206,7 @@ def agent_distributions(records, client, usage) -> tuple[np.ndarray, int]:
             parsed = [1 / len(BRANDS)] * len(BRANDS)
         cache[prompt] = parsed
     usage.seconds = wall
-    save_cache(cache)
+    save_cache(model, cache)
     if exhausted is not None:
         remaining = len(distinct) - len(results)
         print(f"\n    Daily quota reached with {remaining:,} prompts still to "
@@ -261,7 +285,11 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--limit", type=int, default=None,
                         help="pilot on the first N occasions")
+    parser.add_argument("--provider", choices=sorted(PROVIDERS), default="groq",
+                        help="which Agent arm to query")
     args = parser.parse_args()
+    provider = PROVIDERS[args.provider]
+    model, settings = provider["model"], provider["settings"]
 
     commit = experiment_log.git_commit(REPO_ROOT)
     RESULTS_ROOT.mkdir(parents=True, exist_ok=True)
@@ -272,7 +300,7 @@ def main() -> int:
     print(f"\n=== Phase 10 — human panel, Agent, and two baselines ===")
     print(f"  {RESEARCH_QUESTION}\n")
     print(f"  {len(records):,} occasions, conditioned on participation.")
-    print(f"  Agent: {MODEL}, settings frozen at {AGENT_SETTINGS}\n")
+    print(f"  Agent: {model}, settings frozen at {settings}\n")
 
     observed = np.zeros((len(records), len(BRANDS)))
     observed[np.arange(len(records)), [r["chosen_index"] for r in records]] = 1
@@ -290,15 +318,15 @@ def main() -> int:
 
     # ---- A: the Agent ------------------------------------------------------
     usage = agent.Usage()
-    client = agent.groq_client(MODEL, tokens_per_minute=TOKENS_PER_MINUTE,
-                               requests_per_minute=REQUESTS_PER_MINUTE,
-                               **AGENT_SETTINGS)
-    print("  Querying the Agent (cached on the bucketed prompt)...", flush=True)
-    a, unparsed = agent_distributions(records, client, usage)
+    build = agent.gemini_client if args.provider == "gemini" else agent.groq_client
+    client = build(model, **provider["limits"], **settings)
+    print("  Querying the Agent (cached on model and bucketed prompt)...", flush=True)
+    a, unparsed = agent_distributions(records, client, usage, model,
+                                     provider["limits"]["requests_per_minute"])
     print(f"  {usage.as_row()}\n")
 
     arms = {"B0 marginal shares": b0, "B1 conditional model": b1_full,
-            f"A agent ({MODEL})": a}
+            f"A agent ({model})": a}
     human_contrasts = contrasts(records, observed)
 
     print(f"  {'arm':32s} {'weighted JS':>12s} {'log-loss':>10s}  direction signs")
@@ -321,23 +349,24 @@ def main() -> int:
     frame.to_csv(RESULTS_ROOT / "arms.csv", index=False)
     pd.DataFrame([{"metric": k, "human": v} for k, v in human_contrasts.items()]).to_csv(
         RESULTS_ROOT / "human_contrasts.csv", index=False)
-    pd.DataFrame([usage.as_row() | {"model": MODEL, **AGENT_SETTINGS}]).to_csv(
+    pd.DataFrame([usage.as_row() | {"model": model, **settings}]).to_csv(
         RESULTS_ROOT / "agent_usage.csv", index=False)
     plot(frame, human_contrasts)
 
     best = frame.loc[frame["weighted_js"].idxmin()]
     experiment_log.append_row(LOG_PATH, {
-        "experiment_id": "phase10_human_vs_agent", "git_commit": commit,
+        "experiment_id": f"phase10_human_vs_agent_{args.provider}",
+        "git_commit": commit,
         "config_file": "experiments/phase10/run_phase10.py",
         "phase": 10, "seed": f"{len(records)} occasions, observed-history one-step",
         "n_buyers": panel["household"].nunique(), "n_sellers": len(BRANDS),
-        "model_used": MODEL, "decision_type": "brand_choice",
+        "model_used": model, "decision_type": "brand_choice",
         "human_benchmark_id": "Ecdat::Cracker",
         "synthetic_cost_usd": usage.as_row()["synthetic_cost_usd"],
         "synthetic_latency_seconds": usage.as_row()["synthetic_latency_seconds"],
         "research_question": RESEARCH_QUESTION,
         "changed_mechanism": (
-            f"brand choice by an LLM Agent ({MODEL}, {AGENT_SETTINGS}) against a "
+            f"brand choice by an LLM Agent ({model}, {settings}) against a "
             f"marginal-share floor and a conditional model carrying household "
             f"preference, price, display and feature"
         ),

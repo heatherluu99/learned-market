@@ -166,6 +166,17 @@ class AgentPolicy:
 #: Published rates per million tokens, filled in by the caller. Left empty
 #: rather than hard-coded: a stale price in the cost column would make the
 #: commercial gate's headline number quietly wrong.
+class QuotaExhausted(RuntimeError):
+    """A provider limit that retrying will not get past within this run.
+
+    Distinct from the per-minute limits the clients already pace around: those
+    are handled by waiting. This is raised only after the retries are spent,
+    and it is what a daily cap looks like from inside a run. Naming it here
+    rather than letting each provider's own exception escape lets a caller
+    save its partial work without importing that provider.
+    """
+
+
 def anthropic_client(model: str, input_price: float, output_price: float,
                      max_tokens: int = 8, temperature: float = 1.0):
     """A `client(system, prompt) -> (text, input_tokens, output_tokens)`.
@@ -273,9 +284,9 @@ def groq_client(model: str, input_price: float = 0.0, output_price: float = 0.0,
                     **kwargs,
                 )
                 break
-            except groq.RateLimitError:
+            except groq.RateLimitError as error:
                 if attempt == retries - 1:
-                    raise
+                    raise QuotaExhausted(str(error)) from error
                 # The windows are a minute long, so a backoff that tops out
                 # below 60s can never outlast one - which is what exhausted
                 # the retries on the second attempt.
@@ -285,6 +296,69 @@ def groq_client(model: str, input_price: float = 0.0, output_price: float = 0.0,
 
     call.settings = {"model": model, "temperature": temperature,
                      "reasoning_effort": reasoning_effort, "max_tokens": max_tokens}
+    call.pricing = (input_price, output_price)
+    return call
+
+
+def gemini_client(model: str, input_price: float = 0.0, output_price: float = 0.0,
+                  max_tokens: int = 512, temperature: float = 0.0,
+                  thinking_budget: int | None = 0,
+                  requests_per_minute: int | None = None, retries: int = 8):
+    """A Google Gemini client, same callable shape as the others.
+
+    Chosen for one reason that is about measurement rather than convenience:
+    the free tiers cap different things. Groq's binds on **tokens per day**,
+    and this phase's prompt set costs about three days of it, so no amount of
+    pacing finishes a run. Gemini's free tier binds on **requests per day**,
+    and this phase is a fixed number of short requests - a shape the quota can
+    actually hold.
+
+    `thinking_budget` is this provider's `reasoning_effort` and carries the
+    same warning: it is a thinking budget that **changes the answer**, so it is
+    frozen before any comparison and recorded in the run's provenance. Zero
+    disables thinking on the Flash models, which is the setting a
+    one-probability answer wants; it is rejected rather than ignored by models
+    that require thinking, which is the right failure - loud, not silent.
+    """
+    from google import genai
+    from google.genai import errors, types
+
+    client = genai.Client()
+    requests = TokenBudget(requests_per_minute) if requests_per_minute else None
+    thinking = ({"thinking_config": types.ThinkingConfig(thinking_budget=thinking_budget)}
+                if thinking_budget is not None else {})
+
+    def call(system: str, prompt: str) -> tuple[str, int, int]:
+        if requests is not None:
+            requests.reserve(1)
+        config = types.GenerateContentConfig(
+            system_instruction=system, temperature=temperature,
+            max_output_tokens=max_tokens, **thinking,
+        )
+        for attempt in range(retries):
+            try:
+                response = client.models.generate_content(
+                    model=model, contents=prompt, config=config,
+                )
+                break
+            except errors.ClientError as error:
+                # Only 429 is a pacing problem. A 400 means the request itself
+                # is wrong and retrying it eight times just makes it wrong
+                # eight times.
+                if error.code != 429:
+                    raise
+                if attempt == retries - 1:
+                    raise QuotaExhausted(str(error)) from error
+                time.sleep(min(75, 2 ** attempt) + random.random() * 2)
+        usage = response.usage_metadata
+        # `candidates_token_count` is None when the model returns nothing at
+        # all, which max_output_tokens can cause; count it as zero rather than
+        # letting a None propagate into the accounting.
+        return (response.text or ""), int(usage.prompt_token_count or 0), int(
+            usage.candidates_token_count or 0)
+
+    call.settings = {"model": model, "temperature": temperature,
+                     "thinking_budget": thinking_budget, "max_tokens": max_tokens}
     call.pricing = (input_price, output_price)
     return call
 

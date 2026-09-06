@@ -2968,6 +2968,39 @@ any comparison**, and no held-out human outcome is used to tune them. The
 model's `reasoning_effort` is part of that freeze — it changes the answer, the
 same prompt returning 35 at the default budget and 45 at "low".
 
+**Two Agent arms, both declared before either runs.** `A-groq` is
+`openai/gpt-oss-120b` at `reasoning_effort="low"`; `A-gemini` is
+`gemini-2.5-flash` at `thinking_budget=0`. Both are frozen at
+`temperature = 0` and `max_tokens = 512`.
+
+The practical reason is that the two free tiers cap different quantities and
+only one shape of cap this phase can finish under: Groq's binds on **tokens per
+day** (200,000, about three days of this prompt set), Gemini's on **requests
+per day**. The substantive reason matters more. With one model, a negative
+result cannot separate *LLM agents do not recover sequential structure here*
+from *this LLM does not*, and those two claims have very different
+consequences for everything downstream of this phase.
+
+**This is registered now specifically because a pilot has already been seen.**
+Two pilots at 150 and 200 occasions put `gpt-oss-120b` behind the B0
+marginal-share floor on weighted JS while getting all four mechanism directions
+right. Adding a second model after seeing that, and then reporting whichever
+does better, would be model shopping dressed as a robustness check. Both arms
+are therefore declared here, before either full run, and **both are reported
+whichever way the comparison falls** — including the case where they disagree,
+which is itself the informative outcome.
+
+The disk cache is keyed on **(model, prompt)**. Keyed on the prompt alone —
+which is how it was first written — pointing the run at the second provider
+would have served the first model's answers under the second model's name: an
+arm that never ran, reported as though it had.
+
+**This is not Phase 12.** Two models cannot decompose outcome variance into
+model, seed, prompt and environment effects; that decomposition needs a proper
+design and stays where it is. What two models buy here is narrower and worth
+stating as such: whether this phase's headline conclusion survives changing the
+model at all.
+
 **2. Same-choice-set exposure.** For household `i` at occasion `t` the panel
 gives `C_it = {(price_j, display_j, feature_j)}` over the four brands. **The
 identical `C_it` is given to every non-human arm.** Human and synthetic face
