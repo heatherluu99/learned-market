@@ -191,6 +191,104 @@ def anthropic_client(model: str, input_price: float, output_price: float,
     return call
 
 
+def groq_client(model: str, input_price: float = 0.0, output_price: float = 0.0,
+                max_tokens: int = 512, temperature: float = 0.0,
+                reasoning_effort: str | None = "low"):
+    """A Groq-hosted client, same callable shape as the others.
+
+    Two settings here are experimental conditions and not conveniences.
+
+    `temperature = 0` is correct *because the Agent is asked for a
+    probability*. The stochasticity of the policy lives in the number it
+    returns, not in sampling the token that carries it, so a deterministic
+    elicitation of a stochastic policy is exactly what is wanted - and it
+    removes a nuisance source of variance that would otherwise be confounded
+    with the policy's own entropy, which is the quantity Phases 9b and 9c
+    showed governs everything downstream.
+
+    `reasoning_effort` is a reasoning model's thinking budget and it **changes
+    the answer**: on one fixed prompt this model returns 35 at the default and
+    45 at "low". It must therefore be frozen before any comparison, and it is
+    recorded in the run's provenance rather than left implicit. "low" is the
+    default here because the default budget costs about 7x the output tokens
+    for the same one-number answer.
+    """
+    from groq import Groq
+
+    client = Groq()
+
+    def call(system: str, prompt: str) -> tuple[str, int, int]:
+        kwargs = {"reasoning_effort": reasoning_effort} if reasoning_effort else {}
+        response = client.chat.completions.create(
+            model=model, max_tokens=max_tokens, temperature=temperature,
+            messages=[{"role": "system", "content": system},
+                      {"role": "user", "content": prompt}],
+            **kwargs,
+        )
+        message = response.choices[0].message
+        return (message.content or ""), response.usage.prompt_tokens, response.usage.completion_tokens
+
+    call.settings = {"model": model, "temperature": temperature,
+                     "reasoning_effort": reasoning_effort, "max_tokens": max_tokens}
+    call.pricing = (input_price, output_price)
+    return call
+
+
+# --------------------------------------------------------------------------
+# Phase 10 — choosing among alternatives, rather than buying or not
+# --------------------------------------------------------------------------
+#
+# The farmers' market asks a buyer to accept or decline one stall. The scanner
+# panel asks a household to pick one of four brands, given that it is buying.
+# Those are different questions and need different prompts, and conflating
+# them would let the simulator's no-purchase mechanism leak into a brand-choice
+# fidelity number - which Phase 10 explicitly conditions away.
+
+CHOICE_SYSTEM = (
+    "You are simulating one household's brand choice on a single shopping "
+    "trip. Given the shelf and the household's recent history, output the "
+    "percentage chance it picks each brand, as four integers separated by "
+    "spaces, in the order listed, summing to 100. Output only the four numbers."
+)
+
+
+def describe_choice(alternatives: list[dict], history: dict) -> str:
+    """The shelf and the household's history, at cache-able resolution.
+
+    Prices are bucketed to the nearest 5 cents. Left exact, essentially every
+    occasion would be a distinct prompt and a cache would never hit, which
+    decides whether this phase is affordable at all.
+    """
+    lines = []
+    for a in alternatives:
+        promos = [k for k in ("display", "feature") if a[k]]
+        tag = f", on {' and '.join(promos)}" if promos else ""
+        lines.append(f"- {a['brand']}: {5 * round(a['price'] / 5):.0f} cents{tag}")
+    if history.get("last") is None:
+        past = "This is the first recorded trip for this household."
+    else:
+        past = (f"Last trip it bought {history['last']}. Over its recent trips "
+                f"it bought {history['top']} most often "
+                f"({int(round(history['top_share'] * 10)) * 10}% of the time).")
+    return "Shelf today:\n" + "\n".join(lines) + "\n" + past
+
+
+def parse_distribution(text: str, n: int = 4) -> list[float] | None:
+    """`n` non-negative numbers, normalized. None if the reply is not that.
+
+    Normalizing rather than requiring an exact sum: a model that answers
+    "40 30 20 15" has expressed a clear ranking and near-clear magnitudes, and
+    discarding it would throw away signal over an arithmetic slip. A reply
+    without `n` numbers is a parse failure and is not repaired.
+    """
+    found = [float(x) for x in re.findall(r"\d+(?:\.\d+)?", text)]
+    if len(found) < n:
+        return None
+    head = found[:n]
+    total = sum(head)
+    return None if total <= 0 else [v / total for v in head]
+
+
 class MockAgent:
     """A deterministic stand-in, so the pipeline is testable without a key.
 
