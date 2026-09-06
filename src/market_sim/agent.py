@@ -371,10 +371,18 @@ def gemini_client(model: str, input_price: float = 0.0, output_price: float = 0.
                     model=model, contents=prompt, config=config,
                 )
                 break
+            except errors.ServerError as error:
+                # 503 "high demand" is transient and frequent enough on the
+                # newer models that a run of a few thousand calls will meet it.
+                # Not retrying it was a hole big enough to kill a long run on
+                # its first unlucky minute.
+                if attempt == retries - 1:
+                    raise
+                time.sleep(min(75, 2 ** attempt) + random.random() * 2)
             except errors.ClientError as error:
                 # Only 429 is a pacing problem. A 400 means the request itself
-                # is wrong and retrying it eight times just makes it wrong
-                # eight times.
+                # is wrong - an unsupported thinking budget, say - and retrying
+                # it eight times just makes it wrong eight times.
                 if error.code != 429:
                     raise
                 if attempt == retries - 1:

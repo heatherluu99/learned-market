@@ -59,8 +59,14 @@ PROVIDERS = {
                      "max_tokens": 512},
         "limits": {"tokens_per_minute": 8000, "requests_per_minute": 30},
     },
+    # gemini-2.5-flash, the obvious pick, is retired for new users. Of what
+    # this account can reach, 3.8-flash is the newest that accepts
+    # `thinking_budget = 0` at all: 3.6-flash rejects it outright with a 400.
+    # An exact version, never `gemini-flash-latest` - a floating alias points
+    # at different models in different months and would make the arm
+    # unreproducible, which is the thing the freeze exists to prevent.
     "gemini": {
-        "model": "gemini-2.5-flash",
+        "model": "gemini-3.8-flash",
         "settings": {"temperature": 0.0, "thinking_budget": 0,
                      "max_tokens": 512},
         "limits": {"requests_per_minute": 10},
@@ -129,25 +135,39 @@ WORKERS = 4
 #: model's answers under the second model's name - an arm that never ran,
 #: reported as though it had. The prompt half also invalidates the cache for
 #: free if prompt construction changes.
-CACHE_PATH = RESULTS_ROOT / "agent_cache.json"
+#: One file per provider, not one shared file keyed by model. Each run does a
+#: single read-modify-write when it finishes, so two providers running at once
+#: - which is the natural way to use two arms - would have the later finisher
+#: overwrite whatever the earlier one had just paid for.
+LEGACY_CACHE = RESULTS_ROOT / "agent_cache.json"
 
 
-def load_cache(model: str) -> dict[str, list[float]]:
+def cache_path(provider: str) -> Path:
+    return RESULTS_ROOT / provider / "agent_cache.json"
+
+
+def load_cache(provider: str, model: str) -> dict[str, list[float]]:
     import json
-    if CACHE_PATH.exists():
-        return json.loads(CACHE_PATH.read_text()).get(model, {})
+    path = cache_path(provider)
+    if path.exists():
+        return json.loads(path.read_text()).get(model, {})
+    # A run that finished under the shared-file layout still has answers worth
+    # keeping; they are read from there once and rewritten split.
+    if LEGACY_CACHE.exists():
+        return json.loads(LEGACY_CACHE.read_text()).get(model, {})
     return {}
 
 
-def save_cache(model: str, answers: dict[str, list[float]]) -> None:
+def save_cache(provider: str, model: str, answers: dict[str, list[float]]) -> None:
     import json
-    CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
-    everything = json.loads(CACHE_PATH.read_text()) if CACHE_PATH.exists() else {}
+    path = cache_path(provider)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    everything = json.loads(path.read_text()) if path.exists() else {}
     everything[model] = answers
-    CACHE_PATH.write_text(json.dumps(everything))
+    path.write_text(json.dumps(everything))
 
 
-def agent_distributions(records, client, usage, model: str, rpm: int) -> tuple[np.ndarray, int]:
+def agent_distributions(records, client, usage, provider: str, model: str, rpm: int) -> tuple[np.ndarray, int]:
     """One distribution per occasion, querying each distinct prompt once.
 
     Deduplicated *before* querying rather than cached during it, so the work is
@@ -160,7 +180,7 @@ def agent_distributions(records, client, usage, model: str, rpm: int) -> tuple[n
     prompts = [agent.describe_choice(r["alternatives"], r["history"]) for r in records]
     distinct = list(dict.fromkeys(prompts))
     usage.cached = len(prompts) - len(distinct)
-    cache = load_cache(model)
+    cache = load_cache(provider, model)
     todo = [p for p in distinct if p not in cache]
     if cache:
         print(f"    {len(cache):,} answers already on disk; {len(todo):,} to fetch",
@@ -206,7 +226,7 @@ def agent_distributions(records, client, usage, model: str, rpm: int) -> tuple[n
             parsed = [1 / len(BRANDS)] * len(BRANDS)
         cache[prompt] = parsed
     usage.seconds = wall
-    save_cache(model, cache)
+    save_cache(provider, model, cache)
     if exhausted is not None:
         remaining = len(distinct) - len(results)
         print(f"\n    Daily quota reached with {remaining:,} prompts still to "
@@ -328,7 +348,7 @@ def main() -> int:
     build = agent.gemini_client if args.provider == "gemini" else agent.groq_client
     client = build(model, **provider["limits"], **settings)
     print("  Querying the Agent (cached on model and bucketed prompt)...", flush=True)
-    a, unparsed = agent_distributions(records, client, usage, model,
+    a, unparsed = agent_distributions(records, client, usage, args.provider, model,
                                      provider["limits"]["requests_per_minute"])
     print(f"  {usage.as_row()}\n")
 

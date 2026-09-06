@@ -3001,6 +3001,29 @@ design and stays where it is. What two models buy here is narrower and worth
 stating as such: whether this phase's headline conclusion survives changing the
 model at all.
 
+**The two arms are not matched on thinking budget, and cannot be.** Groq
+exposes `reasoning_effort`; Gemini exposes `thinking_budget`. These are
+different controls over different architectures, and setting one to "low" and
+the other to `0` does not make two models think equally hard. What is frozen is
+that neither setting changes across its own run, and that both are recorded.
+What is **not** claimed is a controlled contrast between model families: a
+difference between the arms confounds model identity with thinking budget, so
+the pair is reported as two separately-specified agents. Separating those is
+Phase 12's job and needs Phase 12's design.
+
+Freezing the budget is not only about cost. Left at the provider default with a
+64-token allowance, `gemini-3.8-flash` and `gemini-3.6-flash` returned **empty
+completions** — thinking consumed the entire allowance before any answer was
+emitted. An empty reply parses to nothing, is counted as unparsed, and is given
+a uniform distribution. An unfrozen thinking setting is therefore a
+silent-failure question, not a tuning question.
+
+`gemini-2.5-flash` is unavailable to new accounts, and `gemini-3.6-flash`
+rejects `thinking_budget = 0` outright with a 400. The arm is pinned to
+**`gemini-3.8-flash`**, an exact version rather than `gemini-flash-latest`: a
+floating alias resolves to different models in different months, which is
+precisely what the freeze exists to prevent.
+
 **2. Same-choice-set exposure.** For household `i` at occasion `t` the panel
 gives `C_it = {(price_j, display_j, feature_j)}` over the four brands. **The
 identical `C_it` is given to every non-human arm.** Human and synthetic face

@@ -159,11 +159,14 @@ def test_provenance_is_recorded_rather_than_assumed():
 
 
 def test_agent_cache_cannot_serve_one_model_s_answers_for_another(tmp_path, monkeypatch):
-    """The cache is keyed on (model, prompt), not the prompt alone.
+    """Answers are keyed on (provider, model), and each provider owns a file.
 
-    Keyed on the prompt alone, pointing the run at a second provider would
-    return the first provider's answers under the second's name: an arm that
-    never ran, reported as though it had. That is the failure this guards.
+    Two failures are guarded here. Keyed on the prompt alone, pointing the run
+    at a second provider would return the first provider's answers under the
+    second's name: an arm that never ran, reported as though it had. Sharing
+    one file, two providers running at once - the natural way to use two arms -
+    would each do a single read-modify-write at the end, and the later finisher
+    would overwrite what the earlier one had just paid for.
     """
     import importlib.util
 
@@ -171,15 +174,38 @@ def test_agent_cache_cannot_serve_one_model_s_answers_for_another(tmp_path, monk
         "run_phase10", ROOT / "experiments" / "phase10" / "run_phase10.py")
     run = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(run)
-    monkeypatch.setattr(run, "CACHE_PATH", tmp_path / "agent_cache.json")
+    monkeypatch.setattr(run, "RESULTS_ROOT", tmp_path)
+    monkeypatch.setattr(run, "LEGACY_CACHE", tmp_path / "nonexistent.json")
 
-    run.save_cache("model-a", {"a prompt": [1.0, 0.0]})
-    run.save_cache("model-b", {"a prompt": [0.0, 1.0]})
+    run.save_cache("groq", "model-a", {"a prompt": [1.0, 0.0]})
+    run.save_cache("gemini", "model-b", {"a prompt": [0.0, 1.0]})
 
-    assert run.load_cache("model-a") == {"a prompt": [1.0, 0.0]}
-    assert run.load_cache("model-b") == {"a prompt": [0.0, 1.0]}
+    assert run.load_cache("groq", "model-a") == {"a prompt": [1.0, 0.0]}
+    assert run.load_cache("gemini", "model-b") == {"a prompt": [0.0, 1.0]}
+    # Separate files, so neither run's single final write can clobber the other.
+    assert run.cache_path("groq") != run.cache_path("gemini")
+    assert run.cache_path("groq").exists() and run.cache_path("gemini").exists()
     # A model that has never run has no answers, rather than inheriting them.
-    assert run.load_cache("model-never-queried") == {}
+    assert run.load_cache("groq", "model-never-queried") == {}
+    assert run.load_cache("gemini", "model-a") == {}
+
+
+def test_legacy_shared_cache_is_still_readable(tmp_path, monkeypatch):
+    """Answers paid for under the shared-file layout are not stranded."""
+    import json
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        "run_phase10", ROOT / "experiments" / "phase10" / "run_phase10.py")
+    run = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(run)
+    monkeypatch.setattr(run, "RESULTS_ROOT", tmp_path)
+    legacy = tmp_path / "agent_cache.json"
+    legacy.write_text(json.dumps({"model-a": {"a prompt": [1.0, 0.0]}}))
+    monkeypatch.setattr(run, "LEGACY_CACHE", legacy)
+
+    assert run.load_cache("groq", "model-a") == {"a prompt": [1.0, 0.0]}
+    assert run.load_cache("groq", "model-b") == {}
 
 
 def test_both_providers_are_declared_arms_with_frozen_settings():
