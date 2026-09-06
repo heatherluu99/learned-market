@@ -100,6 +100,27 @@ TOKENS_PER_MINUTE = 8000
 REQUESTS_PER_MINUTE = 30
 
 
+#: Answers are cached on disk between runs. The provider's free tier also caps
+#: *tokens per day* at 200,000 - about 700 calls - so this phase's 2,212
+#: distinct prompts are a three-day job, and a run that started from zero each
+#: day could never finish. The cache is keyed on the prompt, so it is also
+#: invalidated automatically if the prompt construction changes.
+CACHE_PATH = RESULTS_ROOT / "agent_cache.json"
+
+
+def load_cache() -> dict[str, list[float]]:
+    import json
+    if CACHE_PATH.exists():
+        return json.loads(CACHE_PATH.read_text())
+    return {}
+
+
+def save_cache(cache: dict[str, list[float]]) -> None:
+    import json
+    CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    CACHE_PATH.write_text(json.dumps(cache))
+
+
 def agent_distributions(records, client, usage) -> tuple[np.ndarray, int]:
     """One distribution per occasion, querying each distinct prompt once.
 
@@ -110,9 +131,17 @@ def agent_distributions(records, client, usage) -> tuple[np.ndarray, int]:
     import time
     from concurrent.futures import ThreadPoolExecutor
 
+    import groq
+
     prompts = [agent.describe_choice(r["alternatives"], r["history"]) for r in records]
     distinct = list(dict.fromkeys(prompts))
     usage.cached = len(prompts) - len(distinct)
+    cache = load_cache()
+    todo = [p for p in distinct if p not in cache]
+    if cache:
+        print(f"    {len(cache):,} answers already on disk; {len(todo):,} to fetch",
+              flush=True)
+    distinct = todo
     print(f"    {len(prompts):,} occasions -> {len(distinct):,} distinct prompts "
           f"({usage.cached / len(prompts):.1%} deduplicated)", flush=True)
     print(f"    request-paced at {REQUESTS_PER_MINUTE}/min: expect about "
@@ -130,11 +159,18 @@ def agent_distributions(records, client, usage) -> tuple[np.ndarray, int]:
         return prompt, agent.parse_distribution(text, len(BRANDS)), tin, tout, elapsed
 
     started = time.perf_counter()
-    with ThreadPoolExecutor(max_workers=WORKERS) as pool:
-        results = list(pool.map(query, distinct))
+    results, exhausted = [], None
+    try:
+        with ThreadPoolExecutor(max_workers=WORKERS) as pool:
+            for result in pool.map(query, distinct):
+                results.append(result)
+    except groq.RateLimitError as error:
+        # The daily cap is not something to retry through. Keep what was paid
+        # for, say so, and let the next run resume from the cache.
+        exhausted = str(error)
     wall = time.perf_counter() - started
 
-    cache, unparsed = {}, 0
+    unparsed = 0
     for prompt, parsed, tin, tout, _ in results:
         usage.calls += 1
         usage.input_tokens += tin
@@ -146,6 +182,13 @@ def agent_distributions(records, client, usage) -> tuple[np.ndarray, int]:
             parsed = [1 / len(BRANDS)] * len(BRANDS)
         cache[prompt] = parsed
     usage.seconds = wall
+    save_cache(cache)
+    if exhausted is not None:
+        remaining = len(distinct) - len(results)
+        print(f"\n    Daily quota reached with {remaining:,} prompts still to "
+              f"fetch. {len(cache):,} answers are saved; re-run tomorrow and it "
+              f"resumes.\n    {exhausted[:160]}", flush=True)
+        raise SystemExit(2)
     if unparsed:
         print(f"    {unparsed} of {len(distinct)} replies could not be parsed and "
               f"were given a uniform distribution", flush=True)

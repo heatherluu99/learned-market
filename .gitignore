@@ -12,3 +12,6 @@ __pycache__/
 
 # Node (only if a JS toolchain is added later for the Phase 6 visualization)
 node_modules/
+
+# Phase 10's agent answers: regenerable, and large
+results/phase10/agent_cache.json
