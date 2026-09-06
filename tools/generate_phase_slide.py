@@ -1430,6 +1430,98 @@ def phase7e2_slide() -> PhaseSlide:
     )
 
 
+def phase7e3a_slide() -> PhaseSlide:
+    """Assemble the Phase 7e-3a slide from the run outputs, not hand-typed numbers."""
+    import pandas as pd
+
+    dev = pd.read_csv(REPO_ROOT / "results/phase7e3a/oracle_context.csv")
+    held = pd.read_csv(REPO_ROOT / "results/phase7e3a/held_out.csv")
+    arm_cols = [c for c in dev.columns if c.startswith("arm_")]
+    median = dev["loyalty_stock"].median()
+    halves = {
+        "low": dev[dev["loyalty_stock"] <= median][arm_cols].mean(),
+        "high": dev[dev["loyalty_stock"] > median][arm_cols].mean(),
+    }
+    best = {k: arm_cols[int(np.argmax(v.to_numpy()))][4:] for k, v in halves.items()}
+
+    context = held["LinUCB context"].to_numpy()
+    blind = held["LinUCB blind"].to_numpy()
+    gain, lo, hi = acceptance.mean_difference_ci(context, blind)
+    scale = float(blind.mean())
+    verdict = acceptance.equivalence_verdict(
+        lo / scale, hi / scale, acceptance.MATERIALITY_PROFIT_PCT
+    )
+
+    return PhaseSlide(
+        phase_number=7,
+        phase_name="Mechanism Sufficiency — 7e-3a Does Context Pay?",
+        subtitle=(
+            "7c's question, asked where the state exists  ·  git tag: "
+            "phase7e3a-context  ·  tune on 2000–2059, test on 0–29"
+        ),
+        badge="EQUIVALENT — CONTEXT DOES NOT PAY",
+        badge_color=GOLD,
+        agents=[
+            ("Buyers: ", "100 — Poor 70 / Middle 20 / Rich 10, dispersed budgets"),
+            ("Sellers: ", "5 — one learns its price, the rest hold their list price"),
+        ],
+        environment=[
+            "-  7e-1's calibrated stock at the cell 7e-2 carried: delta = 1.0,",
+            "   L_max = 3.30, standing price 2.65, arms at ±20% of it.",
+            "-  Gate 1 established the state is dispersed and persistent.",
+        ],
+        method=[
+            "LinUCB on the loyalty stock and the week, against the identical",
+            "algorithm restricted to an intercept — same exploration mechanics,",
+            "same initial arm sweep, both tuned on the discovery block.",
+            "Plus an oracle diagnostic: does the best arm move with the state?",
+        ],
+        literature=[
+            (
+                "Li, Chu, Langford & Schapire (2010), ",
+                "“A Contextual-Bandit Approach to Personalized News Article "
+                "Recommendation” (WWW) — LinUCB, used in its original linear "
+                "form since the state is three interpretable features.",
+            ),
+        ],
+        metrics=[
+            MetricRow("Oracle best arm, low state", f"{best['low']}x", "—"),
+            MetricRow("Oracle best arm, high state", f"{best['high']}x", "—"),
+            MetricRow("LinUCB blind", f"{scale:.1f}/wk", "—"),
+            MetricRow("LinUCB with context", f"{context.mean():.1f}/wk", "—"),
+            MetricRow("  context vs blind", f"{gain / scale:+.1%}", "PASS"),
+            MetricRow("  its 95% CI vs ±5%",
+                      f"[{lo / scale:+.1%}, {hi / scale:+.1%}]",
+                      "PASS" if verdict != "inconclusive" else "FAIL"),
+        ],
+        research_question=(
+            "Now that a persistent, dispersed loyalty state exists, does a policy "
+            "that conditions on it beat one that ignores it?"
+        ),
+        finding=(
+            f"No, and the oracle says why rather than leaving it ambiguous. Over "
+            f"{len(dev)} seller-weeks split at the median loyalty state, the "
+            f"profit-maximizing arm is {best['low']}x on both sides — a seller "
+            f"with a loyal base and one without want the same price. The learner "
+            f"agrees: {gain / scale:+.1%}, CI [{lo / scale:+.1%}, "
+            f"{hi / scale:+.1%}], {verdict}. 7c's finding survives the mechanism "
+            f"change."
+        ),
+        caveat=(
+            f"The two measurements together rule out the reading a learned null "
+            f"alone cannot: with hindsight, perfect state measurement and no "
+            f"exploration cost, there is still nothing to condition on. And it "
+            f"connects back — no one-week deviation pays at any state, but 7e-2's "
+            f"sixteen-week one pays 2.6%. The exploitable structure is a sustained "
+            f"commitment, not a weekly state-contingent choice, so a contextual "
+            f"bandit is the wrong instrument by construction. Every learner also "
+            f"loses to flat pricing at the oracle price ({held['flat at the oracle price'].mean():.1f}/wk), "
+            f"which is not attainable by a learner and bounds rather than enters "
+            f"the comparison."
+        ),
+    )
+
+
 BUILDERS = {
     "1": phase1_slide,
     "2": phase2_slide,
@@ -1442,6 +1534,7 @@ BUILDERS = {
     "7d": phase7d_slide,
     "7e1": phase7e1_slide,
     "7e2": phase7e2_slide,
+    "7e3a": phase7e3a_slide,
 }
 
 

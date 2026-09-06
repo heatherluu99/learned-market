@@ -1391,6 +1391,37 @@ numbers are reported alongside rather than replaced. Should 300 seeds still not
 decide it, that is itself the result and no further widening is done — the
 escalation happens once.
 
+**Result: the escalation resolved it, and context does not pay.** At 300 seeds,
+LinUCB with the context earns **39.72 per week against the identical algorithm
+without it at 40.64 — −2.3%, 95% CI [−3.0%, −1.5%], equivalent** and decisive.
+The interval excludes zero, so the context is not merely useless but slightly
+costly: two extra parameters per arm have to be paid for out of the same 66
+weeks of data. It is a real cost and a small one, comfortably inside the ±5%
+margin, which is what "equivalent" says.
+
+**The two measurements agree, which is the point of running both.** A learned
+null on its own cannot separate "there is no signal" from "the signal is real
+but 66 weeks is too short to find it". The oracle answers that directly: with
+hindsight, perfect state measurement and no exploration cost, the best arm is
+still the same on both sides of the state.
+
+**The reference ladder, 300 seeds.** Every learner loses to the price it is
+hunting:
+
+| | profit/week |
+|---|---|
+| 7e-2's hand-designed schedule (30 seeds) | **44.32** |
+| flat at the oracle price | 43.36 |
+| LinUCB, context-blind | 40.64 |
+| LinUCB, with context | 39.72 |
+| UCB1 (7b's algorithm) | 37.49 |
+
+Flat pricing at the oracle optimum is not attainable by a learner — it is found
+by exhaustive sweep with hindsight — so it bounds the comparison rather than
+entering it. What the gap measures is the cost of exploring inside a single
+66-week season, about 6%, in a market where a schedule written by hand beats
+every learner in it.
+
 **Exit condition:** `git tag phase7e3a-context`.
 
 ---
