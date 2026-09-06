@@ -2818,6 +2818,80 @@ Extends the Phase 6/8 page. This is the centerpiece feature for the portfolio an
 
 ## Phase 10 — Human vs Agent (Asset A begins)
 
+### The dataset, and the boundary of what it can check
+
+**Data.** A scanner panel of cracker brand choices — **3,292 purchase occasions
+by 136 households**, about 24 occasions each, with every brand's price and its
+display and newspaper-feature promotions recorded at each occasion. Retrieved
+2026-09-06 from Rdatasets' mirror of the `Ecdat` R package
+(`csv/Ecdat/Cracker.csv`, 245 KB). Sources: Jain, Vilcassim & Chintagunta
+(1994), *JBES* 12(3), 317; Paap & Franses (2000), *JAE* 15(6), 717–744.
+
+Chosen because it is the same *kind* of object this project simulates —
+repeated discrete choices by identified individuals under varying price and
+promotion — and because it is the data the McFadden random-utility framework in
+`purchase_probability` was built for. Not chosen for size: a bigger panel with
+no repeated within-person occasions would be useless here, because every claim
+Phases 9a–9c make is about trajectories.
+
+**Three occasions are dropped**, carrying a price of 0 — all one brand, all
+chosen, against a 1st percentile of 74 for that brand. A coding artefact, and a
+zero price left in a utility model is the most attractive option in the
+dataset. The whole occasion is dropped rather than the row, so every remaining
+occasion keeps a complete choice set.
+
+**What this panel cannot check, recorded so no later comparison quietly
+extends to it:**
+
+| quantity | why not |
+|---|---|
+| `participation_rate` | every occasion ends in a purchase; there is no no-buy outcome |
+| the budget wall | no household income or budget is recorded |
+| class stratification | no demographics, so buyer class has no analogue |
+| inventory | stock-outs are not observed |
+
+That list removes a large share of Phases 1–5 from comparison. What remains is
+**conditional brand choice** — which is exactly what Phases 6 through 9 are
+about, and is the part of this project that the panel is actually a test of.
+
+### First contact: four comparable quantities
+
+| | humans | this simulator |
+|---|---|---|
+| **repeat purchase, excess over a no-memory baseline** | **+0.368** (0.773 against 0.405) | **+0.109** (0.425 against 0.316) |
+| share concentration | top brand 0.544 | top tier dominant |
+| price response | share 0.343 → 0.196 across the price range | negative `alpha` term |
+| promotion lift | display +0.6 to +10.6 pp; feature +8.3 to +20.1 pp | forced-arm lift, CI excluding zero |
+
+**The headline is the first row, and it is a gap rather than a match.** Real
+households repeat a brand with an excess of **+0.368** over what their own
+brand shares would produce by chance; this project's buyers manage **+0.109**.
+**Human loyalty in this panel is about 3.4× stronger than the simulator's.**
+
+That is exactly the comparison Phase 6 was built to make possible: it insisted
+on a memory-OFF control precisely because a raw repeat rate is not evidence of
+loyalty when one brand dominates, and the same control is what makes the human
+number comparable rather than merely larger. Both numbers are excesses over
+their own no-memory baselines.
+
+**It is a finding and not a defect**, in the sense the project has held
+throughout: `loyalty_bonus_per_streak = 0.5` and its cap of 3 were hand-chosen
+at Phase 6's design gate and **never fitted to anything** — the same objection
+Phase 9a raised about every other buyer parameter. The gap is the first
+measurement of how far one of those hand-chosen numbers is from a real
+population, and it is the kind of quantity Asset A is supposed to accumulate.
+
+**What must not be done with it.** Tuning `loyalty_bonus_per_streak` until the
+excess reaches +0.368 would destroy the pre-registration structure that every
+result in Phases 1–9 rests on: those conclusions hold *because* the parameters
+were never moved to match an outcome. Any calibration against human data
+belongs in Phase 11, as an explicit correction function fitted on a training
+subset and scored on a held-out one — not as an edit to Phase 6.
+
+**Still to design at this phase's gate:** the Agent arm, the choice-distribution
+comparison (Jensen–Shannon divergence and directional agreement), and how a
+simulated buyer is put in front of the same choice sets these households faced.
+
 **Research question:** For a fixed decision scenario, where does Agent/synthetic choice distribution match or diverge from real human choice distribution?
 
 **Budget constraint, addressed directly:** this project currently has no budget for new primary human data collection (surveys, panels). Phase 10 therefore runs **only on scenarios where a usable human benchmark already exists in the public record** — reusing published data rather than collecting new data. This is not a compromise invented for this project; it mirrors what Brand, Israeli & Ngwe (2023) themselves did — their human benchmark was an already-published conjoint study, not new data they collected.
