@@ -135,6 +135,17 @@ def test_the_gate_requires_all_three_and_rejects_a_constant_predictor():
         log_loss=0.6625, constant_log_loss=0.6904, entropy_floor=0.6424)
     assert all(c.passed for c in ok)
 
+    # Criterion 3 is a share of what is available, not a number of nats. Where
+    # the teacher is nearly a coin flip the whole available range is 0.012, and
+    # an absolute threshold of 0.02 would be larger than it - which is how
+    # Phase 9b's tau = 2.0 regime failed a gate nothing could pass.
+    thin = acceptance.evaluate_phase9a_offline(
+        distance=0.045, floor=0.045,
+        calibration={"buyer class": 0.005},
+        log_loss=0.6800, constant_log_loss=0.6857, entropy_floor=0.6739)
+    assert thin[2].passed, thin[2].measured
+    assert "48%" in thin[2].measured
+
     # aggregate-calibrated, conditionally empty: criteria 1 and 2 must fail
     constant = acceptance.evaluate_phase9a_offline(
         distance=0.124, floor=0.084,
@@ -157,3 +168,77 @@ def test_state_drift_is_zero_between_a_distribution_and_itself():
     shifted = data.copy()
     shifted[:, cols["streak_here"]] += 1.0
     assert acceptance.state_drift(data, shifted, cols)["streak_here"] == pytest.approx(1.0)
+
+
+# --------------------------------------------------------------------------
+# Phase 9b — the entropy axis
+# --------------------------------------------------------------------------
+
+
+def test_temperature_of_one_is_every_earlier_phase_exactly():
+    """The sweep's knob must be inert at its default or Phases 1-9a all move."""
+    assert PHASE6_MAIN.teacher_temperature == 1.0
+    explicit = dataclasses.replace(PHASE6_MAIN, teacher_temperature=1.0)
+    for seed in (0, 3):
+        a, b = run_season(PHASE6_MAIN, seed), run_season(explicit, seed)
+        assert np.array_equal(a.chosen_seller, b.chosen_seller)
+    p1 = run_seeds(PHASE1_MAIN)
+    assert float(np.mean([r.participation_rate for r in p1])) == pytest.approx(
+        0.8216666666666667, abs=1e-12
+    )
+
+
+@pytest.mark.parametrize("tau,expected", [(0.25, "sharper"), (4.0, "flatter")])
+def test_temperature_sharpens_without_reordering_preferences(tau, expected):
+    """It changes how decisively a buyer acts, never what it prefers."""
+    hot = dataclasses.replace(PHASE6_MAIN, teacher_temperature=tau,
+                              record_encounters=True)
+    base = np.asarray(run_season(_recording(), 0).encounters)
+    other = np.asarray(run_season(hot, 0).encounters)
+    # Week 0's first encounter per buyer is coupled, so the two are comparable.
+    def first(rows):
+        rows = rows[rows[:, 0] == 0]
+        _, keep = np.unique(rows[:, 1], return_index=True)
+        return rows[np.sort(keep)]
+    a, b = first(base), first(other)
+    assert np.array_equal(a[:, 1:3], b[:, 1:3])
+    # Above and below 0.5 is the preference; distance from 0.5 is the sharpness.
+    assert np.array_equal(a[:, I_P] > 0.5, b[:, I_P] > 0.5)
+    spread_a = np.abs(a[:, I_P] - 0.5).mean()
+    spread_b = np.abs(b[:, I_P] - 0.5).mean()
+    assert (spread_b > spread_a) if expected == "sharper" else (spread_b < spread_a)
+
+
+def test_lower_temperature_lowers_entropy_and_the_intrinsic_noise():
+    seeds = range(3)
+    previous_h, previous_noise = 1.1, 1.0
+    for tau in (1.0, 0.5, 0.2):
+        cfg = dataclasses.replace(PHASE6_MAIN, teacher_temperature=tau)
+        data = buyer.encounters(cfg, seeds)
+        h, noise = buyer.teacher_entropy_bits(data), buyer.intrinsic_noise(data)
+        assert h < previous_h and noise < previous_noise
+        previous_h, previous_noise = h, noise
+
+
+def test_the_offset_calibration_holds_the_level_while_entropy_moves():
+    """Without it a low-entropy regime is a different market, not a sharper one.
+
+    The confound this rules out is the whole reason the sweep can be read: a
+    change in purchase volume would move loyalty, seller profit and entry, and
+    any divergence measured against it would be the market having changed.
+    """
+    seeds = range(4)
+    target = buyer.mean_purchase_probability(PHASE6_MAIN, seeds)
+    raw = dataclasses.replace(PHASE6_MAIN, teacher_temperature=0.2)
+    uncalibrated = buyer.mean_purchase_probability(raw, seeds)
+    fixed = buyer.calibrate_offset(raw, target, seeds)
+    calibrated = buyer.mean_purchase_probability(fixed, seeds)
+
+    # Stated against the tolerance rather than an absolute: what matters is
+    # that the drift calibration removes is an order of magnitude larger than
+    # the drift it leaves.
+    tolerance = 0.005
+    assert abs(uncalibrated - target) > 8 * tolerance
+    assert abs(calibrated - target) <= tolerance
+    # ... while the entropy stays where the temperature put it
+    assert buyer.teacher_entropy_bits(buyer.encounters(fixed, seeds)) < 0.6

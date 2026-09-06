@@ -1445,9 +1445,13 @@ GATE9A_DISTANCE_SLACK = 0.005
 #: 0.0003 in aggregate and 0.3052 at its worst stratum, which is the failure
 #: this threshold exists to reject.
 GATE9A_CALIBRATION = 0.02
-#: Held-out log-loss must beat the constant predictor by this much, against a
-#: total available range of about 0.048 nats.
-GATE9A_LOGLOSS_GAIN = 0.02
+#: Share of the *available* log-loss reduction the student must capture. The
+#: range between the constant predictor and the teacher's own entropy varies by
+#: an order of magnitude across Phase 9b's regimes - 0.012 nats where the
+#: teacher is nearly a coin flip against 0.562 where it is nearly deterministic
+#: - so an absolute threshold is unreachable at one end and trivial at the
+#: other. Stated as a fraction, which is what the gate registered.
+GATE9A_LOGLOSS_SHARE = 0.40
 
 
 def evaluate_phase9a_offline(
@@ -1487,12 +1491,14 @@ def evaluate_phase9a_offline(
         ),
         CriterionResult(
             name="9a-3: the student beats the constant predictor",
-            passed=log_loss <= constant_log_loss - GATE9A_LOGLOSS_GAIN,
+            passed=(constant_log_loss - log_loss)
+            >= GATE9A_LOGLOSS_SHARE * max(constant_log_loss - entropy_floor, 1e-12),
             measured=f"log-loss {log_loss:.4f} against the constant "
-            f"predictor's {constant_log_loss:.4f} "
-            f"(gain {constant_log_loss - log_loss:.4f} of "
-            f"{constant_log_loss - entropy_floor:.4f} available)",
-            threshold=f"at least {GATE9A_LOGLOSS_GAIN:.2f} nats better",
+            f"predictor's {constant_log_loss:.4f} — gain "
+            f"{constant_log_loss - log_loss:.4f} of "
+            f"{constant_log_loss - entropy_floor:.4f} available "
+            f"({(constant_log_loss - log_loss) / max(constant_log_loss - entropy_floor, 1e-12):.0%})",
+            threshold=f"at least {GATE9A_LOGLOSS_SHARE:.0%} of what is available",
             note="The teacher's own entropy floors this at "
             f"{entropy_floor:.4f}; no model can score below it on samples.",
         ),

@@ -1795,6 +1795,94 @@ def phase9a_slide() -> PhaseSlide:
     )
 
 
+def phase9b_slide() -> PhaseSlide:
+    """Assemble the Phase 9b slide from the run outputs, not hand-typed numbers."""
+    import pandas as pd
+
+    r = pd.read_csv(REPO_ROOT / "results/phase9b/regimes.csv").sort_values(
+        "entropy_bits", ascending=False)
+    soft, sharp = r.iloc[0], r.iloc[-1]
+
+    def spearman(x, y):
+        return float(np.corrcoef(pd.Series(x).rank(), pd.Series(y).rank())[0, 1])
+
+    rho_amp = spearman(r["entropy_bits"], r["amplification"])
+    rho_drift = spearman(r["entropy_bits"], r["state_drift"])
+
+    return PhaseSlide(
+        phase_number=9,
+        phase_name="Teacher Entropy Sweep — 9b",
+        subtitle=(
+            "When does one-step imitation error compound?  ·  git tag: "
+            "phase9b-entropy  ·  5 regimes x 30 deployment seeds"
+        ),
+        badge="MONOTONE — NOT YET MATERIAL",
+        badge_color=GOLD,
+        agents=[
+            ("Buyers: ", "100 — a distilled policy deployed against the rule"),
+            ("Sellers: ", "5 — Phase 6's market, unchanged in every regime"),
+        ],
+        environment=[
+            "-  Teacher logit temperature over 2.0 / 1.0 / 0.5 / 0.25 / 0.1,",
+            "   sharpening the same preference ordering rather than changing it.",
+            "-  The sigmoid offset is re-solved at each so the mean purchase",
+            "   probability holds at 0.4594: entropy moves, the level does not.",
+        ],
+        method=[
+            "Per regime: fit up a capacity ladder, deploy the smallest student",
+            "that clears Gate 9a against that regime's own floor, then measure",
+            "D_offline, D_shadow, state drift and behavioural divergence.",
+        ],
+        literature=[
+            (
+                "Ross, Gordon & Bagnell (2011), ",
+                "“A Reduction of Imitation Learning and Structured Prediction to "
+                "No-Regret Online Learning” (AISTATS) — a bound driven by the "
+                "per-step error rate and silent on the environment's own noise, "
+                "which is the gap this sweep measures.",
+            ),
+        ],
+        metrics=[
+            MetricRow("Entropy swept", f"{soft['entropy_bits']:.2f} → "
+                      f"{sharp['entropy_bits']:.2f} bits", "—"),
+            MetricRow("Error / noise ratio R", f"{soft['R']:.0%} → {sharp['R']:.0%}", "—"),
+            MetricRow("Amplification",
+                      f"{soft['amplification']:.2f}x → {sharp['amplification']:.2f}x", "—"),
+            MetricRow("  Spearman vs entropy", f"{rho_amp:+.2f}", "PASS"),
+            MetricRow("State drift, Spearman", f"{rho_drift:+.2f}", "PASS"),
+            MetricRow("Shares equivalent",
+                      f"{int(r['shares_equivalent'].sum())} of "
+                      f"{int(r['n_shares'].sum())}", "—"),
+        ],
+        research_question=(
+            "Does the ratio of systematic policy error to intrinsic teacher "
+            "stochasticity govern whether one-step imitation error compounds "
+            "into trajectory divergence?"
+        ),
+        finding=(
+            f"Yes for the amplification, exactly. As entropy falls from "
+            f"{soft['entropy_bits']:.2f} to {sharp['entropy_bits']:.2f} bits with the "
+            f"market level held fixed, R rises {soft['R']:.0%} → {sharp['R']:.0%} and "
+            f"the amplification rises {soft['amplification']:.2f}x → "
+            f"{sharp['amplification']:.2f}x — Spearman {rho_amp:+.2f}, with the excess "
+            f"growing 160-fold and every interval excluding zero. State drift is "
+            f"equally monotone at {rho_drift:+.2f}."
+        ),
+        caveat=(
+            f"The fourth link is not reached. Behavioural divergence peaks at "
+            f"{r['behavioural_divergence_pp'].max():.2f} pp against a ±5 pp margin, and "
+            f"all {int(r['shares_equivalent'].sum())} class-to-tier shares return "
+            f"equivalent in every regime including the sharpest. Teacher "
+            f"stochasticity governs amplification and does not, alone, carry it "
+            f"through to material behaviour — what remains between them is the "
+            f"environment, which 9c ablates. Two corrections this sweep forced: "
+            f"criterion 3's absolute threshold exceeded the entire available range "
+            f"at high entropy, and a fixed architecture would have read 'this "
+            f"model stopped fitting' as 'the environment amplifies error'."
+        ),
+    )
+
+
 BUILDERS = {
     "1": phase1_slide,
     "2": phase2_slide,
@@ -1811,6 +1899,7 @@ BUILDERS = {
     "7e3b": phase7e3b_slide,
     "8": phase8_slide,
     "9a": phase9a_slide,
+    "9b": phase9b_slide,
 }
 
 

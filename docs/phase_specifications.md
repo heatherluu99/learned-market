@@ -2140,7 +2140,7 @@ observation set removes only about a third of the constant predictor's error.
 |---|---|---|---|
 | 1 | policy distance | `E\|p_T − p_θ\| ≤ floor + 0.005` | learned *something* but not everything the observation set allows |
 | 2 | stratified calibration | worst cell `\|mean p_θ − mean p_T\| ≤ 0.02` | learned the marginal but not the conditional |
-| 3 | proper score | held-out log-loss ≤ constant predictor's − 0.02 nats | learned nothing at all |
+| 3 | proper score | held-out log-loss captures ≥ 40% of the reduction available between the constant predictor and the teacher's own entropy | learned nothing at all |
 
 **Criterion 2 is the one with teeth, and its threshold comes from the failure it
 rejects.** A constant predictor emitting the market's mean rate has an
@@ -2167,9 +2167,14 @@ student act differently on an encounter, so 0.005 means the student takes a
 different action on half a percent more encounters than the best model with the
 same information — under one extra differing decision per buyer-season.
 
-**Criterion 3's 0.02 nats against a 0.0480-nat available range** (constant
-0.6904 down to the teacher's entropy 0.6424) requires capturing over 40% of the
-reduction that exists at all.
+**Criterion 3 is a share, not a number of nats.** At Phase 9a's temperature the
+available range is 0.0480 nats (a constant predictor's 0.6904 down to the
+teacher's entropy of 0.6424), and 40% of it is 0.019. Stated as an absolute it
+would be **unreachable at high teacher entropy and trivial at low**: across
+Phase 9b's regimes the available range runs from 0.012 nats to 0.562, a factor
+of fifty. This was implemented as an absolute 0.02 nats and corrected after
+Phase 9b's τ = 2.0 regime failed a threshold larger than its entire available
+range — the same error as Phase 7e's first gate, caught the same way.
 
 **Both label regimes are fitted.** Soft labels `(s, p_T(s))`, which the
 simulator makes available and which remove label noise; and sampled actions
@@ -2497,6 +2502,75 @@ Learning and Structured Prediction to No-Regret Online Learning" (AISTATS) —
 the compounding-error argument, whose bound is driven by the per-step error
 rate and is silent on the environment's own stochasticity. This phase measures
 what that bound leaves open.
+
+### Phase 9b result — the response curve exists, and it has not reached materiality
+
+**All five regimes clear Gate 9a on their own held-out states**, and the mean
+purchase probability is held at 0.4581–0.4599 against a target of 0.4594. The
+sweep is of one variable.
+
+| `tau` | `H(pi_T)` bits | `R` | `D_offline` | `D_shadow` | amplification | excess, 95% CI | state drift | behavioural |
+|---|---|---|---|---|---|---|---|---|
+| 2.00 | 0.979 | 9.2% | 0.0451 | 0.0458 | **1.02×** | +0.0007 [+0.0006, +0.0008] | 0.0016 | 0.33 pp |
+| 1.00 | 0.928 | 17.6% | 0.0832 | 0.0884 | **1.06×** | +0.0052 [+0.0050, +0.0055] | 0.0070 | 0.40 pp |
+| 0.50 | 0.760 | 30.6% | 0.1289 | 0.1520 | **1.18×** | +0.0231 [+0.0220, +0.0242] | 0.0198 | 1.67 pp |
+| 0.25 | 0.464 | 47.3% | 0.1498 | 0.2094 | **1.40×** | +0.0595 [+0.0572, +0.0619] | 0.0517 | 0.76 pp |
+| 0.10 | 0.191 | 84.6% | 0.1679 | 0.2799 | **1.67×** | +0.1120 [+0.1073, +0.1167] | 0.0883 | 2.49 pp |
+
+**The first three links of the chain are monotone and the correlations are
+exact.** Spearman against entropy: amplification **ρ = −1.00**, state drift
+**ρ = −1.00**, behavioural divergence ρ = −0.90. The excess grows by a factor
+of 160 across the sweep — 0.0007 to 0.1120 — with every interval excluding
+zero. So:
+
+```
+H(pi_T) ↓  →  R ↑  →  state drift ↑  →  error amplification ↑
+```
+
+is established, monotonically, over a five-fold range of entropy with the
+market level held fixed. 9a's `R = 17.6%` sits near the bottom of it, which is
+why 9a saw almost nothing.
+
+**The fourth link is not reached.** Behavioural divergence never becomes
+material: the largest class-to-tier shift anywhere in the sweep is **2.49 pp
+against a ±5 pp margin**, and **all six shares return `equivalent` in every
+regime**, including the sharpest. Nor is it monotone — 1.67 pp at `tau` = 0.5
+against 0.76 at 0.25 — which is what a max-statistic over six noisy shares
+does, and is the reason its ρ is −0.90 rather than −1.00.
+
+So the honest statement of the result is two clauses, and the second is not a
+weaker version of the first:
+
+> **Teacher stochasticity governs the amplification of imitation error, exactly
+> and monotonically. Across the range tested it does not, on its own, carry
+> that amplification through to economically material behavioural
+> divergence.**
+
+An 84.6% error-to-noise ratio and a 67% error amplification still produce a
+market whose every class-to-tier share is equivalent to the teacher's. The
+mechanism is not sufficient by itself. **What remains between amplification and
+behaviour is the environment**, which is what Phase 9c ablates: the budget wall
+that closes most of the action space regardless of policy, and the season-long
+preference draw that pulls a wandering buyer back.
+
+### Two corrections this sweep forced
+
+**Criterion 3's threshold was unreachable at high entropy.** The gate registered
+"over 40% of the reduction that exists at all" and the implementation used an
+absolute 0.02 nats. At `tau` = 2.0 the *entire* available range between the
+constant predictor and the teacher's entropy is **0.0118 nats**, so the
+threshold exceeded the quantity — the τ = 2.0 regime failed a gate no model
+could pass, exactly as Phase 7e's first gate did. Restated as the share it was
+registered as, and the regime passes at 48%.
+
+**A fixed architecture across regimes confounds two things.** A sharper teacher
+is a harder target: at `tau` = 0.1 the 64 × 2 student that suffices at `tau` = 1
+fails stratified calibration at 0.0510, while 256 × 3 reaches 0.0190 and passes.
+Held fixed, that would have appeared as "the environment amplifies error at low
+entropy" when part of it was "this architecture stopped fitting". Each regime is
+now trained up its own capacity ladder and the **smallest student that clears
+the gate** is the one deployed, so every point on the curve is a fair student
+measured against its own regime's floor.
 
 **Exit condition:** `git tag phase9b-entropy`.
 

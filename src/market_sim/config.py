@@ -194,6 +194,11 @@ class MarketConfig:
     #: bonus (0.5 * 3) so the two mechanisms share a ceiling and only the path
     #: to it differs - a 7e result cannot come from stronger habit.
     loyalty_max_bonus: float = 1.5
+    #: Phase 9b: temperature on the purchase logit. 1.0 is every phase before
+    #: it. Below 1 sharpens the same preference ordering toward a step
+    #: function; above 1 flattens it toward a coin flip. It changes how
+    #: *decisively* a buyer acts, never what it prefers.
+    teacher_temperature: float = 1.0
     #: Phase 9a: a learned buyer policy, `(observables) -> probability`. When
     #: set, buyers act on it instead of the hand-written rule - but the rule's
     #: own probability is still computed and recorded, so the teacher can be

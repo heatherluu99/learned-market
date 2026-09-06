@@ -54,6 +54,7 @@ TITLES = {
     "phase8_entry_exit": "Entry, exit and market structure",
     "phase9a_gate_evidence": "Teacher policy and the WTP decision (9a gate)",
     "phase9a_distillation": "Distilling the hand-written buyer (9a)",
+    "phase9b_entropy_sweep": "Teacher entropy sweep (9b)",
 }
 
 #: Runs whose figure was later overwritten in place by a successor writing to
@@ -76,6 +77,7 @@ STATUS = {
     "phase7e3b_horizon": "headroom",
     "phase9a_gate_evidence": "open",
     "phase9a_distillation": "headroom",
+    "phase9b_entropy_sweep": "headroom",
 }
 
 #: Ordered, and the order matters: "Implement Phase 7e-2: ... headroom gate"

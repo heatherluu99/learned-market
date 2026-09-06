@@ -212,3 +212,53 @@ def calibration(data: np.ndarray, predicted: np.ndarray) -> dict[str, float]:
             worst = max(worst, abs(predicted[mask].mean() - p[mask].mean()))
         out[name] = float(worst)
     return out
+
+
+def mean_purchase_probability(cfg: MarketConfig, seeds) -> float:
+    """Mean `p_T` over the affordable encounters `cfg` produces."""
+    data = encounters(cfg, seeds)
+    return float(data[:, ENCOUNTER_FIELDS.index("p_teacher")].mean())
+
+
+def teacher_entropy_bits(data: np.ndarray) -> float:
+    p = np.clip(data[:, ENCOUNTER_FIELDS.index("p_teacher")], 1e-12, 1 - 1e-12)
+    return float(-(p * np.log2(p) + (1 - p) * np.log2(1 - p)).mean())
+
+
+def intrinsic_noise(data: np.ndarray) -> float:
+    """sqrt(E[p(1-p)]) - the sd of the teacher's own per-decision coin flip.
+
+    The denominator of the ratio Phase 9b sweeps: a systematic policy error is
+    only able to steer a trajectory if it is large next to the noise the
+    environment already has.
+    """
+    p = data[:, ENCOUNTER_FIELDS.index("p_teacher")]
+    return float(np.sqrt((p * (1 - p)).mean()))
+
+
+def calibrate_offset(
+    cfg: MarketConfig, target: float, seeds, tolerance: float = 0.002,
+    iterations: int = 24,
+) -> MarketConfig:
+    """Re-solve `sigmoid_offset` so temperature moves entropy and not level.
+
+    Without this a low-temperature regime is a different market - different
+    volumes, different loyalty, different seller profits - and any divergence
+    measured in it would be confounded with the market having changed. The
+    mean purchase probability is monotone decreasing in the offset, so
+    bisection is enough.
+    """
+    lo, hi = cfg.sigmoid_offset - 6.0, cfg.sigmoid_offset + 6.0
+    best = cfg
+    for _ in range(iterations):
+        mid = 0.5 * (lo + hi)
+        candidate = dataclasses.replace(cfg, sigmoid_offset=mid)
+        achieved = mean_purchase_probability(candidate, seeds)
+        best = candidate
+        if abs(achieved - target) <= tolerance:
+            break
+        if achieved > target:
+            lo = mid
+        else:
+            hi = mid
+    return best

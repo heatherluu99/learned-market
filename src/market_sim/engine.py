@@ -160,6 +160,11 @@ def purchase_probability(
               - alpha*(price/price_reference) + 1.5*preference
     P       = sigmoid(utility - 2.0)
 
+    Temperature divides the logit, so it sharpens or flattens the same
+    preference ordering rather than changing it: `tau -> 0` approaches a step
+    function at `utility = offset`, `tau > 1` approaches a coin flip. It is
+    1.0 everywhere before Phase 9b.
+
     `price_reference` is passed in rather than read from the seller being
     scored, and the caller is expected to pass the same market-wide value for
     every seller in the run. It is the max posted price at configuration time
@@ -183,7 +188,9 @@ def purchase_probability(
     # Phase 6: habit. Passed in rather than read from cfg because it depends on
     # the buyer's streak, which is run state, not configuration.
     utility += loyalty_bonus
-    return float(sigmoid(utility - cfg.sigmoid_offset))
+    # Phase 9b: temperature. At 1.0 this is exactly the expression every
+    # earlier phase evaluated, so nothing before Phase 9b moves.
+    return float(sigmoid((utility - cfg.sigmoid_offset) / cfg.teacher_temperature))
 
 
 def run_single(cfg: MarketConfig, seed: int) -> RunResult:

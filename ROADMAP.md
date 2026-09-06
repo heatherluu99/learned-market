@@ -86,7 +86,7 @@ visualization** gets, and when. Specifically:
 
 ## Current phase
 
-**Phase 9a complete; next is Phase 9b.** Every phase through 9a is tagged.
+**Phase 9b complete; next is Phase 9c.** Every phase through 9b is tagged.
 
 Phase 9a distilled the hand-written buyer into a policy that sees eight
 observable columns and not the latent taste draw, and deployed it. The gate
@@ -106,6 +106,18 @@ The reason is quantitative: the teacher's per-decision noise has an sd of
 of the coin-flip the market already runs on. Compounding imitation error needs
 a near-deterministic teacher — the regime a temperature-0 LLM agent occupies —
 which makes this the axis Phase 9b sweeps.
+
+**Phase 9b swept it, and the response curve is exact.** Holding the market's
+purchase level fixed while teacher entropy falls from 0.98 to 0.19 bits, the
+error-to-noise ratio rises 9% → 85% and error amplification rises 1.02× →
+1.67× — Spearman **−1.00** against entropy, with the excess growing 160-fold
+and every interval excluding zero. State drift is equally monotone.
+
+**And the fourth link is not reached.** Behavioural divergence peaks at 2.49 pp
+against a ±5 pp margin, and all six class-to-tier shares return `equivalent` in
+every regime including the sharpest. Teacher stochasticity governs
+amplification; it does not, alone, carry it through to material behaviour.
+What remains between them is the environment, which **9c** ablates.
 
 Phase 8's entry/exit dynamics selectively eliminated the premium tier — from
 a 40% starting share to essentially zero in all eight cells — under this
@@ -220,7 +232,7 @@ Full specification: see `docs/phase_specifications.md`.
 | 7e | Mechanism Sufficiency | Under what market structure does each level of policy complexity become *necessary*? A separate environment with persistent, price-sensitive, bounded loyalty, run as three gates: state exists → intertemporal trade-off exists → complexity pays. **Gates 1 and 2 passed** — memory reaches 2.8× further than the counter's at lag 8 with lock-in strength held equal, and a discount-then-stop schedule beats the best standing price by +2.6% while the delta = 0 control loses. **Gate 3a null** — conditioning on the state is worth −2.3% (equivalent), and an oracle says the best arm is the same at every state. **Gate 3b not passed** — the Q-network reproduces the schedule's first eight weeks and stops, collecting 31% of a gain known to exist. Complexity became valuable without becoming learnable. | Infrastructure only — gives context conditioning and stateful learning an existence condition |
 | 8 | Endogenous Market Structure | Does repeated local interaction produce macro-level structure? | Infrastructure only — **web viz: entry/exit panels** |
 | 9a | Learned Buyer Policy | Can a learned policy recover the rule-based buyer's conditional behaviour, and does one-step fidelity survive closed-loop deployment? **The loop is real and does not compound** — D_shadow exceeds D_offline decisively (+0.0057, CI excludes zero) at 7%, with every trajectory quantity equivalent. | Infrastructure only — closes the buyer-side learning ladder |
-| 9b | Teacher Entropy Sweep | Does the ratio of systematic policy error to intrinsic teacher stochasticity govern whether one-step error compounds? | Infrastructure only |
+| 9b | Teacher Entropy Sweep | Does the ratio of systematic policy error to intrinsic teacher stochasticity govern whether one-step error compounds? **Yes for amplification** (Spearman −1.00, 1.02×→1.67×), **not yet for behaviour** (peak 2.49 pp against ±5). | Infrastructure only |
 | 9c | Stabilizer Ablation | Which environment characteristics — the budget wall, season-long fixed preference — suppress trajectory divergence? | Infrastructure only |
 | 9d | Synthetic Agent Users | What does an LLM Agent add over a *trained* buyer policy? | First scaffolding for A — **web viz: Agent Inspector; cost/speed KPI begins** |
 | 10 | Human vs Agent | Where does synthetic behavior match/diverge from real humans? | **A begins** |

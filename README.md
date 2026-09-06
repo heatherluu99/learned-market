@@ -29,6 +29,8 @@ worth reading.
 | 7e-3a | Does conditioning on loyalty state pay? | **No**, −2.3%. An oracle says there is nothing to condition on |
 | 7e-3b | Can a learner find a trade-off known to exist? | **Partly** — right shape, right depth, half the duration, **31% of the gain** |
 | 8 | Does macro structure emerge from micro interaction? | **Yes** — premium tier eliminated, no rule ever reads a class label |
+| 9a | Does one-step imitation fidelity survive closed-loop deployment? | **The loop is real and does not compound** — +0.0057 CI excludes zero, at 1.07× |
+| 9b | Does teacher entropy govern whether it compounds? | **Yes for amplification** — Spearman −1.00, 1.02×→1.67×. **Not yet for behaviour** |
 
 Full detail: [`docs/phase_specifications.md`](docs/phase_specifications.md).
 Every run: [`experiment_log.csv`](experiment_log.csv), or the self-contained
@@ -355,7 +357,7 @@ not move**. `N ≈ 15` does not mean the same fifteen stalls.
 of 3.0 against a price of 6.0, and both tiers pay the same rent. The market
 discovered what the population already made true.
 
-### 🔜 Phase 9a — learned buyer policy (in design review)
+### ✅ Phase 9a — learned buyer policy
 
 The next rung, and the concept trap is pinned before any code. Training
 trajectories come from **this project's own hand-coded buyer**, so a fitted
@@ -401,9 +403,42 @@ D_shadow  = E_{s∼d_θ}     |p_T(s) − p_θ(s)|     do I still imitate where I
 D(d_T, d_θ)                                     how far did I move the world?
 ```
 
-### ⬜ Phases 9b–16
+**Result.** The gate passes — policy distance 0.0834 against a measured floor
+of 0.0832, worst stratum calibration 0.0157. Deployed, `D_shadow` exceeds
+`D_offline` by **+0.0057, CI [+0.0055, +0.0060]**: the same student really is
+worse at imitating the teacher on the states *it* brings about. And the
+amplification is 1.07×, the largest state drift a Wasserstein-1 of 0.0100, and
+all six class-to-tier shares equivalent. **Under this stochastic teacher and
+these stabilizing dynamics, imitation error produces measurable endogenous
+distribution shift but not economically meaningful trajectory divergence.**
 
-LLM agents (9b), human comparison (10), bias quantification (11), cross-model
+### ✅ Phase 9b — teacher entropy sweep
+
+9a's conclusion names its conditions, so the next phase varies them. Sweeping
+the teacher's logit temperature with the **market's purchase level held fixed**
+— the offset re-solved at every temperature, or a sharper regime would be a
+different market rather than a sharper one:
+
+| `H(π_T)` bits | 0.98 | 0.93 | 0.76 | 0.46 | 0.19 |
+|---|---|---|---|---|---|
+| error / noise `R` | 9% | 18% | 31% | 47% | **85%** |
+| amplification | 1.02× | 1.06× | 1.18× | 1.40× | **1.67×** |
+| behavioural (pp) | 0.33 | 0.40 | 1.67 | 0.76 | 2.49 |
+
+**Amplification and state drift are monotone in entropy at Spearman −1.00**,
+with the excess growing 160-fold and every interval excluding zero. Every
+regime's student clears Gate 9a against its own floor, so no point on the curve
+is just an undertrained model.
+
+**The fourth link is not reached**: behavioural divergence peaks at 2.49 pp
+against a ±5 pp margin and all six shares stay equivalent everywhere. Teacher
+stochasticity governs amplification and does not, alone, carry it into material
+behaviour. What sits between them is the environment — **9c** ablates the budget
+wall and the season-long preference draw to find out which of them absorbs it.
+
+### ⬜ Phases 9c–16
+
+stabilizer ablation (9c), LLM agents (9d), human comparison (10), bias quantification (11), cross-model
 robustness (12–13), decision reliability (14), reference-scale demonstration
 (15), data flywheel (16). No human data enters before Phase 10, and nothing in
 Phases 1–9 claims anything about human behaviour.
@@ -414,7 +449,7 @@ Phases 1–9 claims anything about human behaviour.
 
 ```bash
 python -m venv .venv && .venv/bin/pip install -r requirements.txt
-.venv/bin/python -m pytest -q                        # 281 tests
+.venv/bin/python -m pytest -q                        # 295 tests
 .venv/bin/python experiments/phase8/run_phase8.py    # any phase
 .venv/bin/python tools/build_experiment_explorer.py  # rebuild the explorer
 ```
