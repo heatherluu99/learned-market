@@ -1871,7 +1871,7 @@ wrong policy. Over 14,160 decisions from the standing configuration:
 | decisions with `p` in [0.2, 0.8] | **99.6%** |
 | teacher's mean binary entropy | **0.938 bits** of 1.0 |
 | **accuracy ceiling of *any* deterministic policy** | **0.619** |
-| accuracy of a policy that recovers `p` exactly and samples | **0.541** |
+| **independent-sampling** agreement of a policy that recovers `p` exactly | **0.541** |
 
 Three things follow, and each is a trap this phase would otherwise walk into.
 
@@ -1880,10 +1880,11 @@ Three things follow, and each is a trap this phase would otherwise walk into.
    on almost every decision. Any accuracy figure reported in this phase must be
    read against that ceiling, and it is reported alongside every time.
 2. **Accuracy ranks the wrong policy first.** A policy that recovers `p`
-   exactly and samples from it scores **0.541** — *below* the deterministic
-   argmax policy's 0.619 — while being the only one that reproduces the
-   teacher's behaviour. Optimizing accuracy therefore pushes the fit toward a
-   deterministic policy that is wrong in exactly the way that matters.
+   exactly and then draws its own action scores **0.541** — *below* the
+   deterministic argmax policy's 0.619 — while being the only one that
+   reproduces the teacher's behaviour. Optimizing accuracy therefore pushes the
+   fit toward a deterministic policy that is wrong in exactly the way that
+   matters.
 3. **The aggregate consequence is large, not marginal.** The argmax policy
    buys on 23.8% of decisions against the teacher's 40.9% — **17.1 percentage
    points** — so a market run on it would have a different participation rate,
@@ -1893,27 +1894,69 @@ Three things follow, and each is a trap this phase would otherwise walk into.
 
 So 9a's offline objective and its offline metrics are **distributional**:
 fit with a proper scoring rule (log-loss or Brier, both minimized by the true
-`p` and neither by argmax), and score with calibration against `p_teacher(s)`
-rather than with agreement against a sampled action. **At deployment the
-learned policy samples; it does not take an argmax.** A student in a different
-policy class from its teacher is not being compared to it.
+`p` and neither by argmax), and score against `p_teacher(s)` rather than
+against a sampled action. **At deployment the learned policy samples; it does
+not take an argmax.** A student in a different policy class from its teacher is
+not being compared to it.
 
-**One consequence of this project's existing draw discipline is worth stating,
-because it makes the right metric the natural one.** The engine draws
-`purchase_draw[b, s]` once per encounter, and the learned policy is compared
-against that *same* draw. Teacher and student then differ on an encounter
-exactly when the shared uniform `u` falls between their two probabilities, so
+#### The teacher's probabilities are observable, so the labels are soft
+
+Ordinary behavioural cloning sees only `(s, a)` and has to recover the policy
+from noisy action samples. Here the teacher is a simulator and
+`p_T(s) = sigmoid(U(s) - offset)` is available exactly, so the training data can
+be `(s, p_T(s))` rather than `(s, a_T)`:
 
 ```
-P(actions differ) = |p_teacher(s) - p_theta(s)|
-one-step agreement = 1 - E|p_teacher - p_theta|
+L = - p_T log p_theta - (1 - p_T) log(1 - p_theta)      minimized at p_theta = p_T
 ```
 
-Under common random numbers, one-step agreement **is** a policy-distribution
-distance — mean absolute probability error — rather than an accuracy. The
-measurement design converts the naive metric into a proper one, and this is
-the reason to keep the shared draw rather than giving the student its own
-stream.
+This is soft-label policy distillation, and it removes label noise rather than
+averaging it away — a large variance reduction over fitting sampled zeros and
+ones.
+
+**It also creates the benchmark that makes the closed-loop result
+interpretable.** A student trained on soft labels is the best-case imitator:
+it has seen the teacher's own probabilities, not samples of them. If *that*
+student still drifts in closed loop, the drift cannot be attributed to label
+noise or to an insufficient sample, and what is left is genuine sequential
+distribution shift. Both arms are therefore fitted — sampled-action labels and
+soft labels — and the soft-label arm carries the argument.
+
+#### Two agreement numbers that must never be confused
+
+The 0.541 above is **independent-sampling agreement**: teacher and student each
+draw their own action from the same `p`, and disagree by chance. It is the
+right number for the sentence it appears in — that accuracy misranks policies —
+and it is *not* the number this phase measures.
+
+This project draws `purchase_draw[b, s]` once per encounter, and the student is
+scored against that **same** draw. Under that coupling the two act differently
+exactly when the shared uniform `u` falls between their probabilities:
+
+```
+a_T = 1[u < p_T]      a_S = 1[u < p_theta]      P(a_T != a_S | s) = |p_T - p_theta|
+```
+
+so a student that recovers `p` exactly agrees **100%** of the time, not 54.1%.
+The two must be labelled wherever either appears:
+
+| | perfect student scores |
+|---|---|
+| independent-sampling action agreement | **54.1%** |
+| **CRN-coupled policy agreement** (what 9a measures) | **100%** |
+
+**And the coupled quantity is not an accuracy at all.** For two Bernoulli
+policies the total variation distance is `TV(pi_T, pi_theta) = |p_T - p_theta|`,
+and the shared uniform is exactly the maximal coupling that attains it. So
+
+```
+1 - CRN-coupled agreement = E_s[ TV( pi_T(.|s), pi_theta(.|s) ) ]
+```
+
+— an **expected conditional policy distance**. It is called
+*CRN-coupled policy agreement* throughout, never "accuracy", because the name
+is what stops the 0.619 ceiling from being read onto it. Keeping the shared
+draw rather than giving the student its own stream is what buys this.
 
 ### Staging: four measurements, with a gate between the second and the third
 
@@ -1926,27 +1969,70 @@ offline conditional-policy fidelity
 ```
 
 **1 — Offline conditional-policy fidelity.** Does `pi_theta(. | s)` match
-`pi_teacher(. | s)` on the teacher's own state distribution? Scored on
-calibration and mean absolute probability error, never on bare accuracy.
+`pi_teacher(. | s)` on the teacher's own state distribution?
 
 **2 — Held-out calibration and generalization.** The same, on states the fit
 never saw. Calibration is what has to generalize; a model can be sharp and
 miscalibrated, and a miscalibrated policy is a differently-behaving one.
 
-**3 — The gate.** Only a policy that is calibrated on held-out states is
-deployed. A model that cannot match its teacher on the teacher's own state
-distribution has nothing to say about what happens when it changes that
-distribution.
+**3 — The gate.** Only a policy that passes on held-out states is deployed. A
+model that cannot match its teacher on the teacher's own state distribution has
+nothing to say about what happens when it changes that distribution.
+
+**Calibration cannot be the gate on its own, and the failure mode is
+concrete.** A model that outputs the constant `p_theta(s) = 0.409` for every
+state is *aggregate-calibrated* against a market whose mean purchase rate is
+0.409 — and has learned nothing about the conditional structure of `p(s)`. It
+would pass a calibration check and produce a completely different market. The
+gate therefore requires **all three** together:
+
+| | what it catches |
+|---|---|
+| a **proper score** (log-loss / Brier) | overall fit; minimized only at `p_theta = p_T` |
+| `E\|p_T - p_theta\|` | the coupled policy distance the closed loop will feel |
+| **calibration** | systematic over- or under-confidence a mean score can hide |
+
+and calibration is checked **within behaviourally meaningful strata**, not only
+in aggregate: buyer budget class, seller tier, price range, loyalty level, and
+WTP band. A constant predictor is aggregate-calibrated and stratum-miscalibrated
+everywhere, which is exactly what stratification is for; subgroup failure is
+otherwise invisible under an averaged number.
 
 **4 — Closed-loop trajectory fidelity.** Deployed inside the market, does it
-reproduce the trajectory — participation, class-to-tier shares, pair
-stability, and under Phase 8's mechanism the entry/exit path?
+reproduce the trajectory — participation, class-to-tier shares, pair stability,
+and under Phase 8's mechanism the entry/exit path?
 
 **5 — State-distribution drift.** How far does the state distribution the
-policy faces in closed loop move from the one it was fitted on? This is the
-mechanism behind any degradation between stage 2 and stage 4, and measuring it
-separates "the policy is worse" from "the policy is being asked a different
-question".
+policy faces in closed loop move from the one it was fitted on?
+
+### The three-layer decomposition: approximation error against distribution shift
+
+The teacher is a function, not a trained artefact, so it remains evaluable at
+any state — including states the student reached and the teacher never would
+have. That makes it possible to **shadow-evaluate** the teacher on the
+student's own rollout without letting the teacher control the environment, and
+to separate two things that a single closed-loop number confounds:
+
+```
+D_offline = E_{s ~ d_T}     |p_T(s) - p_theta(s)|      can I imitate where the teacher goes?
+D_shadow  = E_{s ~ d_theta} |p_T(s) - p_theta(s)|      do I still imitate where I go?
+D(d_T, d_theta)                                        how far did I move the world?
+```
+
+`d_T` is the state distribution generated by teacher rollouts; `d_theta` the one
+the deployed student generates. The pair separates **policy approximation
+error** from **endogenous state-distribution shift**, and the interesting
+result is the one where they diverge — for instance `D_offline = 0.02` with
+`D_shadow = 0.09` and `d_theta != d_T`, which reads:
+
+> the student imitates the teacher almost exactly on the training distribution;
+> its own small early errors moved the future state distribution; and in those
+> rarer states its approximation error is amplified.
+
+That is closed-loop imitation failure proper, and neither number alone shows
+it. A high `D_shadow` with `d_theta ≈ d_T` would instead be plain
+underfitting, and `D_shadow ≈ D_offline` with `d_theta != d_T` would say the
+student generalizes and the drift is benign.
 
 **Research question, in full:**
 
@@ -1954,23 +2040,30 @@ question".
 > buyer it replaces, and does that one-step fidelity survive endogenous
 > distribution shift when the learned policy is deployed in closed loop?
 
-The gap between stages 2 and 4 is the phase's headline quantity, and the claim
-it tests is:
+**Hypothesis under test:**
 
-> **A model can imitate decisions offline without reproducing behaviour
-> dynamically.**
+> **High one-step conditional-policy fidelity does not guarantee closed-loop
+> trajectory fidelity, because policy errors can endogenously shift the state
+> distribution on which future decisions are made.**
 
-```
-small policy error -> different action -> different trajectory
-                   -> states the fit never saw -> larger policy error
-```
-
-A policy 95% faithful offline does not make 5% fewer good decisions in the
-market; it makes 5% *different* ones, which move the state distribution it then
+A policy 98% faithful offline does not make 2% fewer good decisions in the
+market; it makes 2% *different* ones, which move the state distribution it then
 faces out of the distribution it was fitted on, where its error is no longer
-5%. This is measurable here precisely because the teacher remains available for
-comparison at every step, and it would be invisible if the loop were closed
-immediately.
+2%.
+
+### The two arms answer two questions and are never merged
+
+```
+distillation    : minimize D(pi_theta, pi_T)     — can it behave like the teacher?
+surplus policy  : maximize E[WTP - price]        — what behaviour does optimizing
+                                                   buyer welfare produce instead?
+```
+
+**Higher surplus is not better synthetic-user fidelity.** The surplus arm is
+expected to depart from the teacher, and the size of that departure is the
+measure of how much the hand-written rule leaves on the table — not a fidelity
+score. Reporting the two under one heading would make an improvement in one
+look like an improvement in the other.
 
 ### The reward problem, and why a new primitive is needed
 
