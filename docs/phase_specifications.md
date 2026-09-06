@@ -2947,9 +2947,77 @@ project's own loyalty mechanism — an exponentially decaying loyalty stock,
 utility — which is what Phase 7e's stock rebuilt independently and what a Level
 3 model here would estimate rather than assume.
 
-**Still to design at this phase's gate:** the Agent arm, the choice-distribution
-comparison (Jensen–Shannon divergence and directional agreement), and how a
-simulated buyer is put in front of the same choice sets these households faced.
+### Phase 10 design gate — four components
+
+**1. Arms, with a baseline the Agent actually has to beat.**
+
+| arm | what it is | what it answers |
+|---|---|---|
+| **B0** | marginal brand shares | the floor |
+| **B1** | conditional logit: household-specific brand preference, price, display, feature, **no previous-choice term** | **the real control** |
+| **S** | this project's simulated buyer, same choice sets | |
+| **A** | LLM Agent, settings frozen | |
+
+The question is **not** "is the Agent close to humans" but **does the Agent
+recover sequential structure that B1 does not already capture**. Beating B0
+would say almost nothing: B1 already predicts 97% of the observed repeat rate
+without any memory term at all.
+
+**The Agent's prompt, observation set and state-update rule are frozen before
+any comparison**, and no held-out human outcome is used to tune them. The
+model's `reasoning_effort` is part of that freeze — it changes the answer, the
+same prompt returning 35 at the default budget and 45 at "low".
+
+**2. Same-choice-set exposure.** For household `i` at occasion `t` the panel
+gives `C_it = {(price_j, display_j, feature_j)}` over the four brands. **The
+identical `C_it` is given to every non-human arm.** Human and synthetic face
+the same alternatives at the same prices under the same promotions, so the only
+thing that differs is the decision policy. Letting the simulator generate its
+own price environment and comparing aggregates would compare two markets rather
+than two policies.
+
+**3. Metrics: distributional distance *and* mechanism direction, both.**
+
+Jensen–Shannon divergence is bounded and symmetric and is the right measure of
+distributional distance — but two models can sit at the same JS with a
+mechanism backwards. It is computed **between distributions within a
+scenario**, never per occasion: against a single occasion the human side is a
+one-hot and the divergence is degenerate. Scenarios are previous brand crossed
+with whether anything is on feature.
+
+Alongside it, four **pre-registered contrasts** — price, display, feature,
+repeat — with
+
+```
+sign(delta_model) = sign(delta_human)
+```
+
+required before any magnitude is discussed. A low JS is not evidence that the
+mechanism was learned.
+
+**4. Two evaluations, which are the Phase 9 pair with a real teacher.**
+
+- **Observed-history one-step.** Before occasion `t` the model is given the
+  household's *real* history through `t-1` and asked for its choice
+  distribution. This is one-step conditional fidelity.
+- **Free-running closed loop.** After the first occasion the history is updated
+  with the model's *own* choices — `a_1 -> S_2 -> a_2 -> ...` — while each
+  occasion still presents the choice set the household actually faced. This
+  asks whether a small policy mismatch compounds into household-level
+  trajectory divergence.
+
+The two are **not re-synchronised**, because re-synchronising removes the
+feedback loop that is the object of study. This is exactly the pair Phases
+9a–9c measured against a simulator teacher; here the teacher is a real
+household sequence, and 9c's finding — that amplification needs persistent
+state to carry it — predicts that a real panel, which has genuine household
+persistence, is where it could appear.
+
+**Everything is conditioned on participation.** The panel has no no-purchase
+outcome, so the simulator's purchase mechanism is not in play and cannot leak
+into a brand-choice fidelity number.
+
+**Exit condition:** `git tag phase10-human-comparison`.
 
 **Research question:** For a fixed decision scenario, where does Agent/synthetic choice distribution match or diverge from real human choice distribution?
 
