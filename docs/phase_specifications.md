@@ -2854,39 +2854,98 @@ That list removes a large share of Phases 1–5 from comparison. What remains is
 **conditional brand choice** — which is exactly what Phases 6 through 9 are
 about, and is the part of this project that the panel is actually a test of.
 
+### What the panel supports, stated narrowly
+
+The residual data supports **comparison of conditional repeated-choice
+mechanisms**, not validation of the simulated purchase process. The panel gives
+
+```
+P(brand = j | a purchase occurred, this choice set, this context)
+```
+
+while the simulator additionally has a `P(purchase)` layer. Every Phase 10
+comparison is therefore **conditioned on participation** — `P(j | buy)` — so the
+model's no-purchase mechanism cannot leak into a brand-choice fidelity number.
+
 ### First contact: four comparable quantities
 
 | | humans | this simulator |
 |---|---|---|
-| **repeat purchase, excess over a no-memory baseline** | **+0.368** (0.773 against 0.405) | **+0.109** (0.425 against 0.316) |
+| **repeat purchase, excess over a marginal-share baseline** | **+0.359** (0.764 against 0.405, held out) | +0.109 (0.425 against 0.316) |
 | share concentration | top brand 0.544 | top tier dominant |
 | price response | share 0.343 → 0.196 across the price range | negative `alpha` term |
 | promotion lift | display +0.6 to +10.6 pp; feature +8.3 to +20.1 pp | forced-arm lift, CI excluding zero |
 
-**The headline is the first row, and it is a gap rather than a match.** Real
-households repeat a brand with an excess of **+0.368** over what their own
-brand shares would produce by chance; this project's buyers manage **+0.109**.
-**Human loyalty in this panel is about 3.4× stronger than the simulator's.**
+### The correction: most of that excess is not memory
 
-That is exactly the comparison Phase 6 was built to make possible: it insisted
-on a memory-OFF control precisely because a raw repeat rate is not evidence of
-loyalty when one brand dominates, and the same control is what makes the human
-number comparable rather than merely larger. Both numbers are excesses over
-their own no-memory baselines.
+The marginal-share baseline `sum_j s_j^2` removes brand-share concentration
+**and nothing else**. Persistent household preference and repeating price and
+promotion patterns are all still inside the excess, which is the identification
+problem Fader & Lattin (1993) and Keane (1997) raise about exactly this class of
+data. So a second baseline was built — Phase 6's memory-OFF control, rebuilt for
+a panel: a conditional logit given brand intercepts, **household-specific**
+brand preferences, price, display and feature, and **no previous-choice term by
+construction**. Fitted on alternating occasions within each household and
+scored on the others, since scoring in sample would inflate the baseline it is
+being used to measure.
 
-**It is a finding and not a defect**, in the sense the project has held
-throughout: `loyalty_bonus_per_streak = 0.5` and its cap of 3 were hand-chosen
-at Phase 6's design gate and **never fitted to anything** — the same objection
-Phase 9a raised about every other buyer parameter. The gap is the first
-measurement of how far one of those hand-chosen numbers is from a real
-population, and it is the kind of quantity Asset A is supposed to accumulate.
+| baseline | predicted repeat | excess over it |
+|---|---|---|
+| marginal share, `sum_j s_j^2` | 0.4049 | **+0.3592** |
+| conditional, pooled (price, display, feature, brand) | 0.4193 | +0.3448 |
+| conditional **+ household heterogeneity** | **0.7432** | **+0.0209** |
 
-**What must not be done with it.** Tuning `loyalty_bonus_per_streak` until the
-excess reaches +0.368 would destroy the pre-registration structure that every
-result in Phases 1–9 rests on: those conclusions hold *because* the parameters
-were never moved to match an outcome. Any calibration against human data
-belongs in Phase 11, as an explicit correction function fitted on a training
-subset and scored on a held-out one — not as an edit to Phase 6.
+**A memoryless model with household-specific preferences predicts 97% of the
+observed repeat rate.** Price, display and feature explain almost none of it —
+1.4 pp of 35.9 — and household preference explains nearly all the rest.
+
+**The penalty on the household deviations is selected, not chosen.** Across the
+grid the conditional excess runs from +0.001 at no penalty to +0.110 at 0.3 —
+nearly the whole distance between "no memory at all" and the marginal-share
+answer — so a hand-picked value would have been picking the finding. It is
+selected on **held-out predictive log-loss**, never on the repeat rate it
+implies, and the minimum is interior (0.5447 at zero penalty, **0.4722 at
+0.03**, 0.4832 at 0.1). The grid was extended downward after the first
+selection landed on its first point; a minimum at a boundary is not a minimum.
+
+### What can and cannot be concluded
+
+**The two estimands are not the same, and they bracket rather than agree.**
+
+- The simulator's **+0.109** is a *causal* ablation: the same seeds re-run with
+  loyalty disabled and fixed preference retained. It removes memory and holds
+  heterogeneity constant.
+- The panel's **+0.021** is a *statistical* control whose household intercepts
+  are estimated from that household's own other occasions — so they absorb some
+  genuine state dependence along with the preference. It is a **lower bound**.
+- The panel's **+0.359** removes nothing but concentration. It is an **upper
+  bound**.
+
+So human state dependence in this panel lies somewhere in **[+0.02, +0.36]**,
+and the simulator's +0.109 **falls inside that bracket**. The data as analysed
+so far supports no claim that this project's memory mechanism is too weak or
+too strong.
+
+**An earlier draft of this section claimed human loyalty was "about 3.4×
+stronger than the simulator's".** That compared +0.359 against +0.109 —
+an upper bound against a causal quantity — and is withdrawn. The correct
+statement:
+
+> Observed repeat purchasing exceeds the marginal-share no-memory benchmark by
+> 35.9 pp in the human panel against 10.9 pp in the simulator. This descriptive
+> gap is **not** a difference in causal memory strength, because household
+> preference heterogeneity and observed marketing conditions have not been
+> removed from the human benchmark. Once they are, only 2.1 pp survives — and
+> that figure is itself a lower bound.
+
+**Separating the two properly is Level 3 and is not done here**: a model
+carrying household heterogeneity *and* an explicit state-dependence term
+together, as Keane (1997) and Gupta, Chintagunta & Wittink (1997) do on this
+class of data. Guadagni & Little (1983) is the academic ancestor of this
+project's own loyalty mechanism — an exponentially decaying loyalty stock,
+`L_ijt = lambda L_ij,t-1 + (1 - lambda) I(Y_i,t-1 = j)`, entering a logit
+utility — which is what Phase 7e's stock rebuilt independently and what a Level
+3 model here would estimate rather than assume.
 
 **Still to design at this phase's gate:** the Agent arm, the choice-distribution
 comparison (Jensen–Shannon divergence and directional agreement), and how a

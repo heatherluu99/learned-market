@@ -62,19 +62,56 @@ def test_brand_shares_sum_to_one_and_are_concentrated(panel):
     assert shares.max() > 0.5           # one brand dominates, as in this market
 
 
-def test_repeat_purchase_is_reported_against_a_no_memory_baseline(panel):
-    """Phase 6's lesson, applied to real data.
+def test_the_marginal_baseline_is_named_for_what_it_actually_removes(panel):
+    """It removes brand-share concentration and nothing else.
 
-    An unequal brand share produces repeat purchasing with no memory at all, so
-    a raw repeat rate is not evidence of loyalty. The baseline is what
-    independent draws from the observed shares would give.
+    Persistent household preference and repeating price and promotion patterns
+    are all still inside the excess, so the field is called `marginal_excess`
+    and not `memory_effect`. Naming it the latter is the overclaim this test
+    exists to prevent.
     """
     r = human.repeat_rate(panel)
     shares = human.brand_shares(panel)
-    assert r["no_memory_baseline"] == pytest.approx(float((shares ** 2).sum()))
-    assert r["excess"] == pytest.approx(r["repeat_rate"] - r["no_memory_baseline"])
-    assert 0 < r["no_memory_baseline"] < r["repeat_rate"] <= 1
+    assert r["marginal_share_baseline"] == pytest.approx(float((shares ** 2).sum()))
+    assert r["marginal_excess"] == pytest.approx(
+        r["repeat_rate"] - r["marginal_share_baseline"])
+    assert "no_memory_baseline" not in r and "excess" not in r
+    assert 0 < r["marginal_share_baseline"] < r["repeat_rate"] <= 1
     assert r["n_pairs"] == panel["occasion"].nunique() - panel["household"].nunique()
+
+
+def test_household_preference_absorbs_most_of_the_marginal_excess(panel):
+    """The correction that matters, pinned as a number.
+
+    A memoryless model given household-specific brand preferences plus current
+    price, display and feature predicts nearly all the observed repeat rate.
+    Almost none of the marginal excess survives as anything memory-like.
+    """
+    l2, table = human.select_l2(panel)
+    assert table["held_out_log_loss"].idxmin() not in (0, len(table) - 1), \
+        "the penalty was selected at a grid boundary; extend the grid"
+    conditional = human.conditional_repeat_baseline(panel, l2=l2)
+    assert conditional["marginal_excess"] > 0.3
+    assert conditional["conditional_excess"] < 0.1
+    assert conditional["conditional_excess"] < conditional["marginal_excess"] / 3
+
+
+def test_the_penalty_is_selected_on_prediction_and_not_on_the_answer(panel):
+    """Choosing l2 by hand chooses the finding.
+
+    The conditional excess spans nearly the whole distance between "no memory"
+    and the marginal-share answer across this grid, so the selection criterion
+    has to be held-out predictive log-loss and never anything about the repeat
+    rate it implies.
+    """
+    excesses = [
+        human.conditional_repeat_baseline(panel, l2=v)["conditional_excess"]
+        for v in (0.0, 0.3)
+    ]
+    assert excesses[1] - excesses[0] > 0.08, "the knob must visibly move the answer"
+    l2, table = human.select_l2(panel)
+    assert set(table.columns) == {"l2", "held_out_log_loss"}
+    assert l2 in human.L2_GRID
 
 
 def test_price_response_slopes_downward(panel):
