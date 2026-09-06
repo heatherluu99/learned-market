@@ -1319,10 +1319,37 @@ flat pricing at the oracle standing price (the myopic ceiling, 43.18/wk) and
 7e-2's best hand-designed schedule (44.32/wk). A learner that cannot beat a
 schedule written by hand has not found much.
 
-**Gate 3a passes** if LinUCB beats UCB1 by a **material** margin under the
-standard ±5% relative test on the evaluation seeds. As everywhere since Phase
+**Gate 3a passes** if the contextual policy beats its context-blind control by
+a **material** margin under the standard ±5% relative test on the evaluation
+seeds. As everywhere since Phase
 5, what is *graded* is that the comparison reaches a verdict; which verdict it
 reaches is the finding.
+
+**The context-blind control is the same algorithm with the context removed, not
+UCB1.** The gate as first written compared LinUCB against UCB1, and a first
+measurement showed LinUCB ahead by +11.7% — which was not context. UCB1's
+exploration constant is fixed at √2 by definition while LinUCB's `alpha` is a
+free parameter, so the comparison was reading a tuned exploration rate against
+an untuned one. Replaced by **LinUCB restricted to an intercept**: identical
+algorithm, identical exploration mechanics, identical initial sweep, and the
+only difference is whether `loyalty_stock` and `season_fraction` are visible.
+Against that control the effect reverses to between −1.3% and −6.2%. UCB1 is
+still run and reported, for continuity with 7b, but it is not the control.
+
+Both learners are tuned on the discovery block — `c` for UCB1, `alpha` for both
+LinUCBs — so neither wins on a hyperparameter the other was denied.
+
+**Two implementation facts that decide whether LinUCB works at all, recorded
+because they are not tuning.** Weekly profits are strictly positive and about
+0.9 after scaling, while a ridge prior predicts 0; an arm that has returned a
+large positive reward therefore outscores every untried arm's optimism term,
+and in a first implementation LinUCB played a single arm for 65 of 66 weeks.
+Two corrections: **every arm is swept once before any is judged** — which UCB1
+does by definition and which Phase 7b found decided its own verdict, so both
+learners are given exactly the same sweep — and **rewards are centered on the
+learner's running mean**, so the prior means "an untried arm is worth what the
+seller has been earning" rather than "worth nothing". Neither uses information
+a seller does not have.
 
 **Literature basis:** Li, Chu, Langford & Schapire (2010), "A Contextual-Bandit
 Approach to Personalized News Article Recommendation" (WWW) — LinUCB, the
