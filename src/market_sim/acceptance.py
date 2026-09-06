@@ -1048,6 +1048,10 @@ def memory_off(cfg: MarketConfig) -> MarketConfig:
     """
     import dataclasses
 
+    if cfg.has_relationship_loyalty:
+        # gamma is the whole strength of v2's bonus, so zeroing it removes the
+        # mechanism while leaving rho, and therefore the state update, intact.
+        return dataclasses.replace(cfg, name=f"{cfg.name}_off", loyalty_gamma=0.0)
     if cfg.has_loyalty_stock:
         return dataclasses.replace(cfg, name=f"{cfg.name}_off", loyalty_max_bonus=0.0)
     return dataclasses.replace(

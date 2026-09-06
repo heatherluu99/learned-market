@@ -546,8 +546,13 @@ def run_season(cfg: MarketConfig, seed: int, policy=None) -> SeasonResult:
     # Phase 7e: a stock per buyer-seller pair, updated deterministically from
     # the week's purchases. It draws no randomness, so enabling it moves no
     # existing stream and Phases 1-7d stay bit-identical.
+    # Loyalty v2 ("relationship") shares this array and every code path that
+    # reads it - the same weekly freeze, the same deterministic update, the
+    # same absence of draws. Only the accrual and the bonus differ.
     loyalty_stock = (
-        np.zeros((n_buyers, n_sellers)) if cfg.has_loyalty_stock else None
+        np.zeros((n_buyers, n_sellers))
+        if (cfg.has_loyalty_stock or cfg.has_relationship_loyalty)
+        else None
     )
     bonus_hist: list[np.ndarray] = []
     # Phase 7: the posted price persists across weeks - that persistence is
@@ -605,7 +610,9 @@ def run_season(cfg: MarketConfig, seed: int, policy=None) -> SeasonResult:
                     # Appended rather than replacing loyal_fraction so 7d's
                     # feature list still reads the same four names.
                     "loyalty_stock": (
-                        float(np.tanh(loyalty_stock[:, si] / cfg.loyalty_saturation).mean())
+                        float(loyalty_stock[:, si].mean())
+                        if cfg.has_relationship_loyalty
+                        else float(np.tanh(loyalty_stock[:, si] / cfg.loyalty_saturation).mean())
                         if loyalty_stock is not None else 0.0
                     ),
                     "last_arm": int(chosen_arm[si]),
@@ -632,11 +639,17 @@ def run_season(cfg: MarketConfig, seed: int, policy=None) -> SeasonResult:
 
         # Frozen before any purchase, so a buyer's own buying this week cannot
         # move the bonus they are shopping under. The stock is a weekly state.
-        stock_bonus = (
-            cfg.loyalty_max_bonus * np.tanh(loyalty_stock / cfg.loyalty_saturation)
-            if loyalty_stock is not None
-            else None
-        )
+        if loyalty_stock is None:
+            stock_bonus = None
+        elif cfg.has_relationship_loyalty:
+            # v2: linear. L is bounded in [0,1] by the update, so the largest
+            # bonus any pair can carry is gamma, in every cell, with nothing
+            # solved per cell to make cells comparable.
+            stock_bonus = cfg.loyalty_gamma * loyalty_stock
+        else:
+            stock_bonus = cfg.loyalty_max_bonus * np.tanh(
+                loyalty_stock / cfg.loyalty_saturation
+            )
         if cfg.record_loyalty_bonus:
             bonus_hist.append(
                 (stock_bonus if stock_bonus is not None else _streak_bonus_matrix(
@@ -797,13 +810,22 @@ def run_season(cfg: MarketConfig, seed: int, policy=None) -> SeasonResult:
                     bought[b, s] = 1.0
             # `price` is what was actually paid, `price0` the stall's list
             # price, so a promotion counts as the deal it is.
-            accrual = cfg.loyalty_increment * np.maximum(
-                0.0,
-                1.0
-                + cfg.loyalty_deal_sensitivity
-                * (1.0 - price / price0)
-                / cfg.arm_half_range,
-            )
+            if cfg.has_relationship_loyalty:
+                # Guadagni & Little (1983): L <- rho*L + (1-rho)*I. One
+                # parameter, bounded in [0,1], no promotion term - delta is
+                # held at zero throughout this branch for identification, so
+                # it is absent here rather than multiplied by zero.
+                accrual = 1.0 - cfg.loyalty_retention
+            else:
+                # `price` is what was actually paid, `price0` the stall's list
+                # price, so a promotion counts as the deal it is.
+                accrual = cfg.loyalty_increment * np.maximum(
+                    0.0,
+                    1.0
+                    + cfg.loyalty_deal_sensitivity
+                    * (1.0 - price / price0)
+                    / cfg.arm_half_range,
+                )
             loyalty_stock = loyalty_stock * cfg.loyalty_retention + bought * accrual
 
         if cfg.record_encounters:

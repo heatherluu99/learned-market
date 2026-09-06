@@ -174,6 +174,9 @@ class MarketConfig:
     #: per-pair stock, which decays instead of resetting and accrues more from
     #: a cheaper purchase - the property that makes a discount buy something
     #: outlasting the week. See docs/phase_specifications.md, Phase 7e.
+    #: "relationship" is Loyalty v2: Guadagni & Little's own form, kept as a
+    #: third option rather than a replacement so Phases 6 and 7e stay
+    #: reproducible under the mechanisms they were measured with.
     loyalty_model: str = "streak"
     #: Weekly retention (rho). 0.80 gives a stock half-life of 3.1 weeks and
     #: costs a defector 20% of the stock rather than all of it.
@@ -217,6 +220,11 @@ class MarketConfig:
     #: Keep the per-week (buyer, seller) bonus matrix on the SeasonResult.
     #: Off by default: only Phase 7e's calibration reads it, and it is the one
     #: run-state array whose size scales with buyers x sellers x weeks.
+    #: Loyalty v2's single strength parameter: the bonus is `gamma * L` and,
+    #: since L is bounded in [0,1], `gamma` is also the maximum effect and
+    #: `gamma / teacher_temperature` the maximum shift in purchase log-odds.
+    loyalty_gamma: float = 0.0
+
     record_loyalty_bonus: bool = False
 
     #: Phase 5: budget-cliff nonlinearity. None disables it entirely (Phases
@@ -250,7 +258,7 @@ class MarketConfig:
     def __post_init__(self) -> None:
         if not self.seller_classes:
             raise ValueError("a market needs at least one seller class")
-        if self.loyalty_model not in ("streak", "stock"):
+        if self.loyalty_model not in ("streak", "stock", "relationship"):
             raise ValueError(f"unknown loyalty_model {self.loyalty_model!r}")
         if self.exit_rule not in (None, "capital", "streak"):
             raise ValueError(f"unknown exit_rule {self.exit_rule!r}")
@@ -330,11 +338,17 @@ class MarketConfig:
 
     @property
     def has_loyalty(self) -> bool:
-        return self.has_loyalty_stock or self.loyalty_bonus_per_streak > 0
+        return (self.has_loyalty_stock or self.has_relationship_loyalty
+                or self.loyalty_bonus_per_streak > 0)
 
     @property
     def has_loyalty_stock(self) -> bool:
         return self.loyalty_model == "stock"
+
+    @property
+    def has_relationship_loyalty(self) -> bool:
+        """Loyalty v2: `L <- rho*L + (1-rho)*I`, bonus `gamma*L`, L in [0,1]."""
+        return self.loyalty_model == "relationship"
 
     @property
     def has_entry_exit(self) -> bool:
@@ -394,6 +408,11 @@ class MarketConfig:
         ]
 
     def max_loyalty_bonus(self) -> float:
+        # v2's whole point: L is bounded in [0,1] by construction, so the
+        # maximum effect is gamma exactly - the same number in every cell,
+        # with nothing solved per cell to make cells comparable.
+        if self.has_relationship_loyalty:
+            return self.loyalty_gamma
         if self.has_loyalty_stock:
             return self.loyalty_max_bonus
         return self.loyalty_bonus_per_streak * self.loyalty_streak_cap
@@ -825,6 +844,64 @@ PHASE7E_COUNTER = dataclasses.replace(
 )
 
 PHASE7E_CELLS = tuple(phase7e_cell(rho=r) for r in PHASE7E_RETENTIONS)
+
+
+# --------------------------------------------------------------------------
+# Loyalty v2 — a human-constrained relationship-state branch
+# --------------------------------------------------------------------------
+#
+# Guadagni & Little (1983) as written: `L <- rho*L + (1-rho)*I`, bonus
+# `gamma*L`. No saturating transform, no per-cell calibration, and no
+# promotion term - `delta` is held at zero throughout this branch so that a
+# change in state dependence is attributable to persistence or to strength and
+# not to their confound with price exposure.
+
+#: How long memory lasts. Half-lives of 1.0, 3.1 and 13.5 weeks.
+LOYALTY_V2_RHOS = (0.50, 0.80, 0.95)
+
+#: How hard it pushes. 1.5 is not a free choice - it is Phase 6's streak
+#: maximum, `kappa * C = 0.5 * 3` - so the ladder is 0.5x / 1x / 2x around the
+#: value every earlier phase already used. At `tau = 1` these are odds ratios
+#: of 2.1, 4.5 and 20. The top cell is a stress point and asserts nothing
+#: about real loyalty: it asks whether even very strong causal leverage lands
+#: inside the human-compatible region.
+LOYALTY_V2_GAMMAS = (0.75, 1.50, 3.00)
+
+
+def loyalty_v2_cell(rho: float, gamma: float) -> MarketConfig:
+    """One cell of the pre-registered grid, on Phase 7a's flat-price market.
+
+    The environment outside the loyalty mechanism is Phase 7e's, so the two
+    branches differ in the mechanism and nothing else and can be read against
+    each other directly.
+    """
+    return dataclasses.replace(
+        PHASE7A_FIXED,
+        name=f"loyaltyv2_r{int(rho * 100):03d}_g{int(gamma * 100):03d}",
+        loyalty_model="relationship",
+        loyalty_retention=rho,
+        loyalty_gamma=gamma,
+        # Zeroed rather than left at their defaults: under "relationship" none
+        # of these is read, and a config should not carry a number that does
+        # nothing.
+        loyalty_bonus_per_streak=0.0,
+        loyalty_deal_sensitivity=0.0,
+        record_loyalty_bonus=True,
+    )
+
+
+LOYALTY_V2_CELLS = tuple(
+    loyalty_v2_cell(rho, gamma)
+    for rho in LOYALTY_V2_RHOS
+    for gamma in LOYALTY_V2_GAMMAS
+)
+
+#: M1, the streak ablation, on the same environment. M0 is `memory_off` of
+#: either.
+LOYALTY_V2_STREAK = dataclasses.replace(
+    PHASE7A_FIXED, name="loyaltyv2_m1_streak",
+    loyalty_bonus_per_streak=0.5, loyalty_streak_cap=3, record_loyalty_bonus=True,
+)
 
 
 # --------------------------------------------------------------------------
