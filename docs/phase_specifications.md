@@ -4070,6 +4070,84 @@ distinction is the same one Phase 9 spent three sub-phases on, and one-step
 agreement there did not imply trajectory agreement.
 
 
+### Phase 10 free-running closed loop — no compounding, against the gate's own expectation
+
+The second of the gate's two evaluations, and the last registered piece of
+Phase 10 that had not been built. After the first occasion the loyalty state is
+advanced by the model's **own sampled choices**, never re-synchronised to the
+panel, while each occasion still presents the choice set the household actually
+faced. 40 independent rollouts. `rho` and `gamma` are carried over from the S
+arm rather than re-selected, since selecting them against the closed-loop
+metric would be selecting on the thing being measured.
+
+| arm | weighted JS | log-loss | directions |
+|---|---|---|---|
+| one-step (real history) | 0.0010 | 0.4673 | 4/4 |
+| free-running (own history) | 0.0011 | 0.4713 | 4/4 |
+
+**Closed-loop amplification: 1.09x.** And the aggregate ratio is the weaker
+half of the evidence — compounding means divergence *grows with depth*, which a
+single ratio cannot show:
+
+| occasions into the household | n | one-step | free-running | ratio |
+|---|---|---|---|---|
+| 0–3 | 136 | 0.0169 | 0.0167 | **0.99** |
+| 3–8 | 407 | 0.0076 | 0.0080 | **1.06** |
+| 8–16 | 522 | 0.0048 | 0.0050 | **1.03** |
+| 16+ | 546 | 0.0026 | 0.0025 | **0.96** |
+
+**There is no trend.** The ratio is flat and if anything dips at the deepest
+bucket. Forty occasions into a household's own sequence, a model driving its
+own history is as close to that household's behaviour as one being handed the
+real history at every step. The realized trajectory agrees too: the
+free-running repeat rate is **0.7695** against the panel's **0.7729**, a gap of
+0.0034.
+
+### This contradicts the Phase 10 gate and agrees with Gate B3
+
+The gate registered an expectation, reasoning from Phase 9c:
+
+> 9c's finding — that amplification needs persistent state to carry it —
+> predicts that a real panel, which has genuine household persistence, is
+> where it could appear.
+
+It did not appear. Loyalty v2's Gate B3 had meanwhile found the opposite sign —
+`dA/dgamma < 0`, stronger memory stabilizing rather than amplifying — and **this
+run agrees with the later measurement against the earlier registration.** Both
+are on record and neither was adjusted after seeing the other.
+
+The numerical agreement is closer than it had any right to be. Gate B3's
+weakest-memory cells sat at **1.07–1.08** amplification at `tau = 1.0`; this
+closed loop, on real household sequences, in a different environment, under a
+different metric — Jensen-Shannon between brand-choice distributions rather
+than policy distance between purchase probabilities — gives **1.09**.
+
+**So one-step conditional fidelity does imply trajectory fidelity here**, which
+is the question Phase 9 spent three sub-phases on and answered the other way
+against a simulator teacher. The reconciliation is Gate B3's: a persistent
+per-pair state is an attractor, and an attractor pulls a wandering trajectory
+back rather than letting it drift.
+
+### What this does not establish
+
+**The environment is still the household's.** Prices, display and feature are
+the real ones at every occasion; only the choice history is endogenous. This
+measures whether a *policy* error compounds, not whether a *market* would
+diverge — no seller here reacts to what the simulated buyer does. The
+market-level loop is Phase 7's and Phase 8's subject and is not tested by this.
+
+**The memory being carried is weak.** `gamma = 0.5` is what held-out log-loss
+selected, and the S arm found that its contribution over B1 is not
+distinguishable from zero. A mechanism that adds nothing measurable is not one
+that can compound much, so this result is partly a restatement of that null.
+Gate B3's finding cuts the other way — amplification falls further as `gamma`
+rises — but that was measured in the farmers' market, and the two have not been
+crossed.
+
+With this, both evaluations the Phase 10 gate registered for the S arm are
+built and run.
+
+
 ## Phase 11 — Bias Quantification (Asset A formalizes; Asset B built)
 
 **Research question:** Is the human-AI gap systematic and predictable, and can it be corrected?
