@@ -72,12 +72,34 @@ def main() -> int:
 
     panel = human.load()
     l2, _ = human.select_l2(panel)
+
+    # Both splits, because the difference between them IS the finding here.
+    # Under "alternating" an antecedent an odd number of occasions back is
+    # always a training occasion and an even one always held out, so the
+    # measured excess alternates with lag parity - a bias that is a function
+    # of the lag, which is fatal for a shape comparison. The conclusions below
+    # rest on "contiguous"; the alternating profile is reported so the
+    # artifact stays visible rather than being quietly dropped.
+    alternating = human.repeat_bracket_by_lag(panel, LAGS, l2=l2,
+                                              split="alternating")
+    alt_ratio = float(alternating.set_index("lag").loc[8, "lower"]
+                      / alternating.set_index("lag").loc[1, "lower"])
+    print(f"  Human panel, ALTERNATING split (the artifact): "
+          f"ratio {alt_ratio:.3f}")
+    print("    " + "  ".join(f"lag {r.lag}: {r.lower:+.4f}"
+                             for r in alternating.itertuples()))
+    print("    Odd lags are biased low: their antecedent is a training "
+          "occasion.\n")
+
     human_rows = []
-    print(f"  Human panel (l2 = {l2}, selected on held-out log-loss):")
+    print(f"  Human panel, CONTIGUOUS split (l2 = {l2}, "
+          f"selected on held-out log-loss):")
     print(f"  {'lag':>4s} {'n':>6s} {'observed':>10s} {'memoryless':>11s} "
           f"{'lower':>9s} {'upper':>9s}")
+    fit = human.fit_memoryless_choice(panel, household_effects=True, l2=l2,
+                                      split="contiguous")
     for lag in LAGS:
-        d = human.conditional_repeat_baseline(panel, l2=l2, lag=lag)
+        d = human._repeat_at_lag(panel, fit, lag)
         human_rows.append({"lag": lag, "n": d["n_held_out"],
                            "observed": d["observed_repeat"],
                            "memoryless": d["memoryless_predicted_repeat"],
@@ -93,7 +115,9 @@ def main() -> int:
     # by one at any parameter value.
     h_lower = human_frame.set_index("lag")["lower"]
     human_ratio = float(h_lower[8] / h_lower[1])
-    print(f"\n  Human decay ratio (lag 8 / lag 1, lower bound): {human_ratio:.3f}")
+    print(f"\n  Human decay ratio (lag 8 / lag 1, lower bound): {human_ratio:.3f} "
+          f"under the parity-free split, against {alt_ratio:.3f} under the "
+          f"alternating one.")
 
     rows = []
     print(f"\n  Simulator, excess by lag:")
@@ -120,7 +144,10 @@ def main() -> int:
 
     frame = pd.DataFrame(rows)
     frame.to_csv(RESULTS_ROOT / "horizon_cells.csv", index=False)
-    human_frame.to_csv(RESULTS_ROOT / "horizon_human.csv", index=False)
+    human_frame["split"] = "contiguous"
+    alternating["split"] = "alternating"
+    pd.concat([human_frame, alternating], ignore_index=True).to_csv(
+        RESULTS_ROOT / "horizon_human.csv", index=False)
     plot(frame, human_frame, m1)
 
     n_every = int(frame["admissible_every_lag"].sum())
@@ -129,7 +156,8 @@ def main() -> int:
           f"(Gate A's one-step test passed 8/9).")
     print(f"  Human decay ratio {human_ratio:.3f}; closest cell "
           f"{closest['cell']} at {closest['decay_ratio']:.3f}. "
-          f"Every cell decays; the human profile does not.")
+          f"The human profile decays too, at a rate between rho = 0.50 and "
+          f"rho = 0.80.")
 
     experiment_log.append_row(LOG_PATH, {
         "experiment_id": "loyaltyv2_horizon_shape",
@@ -153,7 +181,7 @@ def main() -> int:
         "human_benchmark_status": "compared_to_published_panel",
         "participation_rate": "N/A - conditional on choice",
         "result_summary": (
-            f"Human excess is flat across lags ("
+            f"Human excess decays across lags ("
             + ", ".join(f"lag {r.lag}: {r.lower:+.4f}" for r in human_frame.itertuples())
             + f"), decay ratio {human_ratio:.3f}. Every simulator cell decays; "
             f"ratios run {frame['decay_ratio'].min():.3f} to "

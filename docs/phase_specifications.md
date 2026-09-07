@@ -3555,6 +3555,16 @@ gates agree in direction, but only A2b is entitled to the conclusion.
 An earlier reading of the alternating-split profile — that its flatness
 favoured `rho = 0.95` — was the parity artifact and is withdrawn.
 
+**The horizon experiment now runs both splits and reports them side by side**,
+with its conclusions taken from the contiguous one. It had been left on the
+alternating split after that split was found to be the artifact, so its
+committed figure and table carried the withdrawn numbers while this section
+carried the corrected ones. Under the parity-free split its secondary
+criterion — the simulated level falling inside the human bracket at *every*
+lag rather than only at lag 1 — passes in **4 of 9** cells against Gate A1's
+8 of 9, and the closest cell by decay shape is `rho = 0.50, gamma = 3.00` at
+0.208 rather than the `rho = 0.95` cell the artifact had favoured.
+
 
 ### Gate B result — the null survives a mechanism built to break it
 
