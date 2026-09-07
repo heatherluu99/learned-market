@@ -79,6 +79,15 @@ and it spends nine phases showing what that buys and what it costs.
 | 9b | Does teacher entropy govern whether it compounds? | **Yes for amplification** — Spearman −1.00, 1.02×→1.67×. **Not yet for behaviour** |
 | 9c | Which environment characteristic suppresses divergence? | **Neither — persistence *carries* it.** Removing season-long taste kills amplification outright |
 | 9b+ | Does it ever become material, down to a deterministic teacher? | **No.** Amplification saturates at ~1.7×; **48 of 48 shares equivalent** |
+| 10 | Is human loyalty stronger than the simulator's? | **Unanswerable as first asked.** A memoryless model with household preference predicts **97%** of the observed repeat rate. A "3.4×" claim was **withdrawn** — it compared an upper bound against a causal quantity |
+| 10 · S | On the households' own choice sets, does the simulator's memory add anything? | **No.** −0.0049 nats over a model that already knows the household, CI **[−0.0101, +0.0006]** |
+| 10 · S | Can a model that knows *no individual* match the aggregate? | **Yes** — JS 0.0035 against 0.0015 for one that does, while being **twice as wrong** per household. Aggregate fidelity is cheap; individual fidelity is not |
+| 10 · free-run | Does one-step fidelity survive the model driving its own history? | **Yes.** 1.09×, and **no trend with depth** (0.99, 1.06, 1.03, 0.96). Repeat rate 0.7695 against 0.7729 |
+| v2 · A2 | How long is human choice memory? | **Short** — and the first answer was a **measurement artifact**. An alternating train/test split made odd lags average +0.016 and even lags +0.032, eight for eight. Parity-free, it decays: ratio **0.255**, not 1.337 |
+| v2 · B | Does an uncapped, slower-decaying memory produce path dependence? | **No.** Zero in every primary cell — the Phase 6 null survives a mechanism built to break it |
+| v2 · B3 | Does buyer memory amplify trajectory divergence? | **The opposite.** Stronger memory *stabilizes*: ∂A/∂γ = −0.093. **1 of 3 pre-registered signs held** |
+| v2 · B3 | Is teacher entropy a sufficient statistic for amplification? | **No.** Two cells at 0.817 and 0.807 bits differ by **28%** — how the entropy was lowered matters |
+| H_promo | Do promotion-bought customers come back less? | **Not once you control for who they are.** The raw −0.0436 is **entirely selection**; adjusted it is +0.0085, CI spanning zero |
 
 Full detail: [`docs/phase_specifications.md`](docs/phase_specifications.md).
 Every run: [`experiment_log.csv`](experiment_log.csv), or the self-contained
@@ -257,6 +266,34 @@ bonus:      L_max · tanh( L[b,s] / L* )
 outlives the week. With `δ = 0` a purchase is a purchase whatever it cost, and
 the only reason to cut price is this week's demand — which is precisely the
 myopic problem a bandit already solves.
+
+**Loyalty v2 is a third mechanism, and a return to the textbook one.** It is
+Guadagni & Little (1983) as written:
+
+```
+L[b,s] ← ρ·L[b,s] + (1 − ρ)·1{bought}          L ∈ [0, 1]
+bonus:   γ · L[b,s]
+```
+
+Three changes, and two of them are one fix. `β` was already a function of `ρ`,
+so folding it in costs no freedom and makes `L` bounded by construction. The
+`tanh` is dropped, and with it the **per-cell calibration of `L_max`** — under a
+saturating transform the bonus a buyer actually received depended on where its
+own stock sat on the curve, so the mechanism's realized strength was
+cell-dependent and had to be re-solved per cell. That invited the obvious
+objection: if two mechanisms are each re-tuned per cell and come out similar,
+whose similarity is it? With `L` in [0, 1] and a linear bonus, the maximum
+effect is `γ` exactly, in every cell, calibrated nowhere.
+
+And `δ = 0` throughout — not because it is small, but because with `ρ` moving
+persistence and `γ` moving strength, a third parameter acting through price
+exposure makes a change in state dependence unattributable among the three. It
+became `H_promo`, a separate hypothesis with a **sign predicted before it ran**.
+The prediction was wrong.
+
+The three mechanisms are kept side by side rather than replaced: `M0` none,
+`M1` the capped streak counter, `M2` the relationship stock. Two of five
+conclusions turn on which one is used.
 
 ### Seller learning, in four rungs
 
@@ -561,7 +598,7 @@ Phases 1–9 claims anything about human behaviour.
 
 ```bash
 python -m venv .venv && .venv/bin/pip install -r requirements.txt
-.venv/bin/python -m pytest -q                        # 307 tests
+.venv/bin/python -m pytest -q                        # 340 tests
 .venv/bin/python experiments/phase8/run_phase8.py    # any phase
 .venv/bin/python tools/build_experiment_explorer.py  # rebuild the explorer
 ```
@@ -570,10 +607,15 @@ python -m venv .venv && .venv/bin/pip install -r requirements.txt
 |---|---|
 | `docs/phase_specifications.md` | the pre-registered spec — every gate, correction and result |
 | `src/market_sim/` | engine, config, acceptance criteria, bandits, RL |
-| `experiments/phase*/` | one runnable script per phase |
+| `experiments/phase*/`, `experiments/loyalty_v2/` | one runnable script per phase, and per gate of the loyalty branch |
 | `results/`, `experiment_log.csv` | generated outputs, each bound to a commit hash |
 | `viz/experiment_explorer.html` | every run, its figure, and the commits behind it |
 | `project_tracking.pptx` | one tracking slide per completed phase |
 
-Every logged run records the commit it ran at, and the log refuses a clean hash
-if any source path is dirty.
+Every logged run records the commit it ran at. The hash is suffixed `-dirty`
+when any source path was uncommitted, and the log now says so out loud while
+it happens — the natural workflow is to run an experiment and commit it
+afterwards, which is exactly the order that leaves a hash pointing at a tree
+without the experiment in it. Eight rows were written that way before anything
+warned; all eight were re-run from a clean tree and reproduced their published
+numbers exactly.
