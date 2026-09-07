@@ -347,3 +347,24 @@ def test_phase10_split_is_still_the_default():
     d = human.conditional_repeat_baseline(panel, l2=0.03, lag=1)
     assert d["conditional_excess"] == pytest.approx(0.0209, abs=5e-4)
     assert d["marginal_excess"] == pytest.approx(0.3592, abs=5e-4)
+
+
+def test_a_dirty_run_says_so(capsys, tmp_path):
+    """Recording against modified source must be visible, not silent.
+
+    Nine rows were written that way before anything said so, because the
+    natural workflow - run the experiment, then commit it - is exactly the
+    order that produces a hash pointing at a tree without the experiment in it.
+    """
+    from market_sim import experiment_log
+
+    row = {c: "x" for c in experiment_log.COLUMNS}
+    row["git_commit"] = "abc123-dirty"
+    row["experiment_id"] = "some_run"
+    experiment_log.append_row(tmp_path / "log.csv", row)
+    assert "MODIFIED source" in capsys.readouterr().err
+
+    row["git_commit"] = "abc123"
+    row["experiment_id"] = "clean_run"
+    experiment_log.append_row(tmp_path / "log.csv", row)
+    assert "MODIFIED source" not in capsys.readouterr().err

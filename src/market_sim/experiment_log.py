@@ -87,10 +87,32 @@ def git_commit(repo_root: Path, source_paths: tuple[str, ...] = SOURCE_PATHS) ->
     return f"{head}-dirty" if dirty else head
 
 
+def _warn_if_dirty(row: dict) -> None:
+    """Say so, loudly, when a run is being recorded against modified source.
+
+    The hash then identifies a tree that does not contain the code that
+    produced the row, so the result is not reproducible from it. Nine rows
+    were written this way before anything said so - the natural workflow is
+    to run an experiment and commit it afterwards, which is exactly the
+    order that produces a dirty hash.
+    """
+    if str(row.get("git_commit", "")).endswith("-dirty"):
+        import sys
+
+        print(
+            f"  ! experiment_log: '{row.get('experiment_id')}' is being "
+            f"recorded against MODIFIED source.\n"
+            f"    The hash does not identify the code that produced it. "
+            f"Commit first, then re-run, to bind the two.",
+            file=sys.stderr, flush=True,
+        )
+
+
 def append_row(log_path: Path, row: dict[str, object]) -> None:
     missing = set(COLUMNS) - set(row)
     if missing:
         raise ValueError(f"experiment_log row is missing columns: {sorted(missing)}")
+    _warn_if_dirty(row)
     unexpected = set(row) - set(COLUMNS)
     if unexpected:
         raise ValueError(f"experiment_log row has unknown columns: {sorted(unexpected)}")
