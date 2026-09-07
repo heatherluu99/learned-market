@@ -3823,6 +3823,92 @@ so a mechanism cannot move amplification by moving how much buying happens, and
 which number that is does not enter any comparison.
 
 
+## H_promo — does a promotion-acquired purchase build weaker attachment?
+
+Deferred out of Loyalty v2 for identification: with `rho` moving persistence
+and `gamma` moving strength, a third parameter acting through price exposure
+would make a change in state dependence unattributable among the three.
+Seetharaman separates structural state dependence from lagged marketing
+carryover as distinct sources, and this is that separation.
+
+### The mechanism
+
+```
+L[b,s,t+1] = rho * L[b,s,t] + (1 - rho) * (1 + delta * promoted) * 1{y[b,t] = s}
+```
+
+`promoted` is 1 when the purchase was made at the promotional price and 0 at
+list, so **delta is read directly: a purchase on promotion accrues `1 + delta`
+times the loyalty of one at list price.** The normalizer is the promotion
+discount itself rather than Phase 7e's `arm_half_range`, which made the
+multiplier 1.375 on a 30%-off purchase for no stated reason.
+
+**This costs the boundedness that motivated dropping the term.** With
+`delta > 0`, `L` can reach `1 + delta`, so the maximum bonus is
+`gamma * (1 + max(0, delta))` rather than `gamma`. The effective ceiling is
+reported per cell rather than assumed equal, and no cross-`delta` comparison of
+levels is made without it.
+
+```
+delta in {-0.25, 0, +0.25}
+```
+
+### Pre-registration, and a disclosure
+
+**The sign was not registered blind, and this section says so rather than
+implying otherwise.** A feasibility check was run first — the panel has to
+contain enough promoted-then-repeat pairs for the question to be answerable at
+all, and two earlier gates in this project registered thresholds their own
+quantities could not reach. That check returned the raw contrast:
+
+| previous purchase | n | repeat rate |
+|---|---|---|
+| on promotion | 935 | 0.7422 |
+| at list price | 2218 | 0.7858 |
+| **raw difference** | | **−0.0436** |
+
+So the raw direction was seen before any sign was written down, and a
+"prediction" of it now would be worthless.
+
+**The registered prediction is therefore about a quantity that has not been
+computed:** the same contrast after conditioning on B1 — household-specific
+brand preference, price, display and feature, no previous-choice term. That
+control matters because the raw number is confounded in a known direction: a
+promoted purchase is disproportionately a deal-induced *switch*, so the brand
+bought was one the household likes less to begin with, and it would repeat less
+often with no loyalty mechanism of any kind. The confound and the hypothesis
+push the same way, which is exactly when an unadjusted number is worth least.
+
+**Registered before running:**
+
+1. The B1-adjusted contrast stays **negative** but **shrinks in magnitude**,
+   landing in `(-0.03, 0)`. The behavioural reason for expecting negative at
+   all is attribution: a buyer who bought because of the deal credits the
+   price rather than the seller (Dodson, Tybout & Sternthal 1978), so less
+   attachment is carried forward. The reason for expecting shrinkage is that
+   the confound above is removed by the control.
+2. If the adjusted contrast is **not distinguishable from zero**, the correct
+   specification is `delta = 0` and Loyalty v2's baseline needs no promotion
+   term — a null that would retire the hypothesis rather than leave it open.
+3. If it is **positive**, the attribution account is wrong for this category
+   and the deal-experience account is supported. This outcome is written down
+   now precisely because it is the one that would be tempting to explain away.
+
+### What is compared
+
+The human and simulator contrasts are computed by the **identical formula** —
+repeat rate after a promoted purchase minus repeat rate after a list-price
+purchase — because a comparison between two differently-defined quantities is
+not a comparison. The B1 adjustment is applied on the human side and reported
+as the check on whether the human effect survives control at all; the simulator
+side has its own memory-off twin for the same purpose.
+
+The question the three cells answer is which `delta` reproduces the human
+contrast, and the answer is a sign and a rough magnitude, not a fitted value.
+Nothing here estimates `delta`: three points on a grid cannot, and the same
+calibration-not-estimation discipline applies as in Gate A2b.
+
+
 ## Phase 11 — Bias Quantification (Asset A formalizes; Asset B built)
 
 **Research question:** Is the human-AI gap systematic and predictable, and can it be corrected?
