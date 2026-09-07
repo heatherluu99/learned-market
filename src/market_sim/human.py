@@ -368,6 +368,11 @@ def fit_memoryless_choice(
         "held_out_log_loss": held_out_loss,
         "beta": beta.detach().numpy(),
         "alpha": alpha.detach().numpy(),
+        # The fitted household deviations. Returned so a caller can rebuild
+        # this model's utility and add a term to it - which is what makes
+        # "B1 plus memory and nothing else" constructible.
+        "u": u.detach().numpy(),
+        "train": train.numpy(),
     }
 
 

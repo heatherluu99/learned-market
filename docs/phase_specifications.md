@@ -3981,6 +3981,95 @@ effect, and it does. Adjusted against adjusted asks what `delta` should be, and
 it cannot tell.
 
 
+### Phase 10 S arm — the simulator on the households' own choice sets
+
+Registered in the Phase 10 gate and, until now, **never built**. The arms
+actually run were B0, B1 and A. Every "simulator versus human" statement this
+project had made was therefore a statistic computed in the farmers' market set
+beside a statistic computed in the panel — which is what the gate itself
+forbade:
+
+> Letting the simulator generate its own price environment and comparing
+> aggregates would compare two markets rather than two policies.
+
+Two variants, because they answer different questions and either one alone
+invites the wrong reading. **S-blind** uses the simulator's own coefficients
+and draws household preference from a distribution, as the simulator does; it
+asks whether the *mechanism* produces human-shaped behaviour. **S-informed** is
+B1's fitted utility plus the loyalty term and nothing else, so the difference
+between it and B1 is exactly what the memory contributes.
+
+Scored on the **1,611 held-out occasions**, every arm identically.
+
+| arm | weighted JS | log-loss | directions |
+|---|---|---|---|
+| B0 marginal shares | 0.1239 | 1.0759 | 4/4 |
+| B1 conditional model | 0.0015 | 0.4722 | 4/4 |
+| S-blind (`rho`=0.80, `gamma`=8) | 0.0035 | 0.8701 | 4/4 |
+| **S-informed** (`rho`=0.80, `gamma`=0.5) | **0.0010** | **0.4673** | 4/4 |
+
+**S-informed minus B1 on held-out log-loss: −0.0049, 95% CI [−0.0101, +0.0006],
+paired household bootstrap.** Not distinguishable from zero.
+
+**The memory adds nothing measurable to a model that already knows the
+household.** This is the comparison the Phase 10 gate was built for, and it
+answers in the same direction as everything upstream of it: Phase 10 already
+found that a memoryless model with household-specific preferences predicts 97%
+of the observed repeat rate, and this says the remaining 3% is not recovered by
+adding this project's loyalty mechanism to that model. `gamma` was selected on
+held-out log-loss over a nine-point grid and the best it could buy was half a
+percent of a nat, with an interval spanning zero.
+
+### The dissociation that matters more
+
+**S-blind knows nothing about any individual household and still matches the
+aggregate distributions almost as well as B1** — JS 0.0035 against 0.0015,
+where the no-memory floor is 0.1239. Its household preferences are random
+draws. Yet on *individual* prediction it is far behind: 0.8701 nats against
+B1's 0.4722.
+
+So aggregate fidelity and individual fidelity come apart sharply here, and the
+cheap one is aggregate. A model that has never seen a particular household can
+reproduce the population's choice distribution within a scenario; predicting
+what *that household* does next is the part that requires knowing it. This is
+the caution Brand, Israeli & Ngwe (2023) raise about LLM-simulated respondents
+— aggregate patterns captured better than individual-level heterogeneity —
+arriving here in a model with no LLM in it at all, which suggests it is a
+property of the measurement rather than of the generator.
+
+**The practical consequence for this project's commercial case is direct.** A
+synthetic-consumer product evaluated on aggregate distributional match can look
+excellent while carrying no individual-level validity, and every arm here
+including the marginal-share floor gets all four mechanism directions right.
+Distributional distance and sign agreement are both necessary and are jointly
+insufficient.
+
+### Two errors caught in building this
+
+**In-sample scoring, which reversed the headline.** The first run reported
+S-informed at JS 0.0013 and log-loss 0.4271 against B1's 0.0404 and 0.7739 — an
+enormous win. It was an artifact: Phase 10 hands B1 the *marginal shares* on
+training occasions to avoid in-sample inflation, while S-informed was built
+from the fitted utility everywhere and so was reading answers it had been
+fitted to on half the data. Scoring every arm on held-out occasions only closes
+the gap from 0.35 nats to 0.005 and turns the result from a large win into a
+null.
+
+**A grid boundary.** S-blind first selected `gamma = 4.0`, the largest value
+offered. The grid was extended to 32 and the selection moved to 8. A minimum at
+a boundary is not a minimum — the same correction this project already had to
+make to the L2 grid in Phase 10, and the second time this class of error has
+been caught by looking rather than by a test.
+
+### What is still not compared
+
+The **free-running closed loop** — the simulator generating its own trajectory
+`a_1 -> S_2 -> a_2 -> ...` rather than being fed the human history at every
+step — remains unbuilt. Everything above is observed-history one-step. The
+distinction is the same one Phase 9 spent three sub-phases on, and one-step
+agreement there did not imply trajectory agreement.
+
+
 ## Phase 11 — Bias Quantification (Asset A formalizes; Asset B built)
 
 **Research question:** Is the human-AI gap systematic and predictable, and can it be corrected?
