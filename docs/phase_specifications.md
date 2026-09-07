@@ -3556,6 +3556,85 @@ An earlier reading of the alternating-split profile — that its flatness
 favoured `rho = 0.95` — was the parity artifact and is withdrawn.
 
 
+### Gate B result — the null survives a mechanism built to break it
+
+30 seeds, victims `(5, 40, 75, 95)`, shock at week 40, all nine cells plus M1.
+
+**Path dependence.** One buyer is forced to skip week 0 with every random draw
+left untouched, and late-week choices are compared against the unperturbed run.
+
+| cell | primary | path ON | path OFF | verdict |
+|---|---|---|---|---|
+| `rho = 0.50`, all `gamma` | yes | **0.0000** | 0.0000 | equivalent |
+| `rho = 0.80`, all `gamma` | yes | **0.0000** | 0.0000 | equivalent |
+| `rho = 0.95`, `gamma = 0.75` | — | 0.0000 | 0.0000 | equivalent |
+| `rho = 0.95`, `gamma = 1.50` | — | 0.0033 | 0.0000 | equivalent |
+| `rho = 0.95`, `gamma = 3.00` | — | 0.0017 | 0.0000 | equivalent |
+| M1 streak | — | 0.0000 | 0.0000 | equivalent |
+
+**Phase 6's path-dependence null holds across the entire grid**, and this is
+the pre-registered "strengthened" branch rather than a repetition. Phase 6
+attributed the null partly to the streak counter's three-week cap: a bonus that
+stops growing and resets on one switch cannot carry a perturbation. That
+explanation is now ruled out. The v2 mechanism has no cap, decays
+geometrically instead of resetting, and at `rho = 0.95` has a 13.5-week
+half-life — and a week-0 perturbation still leaves no trace sixty weeks later.
+
+**The two nonzero entries are noise and should not be read as a trend.**
+0.0033 is two differing buyer-weeks out of 600, and 0.0017 is one. They are
+also non-monotonic in `gamma` — absent at 0.75, largest at 1.50, smaller at
+3.00 — which is what noise looks like and not what a mechanism looks like. Both
+verdicts are equivalent.
+
+What can be said is weaker than it first appears and worth stating carefully:
+**the only cells showing any divergence at all sit in the row the human decay
+shape excludes.** With two buyer-weeks of evidence that is a direction, not a
+finding, and it is recorded as one.
+
+**Shock recovery.** One seller closed for a single week, averaged over every
+seller, memory ON minus the same seed's memory-OFF counterfactual.
+
+| cell | return within 3 wk | permanent switch | recovery weeks |
+|---|---|---|---|
+| `rho=0.50, gamma=0.75` | +0.0145 | +0.0017 | +0.118 |
+| `rho=0.50, gamma=1.50` | +0.0205 | +0.0004 | +0.360 |
+| `rho=0.50, gamma=3.00` | +0.0182 | +0.0042 | +0.709 |
+| `rho=0.80, gamma=0.75` | +0.0383 | −0.0010 | −0.018 |
+| `rho=0.80, gamma=1.50` | +0.0510 | −0.0003 | −0.062 |
+| `rho=0.80, gamma=3.00` | **+0.0688** | −0.0012 | −0.153 |
+| `rho=0.95, gamma=0.75` | +0.0295 | −0.0030 | −0.098 |
+| `rho=0.95, gamma=1.50` | +0.0509 | +0.0072 | −0.171 |
+| `rho=0.95, gamma=3.00` | +0.0437 | +0.0039 | −0.087 |
+| M1 streak | +0.0276 | +0.0026 | +0.229 |
+
+**Memory raises the rate of returning to a shocked seller in every cell**, by
+1.5 to 6.9 percentage points, while permanent switching moves by less than one
+point anywhere. The effect is largest at `rho = 0.80`, not at `rho = 0.95`:
+persistence and recency-weight trade off against each other here as they did in
+Gate A2b, and the middle of the range holds the most attachment at the moment
+it is tested.
+
+**M1 and M2 separate on this measure, and in the direction that matters for
+Gate C.** M1 recovers *more slowly* than its own memory-off control (+0.229
+weeks) while every `rho >= 0.80` stock cell recovers *faster* (−0.02 to −0.17).
+A counter that resets on one switch loses its accumulated relationship the
+moment the outage forces a substitute; a decaying stock keeps most of it and
+pulls the buyer back. That is a substantive mechanism difference on a dynamic
+quantity, not a robustness failure, and it is the first place in this branch
+where the two theories of loyalty give different answers.
+
+**Not a comparison with Phase 6's shock result.** Phase 6 measured week 12 of a
+22-week season in its own market; this is week 40 of 66 in Phase 7a's
+flat-price market. M1 here is the streak mechanism in *this* environment, and
+the M1-versus-M2 contrast above is the valid one. Nothing here revises Phase
+6's recorded shock finding.
+
+**Still outstanding: Gate B3**, Phase 9c's amplification as
+`A(R, rho, gamma)` with pre-registered signs on both partials and their
+interaction with `R`. It needs the distillation pipeline run per cell and is
+not included here.
+
+
 ## Phase 11 — Bias Quantification (Asset A formalizes; Asset B built)
 
 **Research question:** Is the human-AI gap systematic and predictable, and can it be corrected?
