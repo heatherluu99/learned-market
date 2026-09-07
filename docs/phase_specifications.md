@@ -3635,6 +3635,99 @@ interaction with `R`. It needs the distillation pipeline run per cell and is
 not included here.
 
 
+### Gate B3 result — buyer memory is a stabilizer, and one of three registered signs holds
+
+3 x 3 x 2 factorial over `rho`, `gamma` and teacher temperature, 60 training
+seeds, 24 held out, 30 evaluation seeds per cell. Every cell's sigmoid offset
+is re-solved to hold the mean purchase probability at Phase 7a's no-loyalty
+level of 0.4640, so `gamma` cannot move amplification by moving how much buying
+happens.
+
+| `gamma` | `tau` = 1.0 | | | `tau` = 0.5 | | |
+|---|---|---|---|---|---|---|
+| | `rho`=0.50 | 0.80 | 0.95 | `rho`=0.50 | 0.80 | 0.95 |
+| 0.75 | 1.08 | 1.07 | 1.07 | 1.21 | 1.19 | 1.20 |
+| 1.50 | 1.03 | 1.01 | 1.02 | 1.08 | 1.10 | 1.15 |
+| 3.00 | **0.94** | **0.92** | **0.94** | 0.97 | 1.02 | 1.04 |
+
+**Pre-registered signs, with the six gate-failing cells removed as a
+robustness check:**
+
+| | all 18 | gate-passing 12 | verdict |
+|---|---|---|---|
+| `dA/drho` | +0.0357 | **+0.0025** | **no main effect** |
+| `dA/dgamma` | −0.0712 | **−0.0928** | **against registration** |
+| `d2A/(dR drho)` | +0.1081 | **+0.1400** | **as registered** |
+
+**One of three registered signs holds.** That is worth stating plainly: two
+predictions made before the run were wrong, and the surviving one is the
+interaction rather than either main effect.
+
+**Loyalty strength stabilizes trajectories rather than amplifying them.** The
+`gamma` slope is negative in every subset and both temperature halves
+(−0.0571 and −0.0821 among gate-passing cells), and at `gamma = 3.0` with
+`tau = 1.0` amplification drops **below one**: the closed loop tracks the
+teacher *better* than the offline error predicts. A per-pair loyalty stock is
+an attractor. A student that mis-predicts a purchase still finds the buyer
+pulled back toward the seller it has a relationship with, so the error does not
+get to compound.
+
+**This is the stabilizer Phase 9c was looking for and could not name.** 9c
+identified a budget wall and a season-long preference draw and concluded
+`amplification ~ R x state persistence`, with persistence whatever the
+environment happened to supply. Given a named persistence parameter, the
+relationship inverts on strength: more state, less divergence.
+
+**`rho` has no main effect but carries the registered interaction.** Pooled
+over both temperatures its slope is +0.0025, and that near-zero is not a weak
+effect but an average of opposite-signed conditional slopes: **−0.0883 at
+`tau` = 1.0 and +0.0517 at `tau` = 0.5** among gate-passing cells. Longer
+memory *reduces* amplification when imitation error is small relative to the
+teacher's own noise, and *increases* it when the error is large. The registered
+`d2A/(dR drho) > 0` is exactly this and is the one prediction that survived.
+
+Its reading is that persistence is not intrinsically costly. It is costly
+conditional on the student already being wrong enough — memory carries whatever
+it is given, a good trajectory or a bad one, which is the same statement Phase
+9c reached qualitatively and could not test.
+
+### Entropy does not determine amplification
+
+Two cells with essentially the same teacher entropy:
+
+| `tau` | `rho` | `gamma` | entropy (bits) | `R` | amplification |
+|---|---|---|---|---|---|
+| 1.0 | 0.50 | 3.00 | 0.8166 | 0.285 | **0.941** |
+| 0.5 | 0.50 | 0.75 | 0.8074 | 0.333 | **1.207** |
+
+Entropy differs by 1%, amplification by 28%. Phase 9b established that entropy
+governs amplification, and it does — **along the axis 9b varied it.** Lowering
+entropy by sharpening the teacher raises amplification; lowering the same
+quantity by adding a persistent state attractor lowers it. The two routes to a
+less random teacher are not interchangeable.
+
+This refines 9b rather than contradicting it: 9b's law was measured with the
+mechanism held fixed and temperature moving, which is precisely the regime it
+is stated for. What is now wrong is the more general reading — that entropy is
+a sufficient statistic for amplification — which this branch had been carrying
+implicitly.
+
+The pair is not perfectly controlled: `R` differs by 17% between the two cells,
+so some of the 28% belongs to that. It cannot account for the sign, since
+higher `R` is associated with *higher* amplification and the low-`R` cell is
+the one with the lower value.
+
+### Gate failures
+
+Six of eighteen cells failed Phase 9a's offline gate, clustered at
+`gamma = 0.75` under `tau = 1.0` — the cells where the mechanism is weakest and
+the student has least signal to learn from, so the distilled policy cannot
+clear the required gain over a constant predictor. Those cells carry the
+*highest* amplification, so dropping them was the check that mattered: every
+slope above is reported on both sets, and the `gamma` effect strengthens while
+the `rho` main effect collapses. No conclusion here rests on a failed cell.
+
+
 ## Phase 11 — Bias Quantification (Asset A formalizes; Asset B built)
 
 **Research question:** Is the human-AI gap systematic and predictable, and can it be corrected?
