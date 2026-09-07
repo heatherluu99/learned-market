@@ -194,7 +194,8 @@ def agent_distributions(records, client, usage, provider: str, model: str,
     accounting does not depend on the order occasions happen to arrive in.
     """
     import time
-    from concurrent.futures import ThreadPoolExecutor
+    from concurrent.futures import (CancelledError, ThreadPoolExecutor,
+                                    as_completed)
 
     prompts = [agent.describe_choice(r["alternatives"], r["history"]) for r in records]
     distinct = list(dict.fromkeys(prompts))
@@ -223,14 +224,25 @@ def agent_distributions(records, client, usage, provider: str, model: str,
 
     started = time.perf_counter()
     results, exhausted = [], None
-    try:
-        with ThreadPoolExecutor(max_workers=WORKERS) as pool:
-            for result in pool.map(query, distinct):
-                results.append(result)
-    except agent.QuotaExhausted as error:
-        # The daily cap is not something to retry through. Keep what was paid
-        # for, say so, and let the next run resume from the cache.
-        exhausted = str(error)
+    # `pool.map` yields in submission order, so one failure discards every
+    # later success along with it: when the quota ran out on the first prompt
+    # the other three workers had already finished, and their answers - paid
+    # for, and not refundable - were thrown away with the exception. A run
+    # that reported "0 answers are saved" had in fact bought several.
+    # `as_completed` keeps each result as it lands, independent of order.
+    with ThreadPoolExecutor(max_workers=WORKERS) as pool:
+        futures = {pool.submit(query, prompt): prompt for prompt in distinct}
+        for future in as_completed(futures):
+            try:
+                results.append(future.result())
+            except agent.QuotaExhausted as error:
+                # The daily cap is not something to retry through. Stop asking
+                # for more, keep what was paid for, and resume tomorrow.
+                exhausted = exhausted or str(error)
+                for pending in futures:
+                    pending.cancel()
+            except CancelledError:
+                pass
     wall = time.perf_counter() - started
 
     unparsed = 0

@@ -368,3 +368,53 @@ def test_a_dirty_run_says_so(capsys, tmp_path):
     row["experiment_id"] = "clean_run"
     experiment_log.append_row(tmp_path / "log.csv", row)
     assert "MODIFIED source" not in capsys.readouterr().err
+
+
+def test_a_quota_failure_does_not_discard_answers_already_paid_for(tmp_path,
+                                                                   monkeypatch):
+    """One failing call must not take the concurrent successes with it.
+
+    pool.map yields in submission order, so a failure on the first prompt
+    raised before any later result was collected - and the other workers had
+    already finished. A run reported "0 answers are saved" having in fact
+    bought several, and those calls are not refundable.
+    """
+    import importlib.util
+    import threading
+
+    from market_sim import agent
+
+    spec = importlib.util.spec_from_file_location(
+        "run_phase10", ROOT / "experiments" / "phase10" / "run_phase10.py")
+    run = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(run)
+    monkeypatch.setattr(run, "RESULTS_ROOT", tmp_path)
+    monkeypatch.setattr(run, "LEGACY_CACHE", tmp_path / "none.json")
+
+    lock = threading.Lock()
+    served = []
+
+    def client(system, prompt):
+        # The first prompt submitted is the one that fails, which is exactly
+        # the case pool.map handled worst.
+        with lock:
+            first = not served
+            served.append(prompt)
+        if first:
+            raise agent.QuotaExhausted("429 daily cap")
+        return "25 25 25 25", 10, 4
+
+    records = [{"alternatives": [{"brand": b, "price": 100 + 5 * i,
+                                  "display": 0, "feature": 0}
+                                 for b in sorted(human.BRANDS)],
+                "history": {"last": None, "top": None, "top_share": 0.0}}
+               for i in range(6)]
+
+    usage = agent.Usage()
+    with pytest.raises(SystemExit) as exit_info:
+        run.agent_distributions(records, client, usage, "groq", "m", {}, rpm=600)
+    assert exit_info.value.code == 2
+
+    kept = run.load_cache("groq", "m", {})
+    assert kept, "answers bought before the quota ran out were discarded"
+    assert len(kept) == len(served) - 1
