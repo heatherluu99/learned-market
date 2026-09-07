@@ -56,6 +56,17 @@ TITLES = {
     "phase9a_distillation": "Distilling the hand-written buyer (9a)",
     "phase9b_entropy_sweep": "Teacher entropy sweep (9b)",
     "phase9c_stabilizers": "Stabilizer ablation (9c)",
+    "phase10_human_vs_agent_PILOT_200":
+        "PILOT ONLY - 200 occasions, not a result (10)",
+    "phase10_s_arm_simulator_on_human_choice_sets":
+        "The simulator on the households' own choice sets (10)",
+    "phase10_s_arm_free_running": "Free-running closed loop (10)",
+    "loyaltyv2_gate_a_admissibility": "Gate A1 - one-step admissibility",
+    "loyaltyv2_horizon_shape": "Gate A2 - the human decay shape",
+    "loyaltyv2_gate_b_dynamics": "Gate B - path dependence and shock recovery",
+    "loyaltyv2_gate_b3_amplification": "Gate B3 - amplification A(R, rho, gamma)",
+    "loyaltyv2_gate_c_mechanism_robustness": "Gate C - M0 / M1 / M2",
+    "hpromo_promotion_reinforcement": "H_promo - promotion reinforcement",
 }
 
 #: Runs whose figure was later overwritten in place by a successor writing to
@@ -65,6 +76,24 @@ OVERWRITTEN = {
     "phase7e1_registered_grid":
         "The figure above is its successor's. This run's own figure was written "
         "to the same path and overwritten; it is recoverable at commit 208f785.",
+}
+
+#: Reading order within a group, where the identifier does not supply it.
+#: Alphabetical puts H_promo before Gate A1 and Gate B3 before Gate B, which
+#: reads as though the branch happened in that sequence. Anything unlisted
+#: sorts after these, alphabetically, so a new run appears rather than
+#: disappearing.
+SEQUENCE = {
+    "phase10_human_vs_agent_PILOT_200": 0,
+    "phase10_human_vs_agent_groq": 1,
+    "phase10_s_arm_simulator_on_human_choice_sets": 2,
+    "phase10_s_arm_free_running": 3,
+    "loyaltyv2_gate_a_admissibility": 0,
+    "loyaltyv2_horizon_shape": 1,
+    "loyaltyv2_gate_b_dynamics": 2,
+    "loyaltyv2_gate_b3_amplification": 3,
+    "loyaltyv2_gate_c_mechanism_robustness": 4,
+    "hpromo_promotion_reinforcement": 5,
 }
 
 #: A run's outcome, which no column in the log records - it is the tag, and
@@ -80,6 +109,16 @@ STATUS = {
     "phase9a_distillation": "headroom",
     "phase9b_entropy_sweep": "headroom",
     "phase9c_stabilizers": "headroom",
+    # The pilot is not a result and the page must not let it read as one.
+    "phase10_human_vs_agent_PILOT_200": "pilot",
+    "phase10_s_arm_simulator_on_human_choice_sets": "null",
+    "phase10_s_arm_free_running": "null",
+    "loyaltyv2_gate_a_admissibility": "calibrated",
+    "loyaltyv2_horizon_shape": "corrected",
+    "loyaltyv2_gate_b_dynamics": "null",
+    "loyaltyv2_gate_b3_amplification": "reversed",
+    "loyaltyv2_gate_c_mechanism_robustness": "open",
+    "hpromo_promotion_reinforcement": "retired",
 }
 
 #: Ordered, and the order matters: "Implement Phase 7e-2: ... headroom gate"
@@ -94,7 +133,17 @@ COMMIT_KINDS = (
 
 
 def group_of(identifier: str) -> str:
-    """1, 7a, 7e-1 ... derived from the identifier, not hand-listed."""
+    """1, 7a, 7e-1 ... derived from the identifier, not hand-listed.
+
+    Loyalty v2 and H_promo are a branch rather than a phase, so they carry no
+    `phase<N>` prefix and would otherwise land in "other" alongside anything
+    unrecognised. They are given their own group so the branch reads as one
+    thing, and sorted after Phase 10 because that is where it hangs off.
+    """
+    if identifier.startswith("loyaltyv2") or identifier.startswith("hpromo"):
+        return "10.5"
+    if identifier.startswith("loyalty_v2"):  # the results directory's name
+        return "10.5"
     m = re.match(r"^phase(\d+)(e\d+|[a-z])?", identifier)
     if not m:
         return "other"
@@ -178,9 +227,12 @@ def main() -> int:
         its experiments is re-run and lands at the end of the file.
         """
         group = group_of(identifier)
+        within = SEQUENCE.get(identifier, 99)
+        if group == "10.5":
+            return (10.5, group, within, identifier)
         digits = "".join(c for c in group if c.isdigit() and group.index(c) < 2)
         number = int(digits) if digits else 99
-        return (number, group, identifier)
+        return (float(number), group, within, identifier)
 
     experiments = []
     log = log.iloc[sorted(range(len(log)),

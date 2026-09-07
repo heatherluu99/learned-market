@@ -112,8 +112,18 @@ const STATUS = {
   skipped:    ["var(--warn)", "var(--warn-bg)", "skipped"],
   superseded: ["var(--dead)", "var(--dead-bg)", "superseded"],
   open:       ["var(--dead)", "var(--dead-bg)", "in progress"],
+  // A registered null is an outcome, not a failure to get one, and most of
+  // this project's headline results are nulls. It gets its own colour rather
+  // than falling through to "in progress".
+  null_:      ["var(--accent)", "var(--accent-bg)", "registered null"],
+  reversed:   ["var(--warn)", "var(--warn-bg)", "sign reversed"],
+  corrected:  ["var(--warn)", "var(--warn-bg)", "corrected"],
+  retired:    ["var(--dead)", "var(--dead-bg)", "hypothesis retired"],
+  // Loud on purpose. A pilot sitting in the log once read as a result, and
+  // the page must not repeat that.
+  pilot:      ["var(--warn)", "var(--warn-bg)", "PILOT - not a result"],
 };
-const st = k => STATUS[k] || STATUS.open;
+const st = k => STATUS[k === "null" ? "null_" : k] || STATUS.open;
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 
 function renderStats() {
