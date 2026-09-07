@@ -3639,9 +3639,11 @@ not included here.
 
 3 x 3 x 2 factorial over `rho`, `gamma` and teacher temperature, 60 training
 seeds, 24 held out, 30 evaluation seeds per cell. Every cell's sigmoid offset
-is re-solved to hold the mean purchase probability at Phase 7a's no-loyalty
-level of 0.4640, so `gamma` cannot move amplification by moving how much buying
-happens.
+is re-solved to hold the mean purchase probability at Phase 7a's own level
+of 0.4640, so `gamma` cannot move amplification by moving how much buying
+happens. (That market has streak loyalty on, so 0.4640 is not a no-loyalty
+level; see the correction under Gate C. What the calibration needs is that
+every cell be held to the same number, not which number.)
 
 | `gamma` | `tau` = 1.0 | | | `tau` = 0.5 | | |
 |---|---|---|---|---|---|---|
@@ -3726,6 +3728,99 @@ clear the required gain over a constant predictor. Those cells carry the
 *highest* amplification, so dropping them was the check that mattered: every
 slope above is reported on both sets, and the `gamma` effect strengthens while
 the `rho` main effect collapses. No conclusion here rests on a failed cell.
+
+
+### Gate C result — two of five conclusions turn on the representation
+
+M0 and M1 were run through the identical amplification pipeline Gate B3 used,
+imported rather than reimplemented and validated against a cell B3 had already
+committed (five quantities matching to six decimals). Every mechanism is held
+at the same purchase level of 0.4640.
+
+| mechanism | `tau` | entropy | `R` | amplification | offline gate |
+|---|---|---|---|---|---|
+| M0 none | 1.0 | 0.960 | 0.171 | **1.13** | failed |
+| M0 none | 0.5 | 0.869 | 0.304 | **1.28** | failed |
+| M1 streak | 1.0 | 0.927 | 0.168 | 1.11 | passed |
+| M1 streak | 0.5 | 0.748 | 0.285 | 1.27 | passed |
+| M2 primary cells | both | — | — | 0.92 – 1.21 | 10/12 passed |
+
+| conclusion | M0 | M1 | M2 primary | depends? |
+|---|---|---|---|---|
+| path dependence after a week-0 perturbation | 0.0000 | 0.0000 | 0.0000 | **no** |
+| decay shape (lag 8 / lag 1) | n/a | 0.158 | 0.177 – 0.590 | **yes** |
+| shock recovery, ON − OFF (weeks) | 0 | **+0.229** | **−0.153 to +0.709** | **yes** |
+| return to a shocked seller within 3 wk | 0 | +0.0276 | +0.0145 to +0.0688 | no |
+| trajectory amplification | 1.13 – 1.28 | 1.11 – 1.27 | 0.92 – 1.21 | no |
+
+**What survives the representation.** The path-dependence null holds under all
+three. Memory raises the rate of returning to a shocked seller under both
+mechanisms by a similar margin. And Gate B3's central finding is confirmed at
+the mechanism level in the cleanest possible form: **M0 > M1 > M2 at both
+temperatures.** Less buyer memory, more trajectory amplification, with no
+memory at all the worst case — the direction is the same however loyalty is
+written down, and only M2 at high `gamma` crosses below one.
+
+**What does not.** Two conclusions are properties of the representation rather
+than of loyalty:
+
+The **decay shape** is the sharper of the two, and it was foreseen in Gate
+A2b. M1 sits at 0.158 and cannot move: a three-week cap that resets on one
+switch has one time constant and no parameter to vary it. M2 spans 0.177 to
+0.590 across its primary region and covers the human ratio of 0.255. Any claim
+about matching human persistence is therefore a claim only M2 can make, and M1's
+agreement with the fastest-forgetting M2 cells — which A2b already showed holds
+at every lag — is agreement at one point of a curve rather than between two
+theories.
+
+The **shock recovery** difference is a genuine mechanism contrast on a dynamic
+quantity. M1 recovers *more slowly* than its own memory-off control while
+`rho >= 0.80` stock cells recover *faster*. A counter loses the relationship the
+moment a forced substitution breaks the streak; a decaying stock keeps most of
+it and pulls the buyer back. This is the pre-registered "two theories give
+different answers" case, and it arrives on recovery rather than on the path
+dependence the registration anticipated.
+
+**M0 fails the offline gate at both temperatures**, while M1 passes at both.
+With no loyalty state there is less structure for a distilled policy to
+recover, so it cannot clear the required gain over a constant predictor. M0's
+amplification figures are therefore reported as the reference they are and are
+not load-bearing for any conclusion above — the ordering M0 > M1 > M2 also holds
+between M1 and M2 alone, both of which pass.
+
+### A construction error caught here, and what it did not touch
+
+Gate C first reported M0 and M1 as **byte-identical** across all five
+quantities. The cause: `PHASE7A_FIXED` already carries `loyalty_bonus_per_streak
+= 0.5`, so an M0 built by taking that market and switching nothing off is M1
+under another name. A true control, `LOYALTY_V2_NONE`, now zeroes it explicitly.
+
+It was caught only because the duplication was exact. A subtler contamination
+would have read as a finding, so the guard is now a test that the three
+mechanisms produce three different choice sequences and that M0 produces no
+bonus.
+
+**Nothing else in the branch used PHASE7A_FIXED as a control.** Gates A and B
+take their controls from `memory_off`, which zeroes the active mechanism's own
+strength, and the v2 cells zero the streak bonus at construction. Those results
+stand.
+
+`MarketConfig.has_loyalty` was also corrected while fixing this. It returned
+True whenever a mechanism was *named*, so a memory-off control with zero
+strength called itself loyal. It now reports whether the active mechanism
+produces a nonzero bonus. No result moved — the accessor gated only a recording
+path that the affected configurations never reach — and the full suite passes
+unchanged.
+
+### Calibration target, corrected
+
+Gate B3 and Gate C hold every cell at a mean purchase probability of 0.4640,
+described in the first draft of the B3 section as "Phase 7a's no-loyalty
+level". **That description was wrong for the same reason:** Phase 7a has streak
+loyalty on, so 0.4640 is that market's own level. The method is unaffected —
+what the calibration requires is that every cell be held to the *same* number
+so a mechanism cannot move amplification by moving how much buying happens, and
+which number that is does not enter any comparison.
 
 
 ## Phase 11 — Bias Quantification (Asset A formalizes; Asset B built)

@@ -73,10 +73,13 @@ def main() -> int:
     print(f"  {RESEARCH_QUESTION}\n")
     print("  Pre-registered: dA/drho > 0, dA/dgamma > 0, d2A/(dR drho) > 0\n")
 
-    # The no-loyalty market's own purchase level. Holding every cell here means
-    # gamma cannot move amplification by moving how much buying happens.
+    # Phase 7a's own purchase level. That market has streak loyalty on, so
+    # this is NOT a no-loyalty level - it is a common anchor, and what matters
+    # is that every cell is held to the same number rather than which number.
+    # Holding it means gamma cannot move amplification by moving how much
+    # buying happens.
     target = buyer.mean_purchase_probability(config.PHASE7A_FIXED, CALIBRATION_SEEDS)
-    print(f"  Purchase level held at {target:.4f} (Phase 7a, loyalty off)\n")
+    print(f"  Purchase level held at {target:.4f} (Phase 7a's own level)\n")
 
     rows = []
     print(f"  {'cell':28s} {'tau':>5s} {'H':>6s} {'R':>6s} {'D_off':>7s} "

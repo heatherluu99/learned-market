@@ -338,8 +338,18 @@ class MarketConfig:
 
     @property
     def has_loyalty(self) -> bool:
-        return (self.has_loyalty_stock or self.has_relationship_loyalty
-                or self.loyalty_bonus_per_streak > 0)
+        """True only when the active mechanism produces a nonzero bonus.
+
+        The mechanism being *selected* is not the same as it being *on*: a
+        memory-off control keeps `loyalty_model` and its state update and
+        zeroes the strength, so asking whether a model is named would call
+        every control loyal.
+        """
+        if self.has_relationship_loyalty:
+            return self.loyalty_gamma > 0
+        if self.has_loyalty_stock:
+            return self.loyalty_max_bonus > 0
+        return self.loyalty_bonus_per_streak > 0
 
     @property
     def has_loyalty_stock(self) -> bool:
@@ -896,11 +906,19 @@ LOYALTY_V2_CELLS = tuple(
     for gamma in LOYALTY_V2_GAMMAS
 )
 
-#: M1, the streak ablation, on the same environment. M0 is `memory_off` of
-#: either.
+#: M1, the streak ablation. Note that `PHASE7A_FIXED` **already carries** the
+#: 0.5 streak bonus, so this is that market renamed rather than a change to it
+#: - which is exactly the trap it is spelled out to avoid. Building "no
+#: loyalty" by taking PHASE7A_FIXED and changing nothing produces M1 twice.
 LOYALTY_V2_STREAK = dataclasses.replace(
     PHASE7A_FIXED, name="loyaltyv2_m1_streak",
     loyalty_bonus_per_streak=0.5, loyalty_streak_cap=3, record_loyalty_bonus=True,
+)
+
+#: M0, the true no-loyalty control: the same market with every mechanism off.
+LOYALTY_V2_NONE = dataclasses.replace(
+    PHASE7A_FIXED, name="loyaltyv2_m0_none",
+    loyalty_bonus_per_streak=0.0, loyalty_model="streak", loyalty_gamma=0.0,
 )
 
 

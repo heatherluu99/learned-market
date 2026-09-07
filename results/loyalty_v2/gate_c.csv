@@ -1,0 +1,6 @@
+question,M0,M1,M2,representation_dependent,note
+Path dependence after a week-0 perturbation,0.0000,0.0000,+0.0000 to +0.0000,False,zero everywhere; the null survives both representations
+Decay shape of state dependence (lag 8 / lag 1),n/a - no memory,0.158,+0.1769 to +0.5904,True,M1 is pinned near the short-memory end; only M2 reaches the human ratio of 0.255 across a range
+"Shock recovery time, memory ON minus OFF (weeks)",0 by construction,+0.229,-0.1529 to +0.7090,True,"M1 recovers more slowly than its own control, rho >= 0.80 stock cells recover faster - a counter loses the relationship a forced substitution breaks, a decaying stock keeps most of it"
+Return to a shocked seller within 3 weeks,0 by construction,+0.0276,+0.0145 to +0.0688,False,"memory raises it under both, by a similar margin"
+Trajectory amplification,+1.1284 to +1.2764,+1.1147 to +1.2721,+0.9161 to +1.2069,False,"the ordering M0 > M1 > M2 holds at both temperatures - less memory, more amplification - and only M2 at high gamma drops below one, so the direction is the same under every representation"

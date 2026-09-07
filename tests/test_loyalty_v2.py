@@ -112,3 +112,35 @@ def test_the_older_mechanisms_are_untouched():
     for c in config.LOYALTY_V2_CELLS:
         assert c.loyalty_deal_sensitivity == 0.0
         assert c.loyalty_bonus_per_streak == 0.0
+
+
+def test_the_three_mechanisms_are_actually_three_mechanisms():
+    """M0, M1 and M2 must differ, and M0 must really have no loyalty.
+
+    Written after Gate C reported M0 and M1 as byte-identical: PHASE7A_FIXED
+    already carries the 0.5 streak bonus, so a "no loyalty" arm built by
+    taking that market and changing nothing is M1 under another name. The
+    numbers matched to four decimals, which is the only reason it was caught -
+    a subtler contamination would have read as a finding.
+    """
+    m0, m1 = config.LOYALTY_V2_NONE, config.LOYALTY_V2_STREAK
+    m2 = config.loyalty_v2_cell(0.80, 1.50)
+
+    assert not m0.has_loyalty, "M0 must produce no bonus"
+    assert m1.has_loyalty and m2.has_loyalty
+
+    seed = 0
+    runs = {name: run_season(dataclasses.replace(c, seeds=(seed,), weeks=40), seed)
+            for name, c in (("M0", m0), ("M1", m1), ("M2", m2))}
+    choices = {k: v.chosen_seller for k, v in runs.items()}
+    for a, b in (("M0", "M1"), ("M0", "M2"), ("M1", "M2")):
+        assert not np.array_equal(choices[a], choices[b]), f"{a} and {b} are identical"
+
+
+def test_memory_off_really_is_memory_off_for_every_mechanism():
+    """A control must produce no bonus, whichever mechanism it controls for."""
+    for cfg in (config.LOYALTY_V2_STREAK, config.loyalty_v2_cell(0.95, 3.0),
+                config.PHASE7E_CELLS[0]):
+        off = memory_off(cfg)
+        assert not off.has_loyalty, cfg.name
+        assert off.max_loyalty_bonus() == 0.0, cfg.name
