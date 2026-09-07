@@ -811,11 +811,20 @@ def run_season(cfg: MarketConfig, seed: int, policy=None) -> SeasonResult:
             # `price` is what was actually paid, `price0` the stall's list
             # price, so a promotion counts as the deal it is.
             if cfg.has_relationship_loyalty:
-                # Guadagni & Little (1983): L <- rho*L + (1-rho)*I. One
-                # parameter, bounded in [0,1], no promotion term - delta is
-                # held at zero throughout this branch for identification, so
-                # it is absent here rather than multiplied by zero.
+                # Guadagni & Little (1983): L <- rho*L + (1-rho)*I, bounded in
+                # [0,1]. Loyalty v2's grid holds delta at zero, so this reduces
+                # to exactly that expression there.
+                #
+                # H_promo turns it on: a purchase made at the promotional price
+                # accrues (1 + delta) times one made at list. The indicator is
+                # the promotion itself rather than a continuous price ratio, so
+                # delta reads directly off the multiplier - and with delta > 0
+                # the stock reaches 1 + delta, which is why the effective
+                # ceiling is reported per cell rather than assumed to be gamma.
                 accrual = 1.0 - cfg.loyalty_retention
+                if cfg.loyalty_deal_sensitivity:
+                    on_promo = (price < price0 - 1e-12).astype(float)
+                    accrual = accrual * (1.0 + cfg.loyalty_deal_sensitivity * on_promo)
             else:
                 # `price` is what was actually paid, `price0` the stall's list
                 # price, so a promotion counts as the deal it is.

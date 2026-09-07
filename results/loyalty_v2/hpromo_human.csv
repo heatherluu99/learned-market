@@ -1,0 +1,3 @@
+estimand,contrast,n_promoted,n_list,ci_lo,ci_hi,predicted_lo,predicted_hi,inside_registered_interval,distinguishable_from_zero
+raw,-0.04359711258878507,935,2218,,,,,,
+b1_adjusted,0.008495127921906959,585,1028,-0.0274666326034528,0.045779820074574346,-0.03,0.0,False,False

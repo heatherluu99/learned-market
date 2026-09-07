@@ -422,7 +422,11 @@ class MarketConfig:
         # maximum effect is gamma exactly - the same number in every cell,
         # with nothing solved per cell to make cells comparable.
         if self.has_relationship_loyalty:
-            return self.loyalty_gamma
+            # With a positive deal sensitivity the stock reaches 1 + delta
+            # rather than 1, so the ceiling moves with it. Reported rather
+            # than assumed: H_promo's whole point is that adding the term
+            # costs the boundedness that made gamma the ceiling everywhere.
+            return self.loyalty_gamma * (1.0 + max(0.0, self.loyalty_deal_sensitivity))
         if self.has_loyalty_stock:
             return self.loyalty_max_bonus
         return self.loyalty_bonus_per_streak * self.loyalty_streak_cap
@@ -914,6 +918,29 @@ LOYALTY_V2_STREAK = dataclasses.replace(
     PHASE7A_FIXED, name="loyaltyv2_m1_streak",
     loyalty_bonus_per_streak=0.5, loyalty_streak_cap=3, record_loyalty_bonus=True,
 )
+
+#: H_promo: a purchase on promotion accrues (1 + delta) times one at list.
+#: Registered before running, with the sign predicted on the B1-adjusted human
+#: contrast rather than the raw one, which had already been seen.
+HPROMO_DELTAS = (-0.25, 0.0, 0.25)
+
+
+def hpromo_cell(delta: float, rho: float = 0.80, gamma: float = 1.50) -> MarketConfig:
+    """One H_promo cell, on Loyalty v2's middle (rho, gamma).
+
+    The middle of the grid rather than a corner: rho = 0.80 and gamma = 1.50
+    are inside Gate A2b's primary region, and gamma is Phase 6's own streak
+    maximum, so delta is the only thing that moves.
+    """
+    return dataclasses.replace(
+        loyalty_v2_cell(rho, gamma),
+        name=f"hpromo_d{int(delta * 100):+04d}",
+        loyalty_deal_sensitivity=delta,
+    )
+
+
+HPROMO_CELLS = tuple(hpromo_cell(d) for d in HPROMO_DELTAS)
+
 
 #: M0, the true no-loyalty control: the same market with every mechanism off.
 LOYALTY_V2_NONE = dataclasses.replace(

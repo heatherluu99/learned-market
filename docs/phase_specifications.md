@@ -3909,6 +3909,78 @@ Nothing here estimates `delta`: three points on a grid cannot, and the same
 calibration-not-estimation discipline applies as in Gate A2b.
 
 
+### H_promo result — the registered sign is wrong, and the raw effect is a selection artifact
+
+| | contrast | n | |
+|---|---|---|---|
+| human, raw | **−0.0436** | 935 / 2218 | seen before registration, disclosed |
+| human, B1-adjusted | **+0.0085** | 585 / 1028 | 95% CI **[−0.0275, +0.0458]** |
+
+**The registered prediction is wrong.** The gate predicted the adjusted
+contrast would stay negative and land in `(−0.03, 0)`. It is **positive**, and
+the point estimate falls outside the registered interval. The reasoning was
+half right and half wrong in a specific way worth recording: the confound was
+correctly identified and correctly signed, but its size was underestimated. It
+does not merely shrink the raw effect, it accounts for **more than all of it**.
+
+**Registered outcome 2 is what fired.** The adjusted contrast is not
+distinguishable from zero, and the gate wrote down in advance what that means:
+`delta = 0` is the correct specification and Loyalty v2's baseline needs no
+promotion term. The hypothesis is retired rather than left open.
+
+**What this says about the panel.** The familiar pattern — purchases made on
+deal are followed by repeat 4.4 points less often — is **entirely a selection
+effect** in this data. A promoted purchase is disproportionately a deal-induced
+switch to a brand the household likes less, and that brand repeats less often
+whether or not any loyalty mechanism exists. Conditioning on household
+preference and current conditions removes the whole of it. Nothing is left for
+promotion-dependent reinforcement to explain, in either direction.
+
+**The simulator independently reproduces the confound.** Its raw contrast at
+`delta = 0` is −0.0249 against the panel's −0.0436: same sign, same order of
+magnitude, from a mechanism that has no promotion-loyalty term at all. That is
+the account being checked rather than assumed — a market in which promotions
+pull buyers toward sellers they like less will show "promotions erode loyalty"
+with no such effect present.
+
+### What the test cannot do
+
+| `delta` | simulator, raw | simulator, adjusted | inside human CI |
+|---|---|---|---|
+| −0.25 | −0.0354 | −0.0205 | yes |
+| 0.00 | −0.0249 | −0.0099 | yes |
+| +0.25 | −0.0164 | −0.0014 | yes |
+
+**All three cells fall inside the human interval, so the panel does not
+discriminate among them.** The conclusion that `delta = 0` rests on parsimony —
+there is no effect requiring a parameter — and not on having ruled the others
+out. The honest bound is that any promotion-loyalty effect in this panel is
+**smaller than about 4 percentage points**, which is what a CI of ±0.037 on
+1,613 held-out occasions supports. A sharper test needs more data or a category
+with heavier promotion, not a finer grid.
+
+The simulator's adjusted contrast moves monotonically with `delta`
+(−0.0205, −0.0099, −0.0014) at about 0.004 per 0.1 of `delta`, so the
+mechanism does what it was built to do; the limit is the human side's
+resolution.
+
+### An estimand mismatch caught in this section's own summary
+
+The first run reported "closest cell to the adjusted human contrast:
+`delta = +0.25`" while comparing the simulator's **raw** number against the
+human's **adjusted** one — precisely the error this gate's design section warned
+against two paragraphs earlier. The simulator now carries its own confound
+removal: each cell's memory-off twin, run on the same seeds down to the draw,
+subtracted from it. That is the structural analogue of B1 — the part of the
+contrast that survives removing everything except loyalty — and adjusted is now
+compared only against adjusted, raw only against raw.
+
+Both comparisons are reported above because they answer different questions.
+Raw against raw asks whether the simulator reproduces the panel's selection
+effect, and it does. Adjusted against adjusted asks what `delta` should be, and
+it cannot tell.
+
+
 ## Phase 11 — Bias Quantification (Asset A formalizes; Asset B built)
 
 **Research question:** Is the human-AI gap systematic and predictable, and can it be corrected?

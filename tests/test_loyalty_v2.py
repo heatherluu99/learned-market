@@ -144,3 +144,44 @@ def test_memory_off_really_is_memory_off_for_every_mechanism():
         off = memory_off(cfg)
         assert not off.has_loyalty, cfg.name
         assert off.max_loyalty_bonus() == 0.0, cfg.name
+
+
+def test_hpromo_delta_changes_accrual_only_on_promoted_purchases():
+    """delta multiplies the accrual of a purchase made at the promotional price.
+
+    With no promotions in the market the three cells must be identical: if
+    they were not, delta would be acting through something other than the
+    promotion and the hypothesis would not be identified.
+    """
+    seed = 0
+    no_promo = {}
+    for delta in config.HPROMO_DELTAS:
+        cfg = dataclasses.replace(config.hpromo_cell(delta), seeds=(seed,),
+                                  weeks=30, promotion_probability=0.0)
+        no_promo[delta] = run_season(cfg, seed).chosen_seller
+    base = no_promo[0.0]
+    for delta in config.HPROMO_DELTAS:
+        assert np.array_equal(no_promo[delta], base), delta
+
+    # With promotions on, they must differ.
+    with_promo = {}
+    for delta in config.HPROMO_DELTAS:
+        cfg = dataclasses.replace(config.hpromo_cell(delta), seeds=(seed,), weeks=30)
+        with_promo[delta] = run_season(cfg, seed).chosen_seller
+    assert not np.array_equal(with_promo[-0.25], with_promo[0.0])
+    assert not np.array_equal(with_promo[0.25], with_promo[0.0])
+
+
+def test_hpromo_reports_its_ceiling_rather_than_assuming_gamma():
+    """A positive delta lifts the stock's ceiling above 1, so gamma is no longer it.
+
+    This is the cost of the term that Loyalty v2 dropped it to avoid, and it
+    is reported rather than quietly carried.
+    """
+    assert config.hpromo_cell(0.0).max_loyalty_bonus() == pytest.approx(1.50)
+    assert config.hpromo_cell(0.25).max_loyalty_bonus() == pytest.approx(1.875)
+    # A negative delta only ever reduces accrual, so the ceiling is unmoved.
+    assert config.hpromo_cell(-0.25).max_loyalty_bonus() == pytest.approx(1.50)
+    # Loyalty v2's own cells carry no delta and keep gamma as the ceiling.
+    for c in config.LOYALTY_V2_CELLS:
+        assert c.max_loyalty_bonus() == pytest.approx(c.loyalty_gamma)
