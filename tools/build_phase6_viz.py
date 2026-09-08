@@ -34,7 +34,7 @@ def main() -> int:
     page = template.replace(PLACEHOLDER, json.dumps(payload, separators=(",", ":")))
     args.out.write_text(page)
     print(
-        f"Wrote {args.out.relative_to(REPO_ROOT)} "
+        f"Wrote {args.out.resolve().relative_to(REPO_ROOT)} "
         f"({args.out.stat().st_size / 1024:.0f} KB, seed {payload['meta']['seed']}, "
         f"{payload['meta']['weeks']} weeks)"
     )
