@@ -79,6 +79,10 @@ and it spends nine phases showing what that buys and what it costs.
 | 9b | Does teacher entropy govern whether it compounds? | **Yes for amplification** — Spearman −1.00, 1.02×→1.67×. **Not yet for behaviour** |
 | 9c | Which environment characteristic suppresses divergence? | **Neither — persistence *carries* it.** Removing season-long taste kills amplification outright |
 | 9b+ | Does it ever become material, down to a deterministic teacher? | **No.** Amplification saturates at ~1.7×; **48 of 48 shares equivalent** |
+| 9d | Does an LLM buyer differ from a policy trained on the same rule? | **Yes, and in a specific way.** Every mechanism direction right; buys **a quarter** as often. Paired −0.6214 [−0.6370, −0.6058] |
+| 9d | Is that the model, or the feedback loop? | **Both, and now separated.** On the rule's own states it returns **half** the rule's probability; the loop then makes that **1.42×** worse. Correlation across states **+0.64** |
+| 9d | Is that amplification unusual for an LLM? | **No.** 9a's distilled network was 1.07×, 9b's sharpest regime 1.78×. **What the loop is given to amplify** is what differs, not the loop |
+| 9d | Is the Agent cheaper than human research? | **Unquotable.** Verified per-respondent figures span **15,000×**, so the ratio's denominator is a choice of source. **Speed** is clean: 3,754×–48,262× |
 | 10 | Is human loyalty stronger than the simulator's? | **Unanswerable as first asked.** A memoryless model with household preference predicts **97%** of the observed repeat rate. A "3.4×" claim was **withdrawn** — it compared an upper bound against a causal quantity |
 | 10 · S | On the households' own choice sets, does the simulator's memory add anything? | **No.** −0.0049 nats over a model that already knows the household, CI **[−0.0101, +0.0006]** |
 | 10 · S | Can a model that knows *no individual* match the aggregate? | **Yes** — JS 0.0035 against 0.0015 for one that does, while being **twice as wrong** per household. Aggregate fidelity is cheap; individual fidelity is not |

@@ -58,6 +58,7 @@ TITLES = {
     "phase9c_stabilizers": "Stabilizer ablation (9c)",
     "phase9d_three_mechanisms": "Agent, trained policy and rule (9d)",
     "phase9d_cost_speed_kpi": "Cost and speed against sourced baselines (9d)",
+    "phase9d_offline_fidelity": "Is the Agent wrong, or the loop? (9d)",
     "phase10_human_vs_agent_PILOT_200":
         "PILOT ONLY - 200 occasions, not a result (10)",
     "phase10_s_arm_simulator_on_human_choice_sets":
@@ -88,6 +89,7 @@ OVERWRITTEN = {
 SEQUENCE = {
     "phase9d_three_mechanisms": 0,
     "phase9d_cost_speed_kpi": 1,
+    "phase9d_offline_fidelity": 2,
     "phase10_human_vs_agent_PILOT_200": 0,
     "phase10_human_vs_agent_groq": 1,
     "phase10_s_arm_simulator_on_human_choice_sets": 2,
@@ -115,6 +117,7 @@ STATUS = {
     "phase9c_stabilizers": "headroom",
     "phase9d_three_mechanisms": "reversed",
     "phase9d_cost_speed_kpi": "sourced",
+    "phase9d_offline_fidelity": "decomposed",
     # The pilot is not a result and the page must not let it read as one.
     "phase10_human_vs_agent_PILOT_200": "pilot",
     "phase10_s_arm_simulator_on_human_choice_sets": "null",
