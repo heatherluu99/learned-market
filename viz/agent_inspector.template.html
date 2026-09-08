@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Millbrook Market — Agent Inspector</title>
+<style>
+  :root{
+    --bg:#ffffff; --panel:#f6f7f9; --panel-2:#fafafb; --border:#e3e5ea;
+    --text:#1a1d24; --text-2:#5b616e; --text-3:#8b909c;
+    --accent:#3B3F8C; --accent-bg:#EEF0FA; --accent-border:#C9CDEF;
+    --ok:#1E7A4D; --ok-bg:#E8F4EE; --warn:#C9922E; --warn-bg:#FBF3E2;
+    --dead:#8b909c; --dead-bg:#f1f2f4;
+    --poor:#3E6FA8; --middle:#B8722E; --rich:#C0453C;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    --mono:"SF Mono",SFMono-Regular,Consolas,"Liberation Mono",Menlo,monospace;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0; background:var(--bg); color:var(--text); font-family:var(--sans); font-size:14px; line-height:1.5;}
+  header{padding:18px 24px 14px; border-bottom:1px solid var(--border);}
+  header h1{font-size:23px; font-weight:700; margin:0; letter-spacing:-0.01em;}
+  header .sub{font-size:14px; color:var(--text-2); margin:6px 0 0; max-width:820px;}
+  .stats{display:flex; gap:8px; flex-wrap:wrap; margin-top:12px;}
+  .stat{background:var(--panel); border:1px solid var(--border); border-radius:7px; padding:5px 11px; font-size:13px;}
+  .stat b{font-family:var(--mono); font-weight:600;}
+  .stat span{color:var(--text-3); font-size:12px; margin-left:5px;}
+
+  .band{margin:16px 24px 0; display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:12px;}
+  .card{background:var(--panel); border:1px solid var(--border); border-radius:9px; padding:12px 14px;}
+  .card h3{margin:0 0 6px; font-size:11px; font-weight:700; letter-spacing:0.05em; text-transform:uppercase; color:var(--accent);}
+  .card .big{font-family:var(--mono); font-size:19px; font-weight:600;}
+  .card p{margin:5px 0 0; font-size:12.5px; color:var(--text-2); line-height:1.45;}
+
+  .shell{display:grid; grid-template-columns:230px 1fr; gap:0; margin-top:18px; border-top:1px solid var(--border);}
+  @media (max-width:900px){ .shell{grid-template-columns:1fr;} }
+  .rail{border-right:1px solid var(--border); padding:14px 12px; max-height:78vh; overflow:auto;}
+  .rail h4{margin:0 0 8px; font-size:11px; letter-spacing:0.05em; text-transform:uppercase; color:var(--text-3);}
+  .buyer{display:flex; align-items:center; gap:8px; padding:6px 9px; border-radius:6px; cursor:pointer; border:1px solid transparent; font-size:13px;}
+  .buyer:hover{background:var(--panel);}
+  .buyer.on{background:var(--accent-bg); border-color:var(--accent-border); color:var(--accent); font-weight:600;}
+  .dot{width:9px; height:9px; border-radius:50%; flex:0 0 auto;}
+  .buyer .n{margin-left:auto; font-family:var(--mono); font-size:11px; color:var(--text-3);}
+  .main{padding:16px 24px 40px; max-height:78vh; overflow:auto;}
+  .wk{font-size:11px; letter-spacing:0.05em; text-transform:uppercase; color:var(--text-3); margin:16px 0 6px;}
+  .wk:first-child{margin-top:0;}
+  .dec{border:1px solid var(--border); border-radius:9px; padding:11px 13px; margin-bottom:9px; background:var(--panel-2);}
+  .dec .top{display:flex; align-items:baseline; gap:10px; flex-wrap:wrap;}
+  .dec .stall{font-weight:600;}
+  .dec .tag{font-size:11px; padding:1px 7px; border-radius:20px; border:1px solid var(--border); color:var(--text-2);}
+  .dec .tag.buy{background:var(--ok-bg); border-color:#BFE0CE; color:var(--ok); font-weight:600;}
+  .dec .tag.skip{background:var(--dead-bg); color:var(--dead);}
+  .probs{display:flex; gap:14px; margin:9px 0 0; font-family:var(--mono); font-size:12.5px;}
+  .probs .g{flex:1;}
+  .probs .lbl{font-family:var(--sans); font-size:10.5px; letter-spacing:0.04em; text-transform:uppercase; color:var(--text-3);}
+  .bar{height:7px; border-radius:4px; background:var(--dead-bg); margin-top:3px; overflow:hidden;}
+  .bar i{display:block; height:100%;}
+  .why{margin:10px 0 0; padding:9px 11px; background:var(--bg); border:1px solid var(--border); border-left:3px solid var(--accent); border-radius:7px; font-size:12.5px; color:var(--text-2); line-height:1.5;}
+  .why b{color:var(--accent); font-size:10.5px; letter-spacing:0.05em; text-transform:uppercase; display:block; margin-bottom:3px;}
+  .empty{color:var(--text-3); font-size:13px;}
+  footer{padding:14px 24px 28px; color:var(--text-3); font-size:12px; border-top:1px solid var(--border);}
+</style>
+</head>
+<body>
+<header>
+  <h1>Agent Inspector</h1>
+  <p class="sub">Every decision an LLM-driven buyer made in one season, with the
+  model's own account of why. The point of the page is the pair of bars on each
+  card: what the Agent said, against what the rule that generates this world
+  said, on the same encounter.</p>
+  <div class="stats" id="stats"></div>
+</header>
+
+<div class="band" id="band"></div>
+
+<div class="shell">
+  <div class="rail">
+    <h4>Agent buyers</h4>
+    <div id="rail"></div>
+  </div>
+  <div class="main" id="main"></div>
+</div>
+
+<footer id="foot"></footer>
+
+<script>
+const DATA = /*__DATA__*/;
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const COLOR = {Poor:"var(--poor)", Middle:"var(--middle)", Rich:"var(--rich)"};
+
+const byBuyer = {};
+for (const d of DATA.decisions) (byBuyer[d.buyer] ||= []).push(d);
+const buyers = Object.keys(byBuyer).map(Number).sort((a,b)=>a-b);
+let current = buyers[0];
+
+function renderStats(){
+  const m = DATA.meta;
+  document.getElementById("stats").innerHTML = [
+    [m.model, "model"], [m.agent_buyers + " of " + m.total_buyers, "buyers on the Agent"],
+    [m.decisions.toLocaleString(), "decisions"], [m.distinct_prompts, "distinct prompts"],
+    [m.weeks, "weeks"], ["seed " + m.seed, ""],
+  ].map(([v,k]) => `<div class="stat"><b>${esc(v)}</b>${k?`<span>${esc(k)}</span>`:""}</div>`).join("");
+}
+
+function renderBand(){
+  const f = DATA.fidelity, k = DATA.kpi;
+  const cards = [
+    ["The error is one number",
+     `agent = ${f.d_offline!=null ? "" : ""}−0.219 + 0.954 × rule`,
+     `A slope of 0.954 is not compression. The Agent's comparative statics are
+      almost exactly right and the whole line sits low. Adding that intercept
+      back recovers <b>71.6%</b> of the closed-loop collapse.`],
+    ["Offline vs closed loop",
+     `${f.d_offline} → ${f.d_shadow}`,
+     `Distance to the rule on the rule's own states, then on the states the
+      Agent's own behaviour produces. The ratio is <b>${f.amplification}×</b>,
+      against 1.07× for a distilled network and 1.78× for the sharpest regime
+      Phase 9b could build.`],
+    ["Speed, study against study",
+     `${Math.round(k.speed_ratio_low).toLocaleString()}×–${Math.round(k.speed_ratio_high).toLocaleString()}×`,
+     `${Math.round(k.wall_seconds)}s against 14–180 days. The cost ratio is
+      <b>not</b> quoted: verified per-respondent figures span 15,000×, so its
+      denominator is a choice of source rather than a measurement.`],
+  ];
+  document.getElementById("band").innerHTML = cards.map(([h,big,p]) =>
+    `<div class="card"><h3>${esc(h)}</h3><div class="big">${esc(big)}</div><p>${p}</p></div>`).join("");
+}
+
+function renderRail(){
+  document.getElementById("rail").innerHTML = buyers.map(b => {
+    const cls = byBuyer[b][0]["class"];
+    const bought = byBuyer[b].filter(d => d.bought).length;
+    return `<div class="buyer ${b===current?"on":""}" data-b="${b}">
+      <span class="dot" style="background:${COLOR[cls]}"></span>
+      buyer ${b} <span style="color:var(--text-3);font-size:11.5px">${esc(cls)}</span>
+      <span class="n">${bought}/${byBuyer[b].length}</span></div>`;
+  }).join("");
+  document.querySelectorAll(".buyer").forEach(el =>
+    el.onclick = () => { current = +el.dataset.b; renderRail(); renderMain(); });
+}
+
+function bar(v, color){
+  return `<div class="bar"><i style="width:${Math.round(v*100)}%;background:${color}"></i></div>`;
+}
+
+function renderMain(){
+  const rows = byBuyer[current];
+  const weeks = [...new Set(rows.map(d => d.week))].sort((a,b)=>a-b);
+  const head = `<p class="empty" style="margin:0 0 14px">Buyer ${current},
+    ${esc(rows[0]["class"])}. ${rows.filter(d=>d.bought).length} purchases in
+    ${rows.length} encounters. Each card is one stall visit.</p>`;
+  document.getElementById("main").innerHTML = head + weeks.map(w => {
+    const ds = rows.filter(d => d.week === w);
+    return `<div class="wk">week ${w}</div>` + ds.map(d => `
+      <div class="dec">
+        <div class="top">
+          <span class="stall">stall ${d.seller}</span>
+          <span class="tag">${d.premium ? "premium" : "budget"} · ${d.price.toFixed(2)}</span>
+          ${d.streak > 0 ? `<span class="tag">bought here ${d.streak} wk running</span>` : ""}
+          <span class="tag ${d.bought ? "buy" : "skip"}">${d.bought ? "bought" : "did not buy"}</span>
+        </div>
+        <div class="probs">
+          <div class="g"><span class="lbl">Agent said</span> ${d.p_agent.toFixed(2)}
+            ${bar(d.p_agent, "var(--accent)")}</div>
+          <div class="g"><span class="lbl">the rule said</span> ${d.p_rule.toFixed(2)}
+            ${bar(d.p_rule, "var(--ok)")}</div>
+        </div>
+        ${d.reasoning ? `<div class="why"><b>the Agent's own reasoning</b>${esc(d.reasoning)}</div>` : ""}
+      </div>`).join("");
+  }).join("");
+}
+
+function renderFoot(){
+  const src = DATA.baseline.filter(r => r.source).map(r =>
+    `${esc(r.research_method)} — ${esc(r.source_type)}`);
+  document.getElementById("foot").innerHTML =
+    `Reasoning text is the model's own and is shown unedited. Probabilities are
+     the acting value the engine used and the rule's value on the same
+     encounter, which the engine evaluates either way — that is what makes the
+     comparison possible on states the rule would never have produced.<br>
+     Human reference points, every figure verified at its own source:
+     ${src.length} rows in <span style="font-family:var(--mono)">data/human_baseline.csv</span>.`;
+}
+
+renderStats(); renderBand(); renderRail(); renderMain(); renderFoot();
+</script>
+</body>
+</html>

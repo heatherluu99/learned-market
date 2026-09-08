@@ -3103,7 +3103,35 @@ makes the Agent cheap is exactly what makes it wrong about people.
 study against study: **3,754× to 48,262× faster**. That comparison needs no
 contested denominator.
 
-### Web Visualization Extension — Agent Inspector (generative-AI showcase)
+### Agent Inspector — built, and what it shows
+
+`viz/agent_inspector.html`, self-contained, 1,591 decisions from one season
+with the model's own reasoning attached to each.
+
+**Built as its own page rather than an extension of the Phase 6 market view.**
+That view is driven by week-level aggregates and a canvas of sprites; the
+Inspector needs per-decision records with text attached, which is a different
+shape of data. Bolting one onto the other would have risked a working page for
+no gain, and both read the same market.
+
+Each card shows the Agent's probability and **the rule's probability on the
+same encounter**, side by side. The engine evaluates the rule whether or not a
+policy is acting — the shadow evaluation Phases 9a–9c depend on — so the
+comparison exists even on states the rule would never itself have produced.
+
+**It makes the intercept visible one decision at a time.** A representative
+card:
+
+> stall 1, budget, 2.00, bought here 1 week running — **did not buy**
+> Agent said **0.15**, the rule said **0.66**
+> *"Low-budget, rarely buys, price 2.00 moderate. Bought last week, so some
+> loyalty. Mid-season…"*
+
+The Agent **names the loyalty in its own reasoning and still lands at 0.15**.
+That is the finding in one card: the logic is right, the number is low, and no
+aggregate could have shown it. This is the qualitative check the phase
+registered the Inspector for, and it agrees with the regression rather than
+merely illustrating it. (generative-AI showcase)
 
 Extends the Phase 6/8 page. This is the centerpiece feature for the portfolio angle, because it is the first point where the visualization can show *reasoning*, not just outcomes.
 
