@@ -2882,6 +2882,57 @@ encodes is present in the Agent's answers.** What is wrong is the level: asked
 for a purchase probability, it is systematically far more conservative than the
 rule that generates the world.
 
+### Why the level collapses: the Agent's own behaviour feeds its observations
+
+The purchase gap is not "the model is conservative". It is a **self-reinforcing
+loop**, and the prompts show it.
+
+All **223 distinct prompts** in the run read *"rarely buys overall"* — every
+one, including prompts describing a shopper that had bought at that stall two
+weeks running. The descriptor comes from the buyer's own `history_rate`, so:
+
+```
+Agent buys less  ->  its history_rate falls  ->  every prompt says "rarely buys"
+                 ->  the Agent assigns a lower probability  ->  it buys less
+```
+
+| | `history_rate` mean | p90 | max |
+|---|---|---|---|
+| buyers on the rule | 0.205 | 0.367 | — |
+| **buyers on the Agent** | **0.029** | 0.067 | 0.250 |
+
+**The Agent's own history rate is one seventh of the rule's.** Its probability
+distribution over the states it actually reaches has median **0.05** and
+maximum **0.35** — against 0.85 when the same model is asked about a
+hand-constructed loyal shopper, a state its own trajectory stops producing.
+
+**Part of this was a defect of mine, and part is not.** The original
+descriptor thresholds were 0.2 and 0.5 on a quantity whose median under the
+rule is 0.18 and whose **maximum is 0.60**: "buys often" described **1.0%** of
+encounters. That is the third threshold in this project set outside its own
+quantity's range, after Phase 6's gate 1b and Phase 10's L2 grid — and the
+first that failed **silently**, collapsing an observation set rather than
+returning an impossible number.
+
+Recalibrating to the rule's terciles (0.156, 0.218, splitting encounters
+32/35/33 instead of 52/47/1) **changed nothing**: the Agent's own p90 is 0.067,
+so only 4.3% of its encounters reach even the lowered boundary. The loop
+survives the fix, which is what establishes it as a loop rather than a
+mis-parameterisation.
+
+**This is Phase 9's question arriving in an LLM.** Phases 9a–9c asked whether
+imitation error compounds through a closed loop and found it saturates at about
+1.7×. Gate B3 then found persistent buyer memory *stabilizes* trajectories.
+Here a different channel — the agent's own behaviour re-entering its
+**observations** rather than its state — produces the collapse those phases did
+not: not amplification of error around the right level, but convergence to a
+wrong one.
+
+**What it does not establish.** The feedback runs through a three-way bucket,
+so an Agent shown the number rather than the label might not collapse. Testing
+that means changing the observation set, which is a registered change and is
+not made here to chase a better result.
+
 **The stability difference is confounded with the level difference and is not
 evidence of stickiness.** The Agent's pair stability is 0.6339 against the
 rule's 0.4461, which looks like a stickier buyer. But pair stability is
