@@ -13,5 +13,12 @@ __pycache__/
 # Node (only if a JS toolchain is added later for the Phase 6 visualization)
 node_modules/
 
-# Phase 10's agent answers: regenerable, and large
-results/phase10/agent_cache.json
+# Phase 10's agent answers. The path this rule named stopped existing when the
+# cache was split per provider, so it has matched nothing since and both
+# caches have been tracked. Left tracked deliberately rather than re-ignored:
+# "regenerable" was the original reason to exclude it, and that stopped being
+# the operative fact once regeneration became four days of rate-limited free
+# quota. It is 392K, it is the only copy, and losing it would mean Phase 10
+# could not finish. The stale path is kept below so the rule's history is
+# visible rather than silently deleted.
+#   results/phase10/agent_cache.json   <- matched until the per-provider split
