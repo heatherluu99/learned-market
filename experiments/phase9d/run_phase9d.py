@@ -50,7 +50,7 @@ MODEL = "gpt-oss:20b"
 AGENT_SETTINGS = {"temperature": 0.0, "think": "low", "max_tokens": 512}
 #: Bumped whenever `agent.describe` or `agent.SYSTEM` changes, because either
 #: changes what the Agent saw and invalidates every cached answer.
-PROMPT_VERSION = "9d-1"
+PROMPT_VERSION = "9d-2"
 
 SHARES = {"agent": 0.30, "policy": 0.35, "rule": 0.35}
 SEEDS = tuple(range(8))

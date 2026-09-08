@@ -75,8 +75,20 @@ def describe(class_index, price, is_premium, streak, purchases, spent,
     basket = ("has bought nothing yet today" if purchases < 1
               else f"has already bought {min(int(purchases), 4)} item(s) today, "
                    f"spending about {round(float(spent))}")
-    habit = ("rarely buys" if history_rate < 0.2
-             else "buys sometimes" if history_rate < 0.5 else "buys often")
+    # Thresholds set from the generating rule's own distribution of
+    # `history_rate` (terciles, 0.156 and 0.218 over six seeds), not from
+    # round numbers. At the original 0.2 / 0.5 the top bucket described 1.0%
+    # of encounters and the rule's *maximum* was 0.60 - so "buys often" was a
+    # label the world could barely produce, and under an Agent whose own
+    # buying is lower it was never produced at all: all 223 distinct prompts
+    # in the first 9d run read "rarely buys overall".
+    #
+    # That is the third threshold in this project set outside its quantity's
+    # range, after Phase 6's gate 1b and Phase 10's L2 grid. Here it did not
+    # fail loudly - it silently collapsed the Agent's observation set to one
+    # value and took the purchase level down with it.
+    habit = ("rarely buys" if history_rate < 0.156
+             else "buys sometimes" if history_rate < 0.218 else "buys often")
     return (
         f"{CLASSES[int(class_index)]} shopper, who {habit} overall, is at a "
         f"{tier} stall priced at {price:.2f}. The shopper {loyalty} and "
