@@ -405,7 +405,7 @@ def ollama_client(model: str, input_price: float = 0.0, output_price: float = 0.
                   max_tokens: int = 512, temperature: float = 0.0,
                   think: str | None = "low",
                   host: str = "http://localhost:11434", retries: int = 3,
-                  timeout: float = 300.0):
+                  timeout: float = 300.0, reasoning_sink: dict | None = None):
     """A locally hosted model, same callable shape as the others.
 
     Written against the HTTP API directly rather than through a client
@@ -467,6 +467,13 @@ def ollama_client(model: str, input_price: float = 0.0, output_price: float = 0.
         # gpt-oss returns its chain of thought in a separate field. Only the
         # content is the answer; concatenating them would feed reasoning text
         # into a parser expecting four numbers.
+        #
+        # The thought is kept when a sink is supplied, because it is the only
+        # cheap check on whether the model's stated logic matches the profile
+        # it was given - and this project has an unexplained calibration gap
+        # that the text may speak to.
+        if reasoning_sink is not None:
+            reasoning_sink[prompt] = message.get("thinking") or ""
         return (message.get("content") or ""),\
             int(payload.get("prompt_eval_count") or 0),\
             int(payload.get("eval_count") or 0)

@@ -149,7 +149,8 @@ def main() -> int:
     student = buyer.as_engine_policy(net)
 
     usage = agent.Usage()
-    client = agent.ollama_client(MODEL, **AGENT_SETTINGS)
+    reasoning: dict[str, str] = {}
+    client = agent.ollama_client(MODEL, reasoning_sink=reasoning, **AGENT_SETTINGS)
     llm = agent.AgentPolicy(client, usage=usage)
 
     n_buyers = sum(b.count for b in cfg.buyer_classes)
@@ -198,6 +199,18 @@ def main() -> int:
               f"purchase {row['purchase_rate_paired']:+.4f} "
               f"[{row['purchase_rate_lo']:+.4f}, {row['purchase_rate_hi']:+.4f}] "
               f"{row['purchase_rate_verdict']}")
+
+    # Every distinct prompt with the probability it produced and the model's
+    # own account of why. Written out because it is the only evidence that
+    # speaks to *why* the level is what it is, and none of the aggregates do.
+    import hashlib
+    pd.DataFrame([
+        {"prompt": prompt,
+         "probability": llm.cache.get(
+             hashlib.sha1(prompt.encode()).hexdigest()),
+         "reasoning": text}
+        for prompt, text in sorted(reasoning.items())
+    ]).to_csv(RESULTS_ROOT / "reasoning.csv", index=False)
 
     frame = pd.DataFrame(rows)
     frame.to_csv(RESULTS_ROOT / "arms.csv", index=False)
