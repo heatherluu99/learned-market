@@ -2970,6 +2970,62 @@ offline error is an order of magnitude larger than a distilled network's to
 begin with. **What makes the LLM's trajectory bad is mostly not the loop; it is
 what the loop is given to amplify.**
 
+### The error is one number, and adding it back recovers most of the collapse
+
+Fitting the Agent against the rule across all 447 offline states, weighted by
+how often each occurs:
+
+```
+agent = -0.219 + 0.954 x rule
+```
+
+**A slope of 0.954 is not compression.** It is a line of essentially the right
+gradient, shifted down by a constant. The Agent's comparative statics are not
+approximately right, they are *almost exactly* right; what is broken is an
+intercept.
+
+So the intercept was added back as a calibration layer — the Agent's own
+probability plus 0.219, clipped to [0, 1], nothing else changed. An attribution
+arm in the sense of Phase 2's common-alpha run: not a better Agent, a way of
+asking how much the offset accounts for.
+
+| arm | purchase rate | pair stability | paired against the rule |
+|---|---|---|---|
+| Agent, as it answers | 0.2191 | 0.5847 | −0.6001 [−0.6153, −0.5849] |
+| **Agent + intercept correction** | **0.6487** | 0.3764 | −0.1705 [−0.1848, −0.1562] |
+| rule (control) | 0.8192 | ~0.446 | — |
+
+**The correction recovers 71.6% of the gap**, and the residual −0.17 is still
+material — so most of the collapse is one number, and the rest is the 1.42×
+loop amplification acting on what remains.
+
+**It also settles the stability question.** Pair stability fell from 0.5847 to
+0.3764 under correction, back toward the rule's own level. The apparent
+stickiness was selection after all — an Agent that buys only in high-loyalty
+states looks sticky — and correcting the level removes it without anything
+being done to the memory mechanism.
+
+**What survives correction is a class-differential bias.** Residuals after
+removing the constant:
+
+| | residual |
+|---|---|
+| high-income buyers | **+0.121** |
+| low-budget buyers | **−0.063** |
+
+The Agent is relatively more optimistic about rich shoppers and more pessimistic
+about poor ones than its own overall pattern predicts, a spread of about 0.18
+that recalibration does **not** fix. That is Phase 11's subject — bias
+quantification — arriving in Phase 9d without being looked for, and it is
+recorded here rather than left for a phase that has not run.
+
+**The commercial reading.** An LLM used as a synthetic consumer here is
+**ordinally usable and cardinally broken**, and broken by a quantity that a
+small calibration set can estimate. That is a far better position than "the
+model is unreliable": it says what to measure and what to correct. What it does
+not say is that the correction is free — the class-differential residual
+survives it, and that residual is the part a client would be harmed by.
+
 **What it does not establish.** The feedback runs through a three-way bucket,
 so an Agent shown the number rather than the label might not collapse. Testing
 that means changing the observation set, which is a registered change and is
