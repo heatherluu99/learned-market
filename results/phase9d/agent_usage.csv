@@ -1,0 +1,2 @@
+calls,cached,cache_hit_rate,input_tokens,output_tokens,synthetic_cost_usd,synthetic_latency_seconds,seconds_per_call,model,prompt_version,temperature,think,max_tokens
+223,18152,0.9878639455782313,37480,6641,0.0,332.715,1.492,gpt-oss:20b,9d-1,0.0,low,512

@@ -728,8 +728,16 @@ def run_season(cfg: MarketConfig, seed: int, policy=None) -> SeasonResult:
                 # function and stays evaluable on states it would never have
                 # produced itself.
                 p_acting = p_purchase
-                if cfg.buyer_policy is not None:
-                    p_acting = float(cfg.buyer_policy(
+                # Phase 9d runs three decision mechanisms in one market, so the
+                # hook is resolved per buyer. A bare callable still means "every
+                # buyer", which is what Phases 9a-9c pass and why none of them
+                # move; a sequence assigns one policy per buyer id, and a None
+                # entry leaves that buyer on the hand-written rule.
+                acting_policy = cfg.buyer_policy
+                if acting_policy is not None and not callable(acting_policy):
+                    acting_policy = acting_policy[buyer_id]
+                if acting_policy is not None:
+                    p_acting = float(acting_policy(
                         BUYER_CLASS_INDEX[buyer_class[buyer_id]],
                         float(p),
                         1.0 if seller_class[seller_id] == "Shigh" else 0.0,
