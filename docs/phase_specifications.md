@@ -2843,6 +2843,83 @@ returns **35** at the default and **65** at `"low"`. It is frozen and recorded,
 and a test asserts on the outgoing request body that the working name is the
 one sent.
 
+### Phase 9d result — the directions are right and the level is not
+
+30 Agents, 35 on Phase 9a's trained policy, 35 on the hand-written rule, all in
+one market across 8 seeds. Arms are stratified within class, and the control is
+the **smallest capacity that passes 9a's own offline gate** (64x2) rather than
+one picked here — a weaker control would have handed the Agent an easier
+comparison.
+
+| arm | purchase rate | premium share | pair stability | paired against the same buyers under the rule |
+|---|---|---|---|---|
+| Agent (`gpt-oss:20b`) | **0.2031** | 0.1187 | 0.6339 | **−0.6214** [−0.6370, −0.6058] material |
+| 9a trained policy | 0.7420 | 0.1047 | 0.4349 | −0.0789 [−0.0903, −0.0674] material |
+| hand-written rule | 0.8109 | 0.0849 | 0.4461 | +0.0000 equivalent |
+
+**The Agent buys about a quarter as often as the rule it replaced.** The
+comparison is within-buyer — the same market re-run with everyone on the rule,
+same seeds down to the draw — so this is not a difference in which buyers
+landed in which arm.
+
+**It is not a parse failure.** `AgentPolicy` raises on an unparseable reply
+rather than substituting a default, and all 223 calls parsed. The number is
+what the model said.
+
+**And the model's answers are well ordered.** Queried on representative states:
+
+| state | Agent's probability |
+|---|---|
+| low-budget, cheap stall, never bought there | 0.35 |
+| low-budget, cheap stall, **bought there 3 weeks running** | **0.85** |
+| low-budget, **premium stall at 6.00** | **0.18** |
+| high-income, premium stall at 6.00 | 0.40 |
+| high-income, cheap stall, already bought today | 0.70 |
+
+Loyalty raises it, price lowers it, income raises willingness at a premium
+stall, and a purchase already made lowers it. **Every direction the simulation
+encodes is present in the Agent's answers.** What is wrong is the level: asked
+for a purchase probability, it is systematically far more conservative than the
+rule that generates the world.
+
+**The stability difference is confounded with the level difference and is not
+evidence of stickiness.** The Agent's pair stability is 0.6339 against the
+rule's 0.4461, which looks like a stickier buyer. But pair stability is
+conditional on having bought in both weeks, and an Agent that buys mainly in
+high-loyalty states will show high stability by selection alone — the states it
+buys in are the ones where the rule is also sticky. Separating the two needs a
+level-matched Agent, which this phase does not have.
+
+**The control behaves as a control should.** The trained policy sits 0.079
+below the rule — small, and material only because eight seeds of a paired
+comparison give tight intervals. That is the residual imitation error Phase 9a
+measured, not a mechanism difference.
+
+### This agrees with Phase 10's pilot, in a different market and a different model
+
+Phase 10's hosted arm — `openai/gpt-oss-120b`, six times larger, on scanner
+panel data rather than a farmers' market — showed the same signature: **all four
+pre-registered mechanism directions correct, and worse than the marginal-share
+floor on distributional distance.** Here: every direction correct, and a
+purchase level a quarter of the truth.
+
+Two markets, two models, one pattern. **An LLM asked to produce a behavioural
+quantity gets the comparative statics right and the calibration wrong.** For a
+synthetic-consumer product that matters more than either half alone: direction
+questions ("does a promotion help?") are the ones it can answer, and level
+questions ("how many will buy?") are the ones it cannot, and those are usually
+what a client is paying for.
+
+### The cost and speed KPI is not reported
+
+Phase 9d's third acceptance criterion needs `human_baseline.csv` — real
+cost-per-respondent and turnaround figures with citations. The spec's own
+instruction is **"do not invent a number without a source"**, and no sourced
+figure is in hand, so the ratio is left uncomputed rather than filled with a
+plausible-looking one. The run's own side is measured and recorded: 223 distinct
+model calls, 322 seconds, 1.4 seconds per distinct decision, at a local marginal
+cost of zero that is **not** comparable to a hosted per-token price.
+
 ### Web Visualization Extension — Agent Inspector (generative-AI showcase)
 
 Extends the Phase 6/8 page. This is the centerpiece feature for the portfolio angle, because it is the first point where the visualization can show *reasoning*, not just outcomes.
