@@ -2928,6 +2928,48 @@ Here a different channel — the agent's own behaviour re-entering its
 not: not amplification of error around the right level, but convergence to a
 wrong one.
 
+### Splitting the two: how much is the model and how much is the loop
+
+Phase 9's own instrument decides this. `D_offline` is the distance between
+Agent and rule measured on **the rule's** state distribution, `D_shadow` the
+same distance on the Agent's own, and their ratio is the amplification 9a–9c
+report for a distilled network. Applied unchanged here, with encounters drawn
+from a rule-only market so `history_rate` takes the values the rule actually
+produces. No engine change, and no change to the observation set — only the
+distribution the questions come from.
+
+| | value |
+|---|---|
+| rule's mean probability, on its own states | 0.4660 |
+| Agent's mean probability, on those same states | **0.2253** |
+| `D_offline` | 0.2621 |
+| **signed bias** | **−0.2407** |
+| correlation across states | **+0.6401** |
+| `D_shadow`, on the Agent's own states | 0.3712 |
+| **amplification** `D_shadow / D_offline` | **1.42×** |
+
+**Both explanations are true, and now they are separated.** The Agent is
+already miscalibrated before any feedback: on the rule's own states it returns
+**about half** the rule's probability, 0.2253 against 0.4660. And the loop then
+makes that error **1.42× worse** on the states its own behaviour generates.
+
+Carried through to the level: offline the Agent's mean is **0.48×** the rule's;
+in closed loop its purchase rate is **0.25×**. Roughly half the collapse is
+baseline miscalibration and the loop roughly halves it again.
+
+**The +0.64 correlation is what survives.** Across states the Agent's ordering
+tracks the rule's — the comparative statics are right, as the closed-loop run
+also showed. It is the intercept that is wrong, and then compounded.
+
+**1.42× places it on Phase 9's existing scale rather than off it.** The
+distilled network in 9a amplified 1.07×; the sharpest teacher-entropy regime 9b
+could construct reached 1.78×. An LLM dropped into the same loop sits between
+them. So this is not a new failure mode peculiar to language models — it is the
+same closed-loop amplification those phases mapped, entered by a policy whose
+offline error is an order of magnitude larger than a distilled network's to
+begin with. **What makes the LLM's trajectory bad is mostly not the loop; it is
+what the loop is given to amplify.**
+
 **What it does not establish.** The feedback runs through a three-way bucket,
 so an Agent shown the number rather than the label might not collapse. Testing
 that means changing the observation set, which is a registered change and is
