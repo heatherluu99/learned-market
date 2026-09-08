@@ -1800,7 +1800,42 @@ construction.
 **Exit condition:** `git tag phase8-validated`. Last purely rule-based phase; no
 moat-relevant data is generated through Phase 8.
 
-### Web Visualization Extension — Entry/Exit Panels
+### Entry/Exit Panels — built
+
+`viz/phase8_market.html`, produced by the **same template and the same two
+tools** as the Phase 6 page, which is what "same underlying artifact, not a
+rebuild" required:
+
+```
+python tools/export_phase6_viz.py --phase8 --out viz/phase8_data.json
+python tools/build_phase6_viz.py --data viz/phase8_data.json --out viz/phase8_market.html
+```
+
+Everything added is guarded on the run carrying entry/exit events, so the
+Phase 6 page draws exactly what it drew before — verified after the change:
+its churn panel stays hidden, its readout still says "Active stalls 5", and
+its own research question and standfirst are unchanged.
+
+**Three things the phase needed the page to show.** The two panels list the
+week's entering and exiting firms with tier, price and the engine's own reason
+string. On the canvas an entering slot ramps in over two weeks and a departing
+one ghosts out, so churn reads as motion rather than only as text. And the
+readout switches from "Active stalls", meaning *sold something*, to **"Occupied
+stalls"**, meaning *held by a trading firm* — the quantity the panels are
+actually about, and a distinction Phase 6 never had to make because its seller
+set is fixed.
+
+**A slot is not a firm, and the page has to keep them apart.** Phase 8 recycles
+a vacated slot, so tier and price are weekly facts rather than fixed
+attributes and the static stall list cannot carry them; both are exported per
+week. The panels key on `firm_id`, the field Phase 8 had to add precisely
+because `active` alone cannot tell a survivor from its replacement.
+
+**Week 11 of seed 0 shows the phase's finding as it happens.** Two `Shigh`
+firms exit with `capital exhausted`, and slot 4 is refilled the same week by a
+`Slow` firm that "imitated firm 0". The premium tier being competed out — the
+result Phase 8 reports as a table — is visible as one slot changing hands and
+changing tier.
 
 Extends the Phase 6 page (same underlying artifact, not a rebuild). Adds:
 - **Top-right panel:** "New this week" — list of entering sellers with class and entry week.

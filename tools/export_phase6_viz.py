@@ -25,13 +25,16 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "src"))
 
 from market_sim import acceptance, experiment_log  # noqa: E402
-from market_sim.config import PHASE6_MAIN, PHASE6_NO_LOYALTY  # noqa: E402
+from market_sim.config import PHASE6_MAIN, PHASE6_NO_LOYALTY, phase8_cell  # noqa: E402
 from market_sim.engine import run_season, run_season_seeds  # noqa: E402
 
 
-def build_payload(seed: int) -> dict:
-    season = run_season(PHASE6_MAIN, seed)
-    cfg = PHASE6_MAIN
+def build_payload(seed: int, phase8: bool = False) -> dict:
+    # Phase 8 is the same page, not a rebuild: same market, same canvas, with
+    # entry and exit turned on so the stall set moves. PHASE6_MAIN has a fixed
+    # seller set and would give the panels nothing to show.
+    cfg = phase8_cell("capital", 10.0) if phase8 else PHASE6_MAIN
+    season = run_season(cfg, seed)
 
     stalls = []
     seller_classes = cfg.seller_class_of()
@@ -72,6 +75,20 @@ def build_payload(seed: int) -> dict:
                 "revenue": round(week.total_revenue, 1),
                 "promo": week.promoted_seller if week.promoted_seller is not None else -1,
                 "sold": week.seller_n_sold.tolist(),
+                # Which slots hold a trading firm this week. A slot can be
+                # vacated and refilled, so the firm id is carried too - without
+                # it the panels cannot tell a survivor from its replacement,
+                # which is the distinction Phase 8 had to add firm_id for.
+                "active": (season.active[w].astype(int).tolist()
+                           if season.active is not None else None),
+                "firm": (season.firm_id[w].astype(int).tolist()
+                         if season.firm_id is not None else None),
+                # A recycled slot can hold a different tier and price than it
+                # did last week, so these are weekly facts under Phase 8 and
+                # the static `stalls` list cannot carry them.
+                "tier": week.seller_classes if season.active is not None else None,
+                "price": ([round(float(x), 2) for x in week.effective_prices]
+                          if season.active is not None else None),
             }
         )
 
@@ -85,7 +102,7 @@ def build_payload(seed: int) -> dict:
 
     return {
         "meta": {
-            "phase": 6,
+            "phase": 8 if phase8 else 6,
             "seed": seed,
             "weeks": cfg.weeks,
             "n_buyers": cfg.n_buyers,
@@ -114,6 +131,7 @@ def build_payload(seed: int) -> dict:
         "buyers": season.chosen_seller.shape[1] and cfg.buyer_class_of(),
         "stalls": stalls,
         "weeks": weeks,
+        "events": season.events,
     }
 
 
@@ -121,14 +139,17 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--out", type=Path, default=REPO_ROOT / "viz" / "phase6_data.json")
+    parser.add_argument("--phase8", action="store_true",
+                        help="run the entry/exit market so the panels have "
+                             "something to show")
     args = parser.parse_args()
 
-    payload = build_payload(args.seed)
+    payload = build_payload(args.seed, phase8=args.phase8)
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(payload, separators=(",", ":")))
     size = args.out.stat().st_size
     print(
-        f"Wrote {args.out.relative_to(REPO_ROOT)} "
+        f"Wrote {args.out.resolve().relative_to(REPO_ROOT)} "
         f"({size / 1024:.1f} KB, seed {args.seed}, {payload['meta']['weeks']} weeks)"
     )
     return 0

@@ -52,6 +52,20 @@
   .legend-dot{display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:4px; vertical-align:-1px;}
   .legend-sq{display:inline-block; width:9px; height:9px; border-radius:2px; margin-right:4px; vertical-align:-1px;}
 
+  /* The panels sit beside the canvas rather than over it, for the same reason
+     the filters do: an overlay on a fixed-aspect canvas covers the thing it
+     is describing. They collapse under the canvas on a narrow window. */
+  .stage{display:grid; grid-template-columns:1fr 232px; gap:12px; align-items:start;}
+  @media (max-width:1000px){ .stage{grid-template-columns:1fr;} }
+  .churn{display:flex; flex-direction:column; gap:12px;}
+  .churn-box{background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:10px 12px; min-height:96px;}
+  .churn-box h4{margin:0 0 7px; font-size:10.5px; font-weight:700; letter-spacing:0.05em; text-transform:uppercase; color:var(--text-3);}
+  .churn-row{display:flex; align-items:baseline; gap:7px; font-size:12.5px; padding:3px 0; border-bottom:1px solid var(--border);}
+  .churn-row:last-child{border-bottom:0;}
+  .churn-row .sw{width:8px; height:8px; border-radius:2px; flex:0 0 auto;}
+  .churn-row .firm{font-family:var(--mono); font-weight:600;}
+  .churn-row .why{color:var(--text-3); font-size:11px; margin-left:auto; text-align:right; max-width:112px; line-height:1.35;}
+  .churn-none{color:var(--text-3); font-size:12px; font-style:italic;}
   .canvas-wrap{position:relative; background:var(--panel-2); border:1px solid var(--border); border-radius:10px; width:100%; aspect-ratio:1400/760; overflow:hidden;}
   #market-canvas{width:100%; height:100%; display:block; cursor:pointer;}
   .canvas-caption{font-size:11.5px; color:var(--text-3); margin:8px 2px 0; line-height:1.5;}
@@ -109,7 +123,7 @@
   <div class="top-row">
     <div>
       <h1>Millbrook Market</h1>
-      <p class="sub">Phase&nbsp;6 — Repeated Interaction. One 22-week season, replayed from a completed simulation run. Buyers remember where they last shopped; the question is whether that memory produces stable relationships.</p>
+      <p class="sub" id="sub"></p>
     </div>
     <div class="badges" id="badges"></div>
   </div>
@@ -150,7 +164,19 @@
       <span style="color:var(--text-3)">Faded dot = did not shop this week</span>
     </div>
 
-    <div class="canvas-wrap"><canvas id="market-canvas"></canvas></div>
+    <div class="stage">
+      <div class="canvas-wrap"><canvas id="market-canvas"></canvas></div>
+      <aside class="churn" id="churn" hidden>
+        <div class="churn-box">
+          <h4>New this week</h4>
+          <div id="entries"></div>
+        </div>
+        <div class="churn-box">
+          <h4>Exited this week</h4>
+          <div id="exits"></div>
+        </div>
+      </aside>
+    </div>
     <p class="canvas-caption">
       Stall size reflects units sold this week; stall x-position reflects its
       <b>position_score</b> — stalls near the entrance sit left and are noticed by more
@@ -172,7 +198,7 @@
   <div>
     <div class="callout">
       <div class="h">Research question</div>
-      <p>Does buyer memory — loyalty to a previously-purchased seller — change future behaviour and produce stable buyer–seller relationships over time?</p>
+      <p id="rq"></p>
       <p class="finding" id="finding"></p>
     </div>
 
@@ -213,8 +239,30 @@ let hovered = null;       // whatever the pointer is currently over
 
 /* ------------------------------------------------------------ header */
 const meta = DATA.meta;
+// Phase 8 turns the fixed stall set into up to 40 slots that firms enter and
+// leave, and a slot's tier is a weekly fact because a vacated slot can be
+// refilled by a different tier. Everything below is guarded on DATA.events so
+// the Phase 6 page draws exactly what it drew before.
+const IS_CHURN = Array.isArray(DATA.events) && DATA.events.length > 0;
+const N_SLOTS = IS_CHURN ? DATA.weeks[0].active.length : DATA.stalls.length;
+const tierOf = (w, i) => IS_CHURN ? DATA.weeks[w].tier[i] : DATA.stalls[i].cls;
+const priceOf = (w, i) => IS_CHURN ? DATA.weeks[w].price[i] : DATA.stalls[i].price;
+const activeAt = (w, i) => IS_CHURN ? !!DATA.weeks[w].active[i] : true;
+
+const eventsBySlot = {};
+(DATA.events || []).forEach(e => (eventsBySlot[e.slot] ||= []).push(e));
+
+// Slot layout: a deterministic fan so a slot keeps its place across weeks.
+// Row still encodes tier, so a recycled slot moves rows - which is honest,
+// it is a different firm - and the fade is what makes that legible.
+const slotFan = i => {
+  const col = i % 8, row = Math.floor(i / 8);
+  return {x: 0.12 + 0.76 * (col / 7), yj: (row - 1.5) * 0.055};
+};
+
 document.getElementById("badges").innerHTML = [
-  `${nBuyers} buyers · ${meta.n_sellers} stalls`,
+  IS_CHURN ? `${nBuyers} buyers · up to ${N_SLOTS} stall slots`
+           : `${nBuyers} buyers · ${meta.n_sellers} stalls`,
   `${nWeeks}-week season`,
   `seed ${meta.seed}`,
   `${meta.git_commit.slice(0,7)}`,
@@ -322,14 +370,35 @@ function frame(now){
   cx.restore();
 
   // stalls
-  DATA.stalls.forEach((s, i) => {
-    if(!showStall[s.cls]) return;
-    const p = stallPos[i], sold = wk.sold[i];
-    const side = 15 + Math.min(sold, 40) * 0.55;
+  for(let i = 0; i < N_SLOTS; i++){
+    const cls = tierOf(week, i);
+    if(!cls || !showStall[cls]) continue;
+    const s = IS_CHURN ? {id: i, cls} : DATA.stalls[i];
+    // Fade: a slot ramps in over the two weeks after it is filled and ghosts
+    // out over the two weeks after it empties, so the churn is visible as
+    // motion rather than only as a list.
+    let fade = 1;
+    if(IS_CHURN){
+      const on = activeAt(week, i);
+      let since = 99;
+      for(const e of (eventsBySlot[i] || [])){
+        if(e.event === (on ? "entry" : "exit") && e.week <= week)
+          since = Math.min(since, week - e.week);
+      }
+      if(!on && since > 2) continue;              // long gone, not drawn
+      fade = since >= 2 ? (on ? 1 : 0) : (on ? 0.35 + 0.325 * since : 0.55 - 0.275 * since);
+      if(fade <= 0.02) continue;
+    }
+    const p = IS_CHURN ? (() => {
+      const f = slotFan(i);
+      return {x: f.x, y: (cls === "Slow" ? 0.30 : 0.72) + f.yj};
+    })() : stallPos[i];
+    const sold = wk.sold[i];
+    const side = (15 + Math.min(sold, 40) * 0.55) * (0.55 + 0.45 * fade);
     const x = p.x * W, y = p.y * H;
     const isSel = (selected && selected.kind === "stall" && selected.id === i)
                || (hovered && hovered.kind === "stall" && hovered.id === i);
-    cx.globalAlpha = 1;
+    cx.globalAlpha = fade;
     cx.fillStyle = STALL_COLOR[s.cls];
     cx.beginPath();
     cx.roundRect(x - side / 2, y - side / 2, side, side, 3);
@@ -345,7 +414,8 @@ function frame(now){
     cx.fillStyle = "#5b616e"; cx.font = "10px " + getComputedStyle(document.body).fontFamily;
     cx.textAlign = "center";
     cx.fillText(`#${i} · ${sold}`, x, y + side / 2 + 13);
-  });
+    cx.globalAlpha = 1;
+  }
 
   // buyers
   buyers.forEach(b => {
@@ -523,7 +593,11 @@ function renderReadouts(){
     ["Attendance", wk.attendance_rate.toFixed(3)],
     ["Purchase rate", wk.purchase_rate.toFixed(3)],
     ["Pair stability", wk.stability == null ? "—" : wk.stability.toFixed(3)],
-    ["Active stalls", wk.active_stalls],
+    // Under Phase 8 "active" means occupied by a trading firm, which is the
+    // quantity the entry/exit panels are about. Phase 6's stall set is fixed,
+    // so there it keeps meaning "sold something this week".
+    [IS_CHURN ? "Occupied stalls" : "Active stalls",
+     IS_CHURN ? wk.active.reduce((a, b) => a + b, 0) : wk.active_stalls],
     ["Avg buyers / stall", wk.avg_load.toFixed(1)],
     ["Revenue", wk.revenue.toFixed(0)],
   ];
@@ -537,12 +611,47 @@ range.max = nWeeks - 1;
 document.getElementById("timeline-ticks").innerHTML = [0, 5, 10, 15, 21]
   .map(w => `<span style="left:${(w / (nWeeks - 1)) * 100}%">${w}</span>`).join("");
 
+document.getElementById("rq").textContent = IS_CHURN
+  ? "Can repeated micro-level interaction produce macro-level market "
+    + "structure - concentration, niche formation, persistent inequality - "
+    + "without that structure being programmed in?"
+  : "Does buyer memory - loyalty to a previously-purchased seller - change "
+    + "future behaviour and produce stable buyer-seller relationships over time?";
+
+document.getElementById("sub").innerHTML = IS_CHURN
+  ? `Phase&nbsp;8 — Endogenous Market Structure. One ${meta.weeks}-week season,
+     replayed from a completed run. Sellers enter by imitating a profitable
+     rival and exit when their capital runs out; no rule anywhere reads a
+     class label, so whatever tier mix survives is an outcome.`
+  : `Phase&nbsp;6 — Repeated Interaction. One ${meta.weeks}-week season,
+     replayed from a completed simulation run. Buyers remember where they last
+     shopped; the question is whether that memory produces stable
+     relationships.`;
+
+function renderChurn(){
+  const box = document.getElementById("churn");
+  if(!IS_CHURN){ box.hidden = true; return; }
+  box.hidden = false;
+  const here = (DATA.events || []).filter(e => e.week === week);
+  for(const [kind, id] of [["entry", "entries"], ["exit", "exits"]]){
+    const rows = here.filter(e => e.event === kind);
+    document.getElementById(id).innerHTML = rows.length ? rows.map(e => `
+      <div class="churn-row">
+        <span class="sw" style="background:${STALL_COLOR[e.tier] || "var(--text-3)"}"></span>
+        <span class="firm">firm ${e.firm}</span>
+        <span style="color:var(--text-3)">${e.tier} · ${e.price.toFixed(2)}</span>
+        <span class="why">${e.reason}</span>
+      </div>`).join("")
+      : `<div class="churn-none">none</div>`;
+  }
+}
+
 function setWeek(w){
   week = Math.max(0, Math.min(nWeeks - 1, w));
   range.value = week;
   document.getElementById("week-label").textContent =
     `Week ${week}` + (week === meta.plateau_week ? " · plateau" : "");
-  renderReadouts(); renderInspector(); drawChart();
+  renderReadouts(); renderInspector(); drawChart(); renderChurn();
   buyers.forEach(b => { b.nextHop = Math.min(b.nextHop, 300 + rand() * 500); });
 }
 range.addEventListener("input", () => setWeek(+range.value));
