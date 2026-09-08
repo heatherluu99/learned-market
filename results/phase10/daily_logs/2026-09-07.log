@@ -49,3 +49,37 @@
     Error code: 429 - {'error': {'message': 'Rate limit reached for model `openai/gpt-oss-120b` in organization `org_01kz033re7ehtvsba3brc6cvcv` service tier `on_de
 --- exit 2 ---
 
+=== 2026-09-07 16:56:28 PDT ===
+
+=== Phase 10 — human panel, Agent, and two baselines ===
+  Given the same choice sets and the same household history, does an LLM Agent recover sequential structure in real purchase behaviour that a conditional choice model does not already capture?
+
+  3,289 occasions, conditioned on participation.
+  Agent: openai/gpt-oss-120b, settings frozen at {'temperature': 0.0, 'reasoning_effort': 'low', 'max_tokens': 512}
+
+  Querying the Agent (cached on model and bucketed prompt)...
+    1,009 answers already on disk; 1,203 to fetch
+    3,289 occasions -> 1,203 distinct prompts (32.7% deduplicated)
+    request-paced at 30/min: expect about 47 minutes
+
+    Daily quota reached with 1,059 prompts still to fetch. 1,153 answers are saved; re-run tomorrow and it resumes.
+    Error code: 429 - {'error': {'message': 'Rate limit reached for model `openai/gpt-oss-120b` in organization `org_01kz033re7ehtvsba3brc6cvcv` service tier `on_de
+--- exit 2 ---
+
+=== 2026-09-07 21:08:16 PDT ===
+
+=== Phase 10 — human panel, Agent, and two baselines ===
+  Given the same choice sets and the same household history, does an LLM Agent recover sequential structure in real purchase behaviour that a conditional choice model does not already capture?
+
+  3,289 occasions, conditioned on participation.
+  Agent: openai/gpt-oss-120b, settings frozen at {'temperature': 0.0, 'reasoning_effort': 'low', 'max_tokens': 512}
+
+  Querying the Agent (cached on model and bucketed prompt)...
+    1,153 answers already on disk; 1,059 to fetch
+    3,289 occasions -> 1,059 distinct prompts (32.7% deduplicated)
+    request-paced at 30/min: expect about 42 minutes
+
+    Daily quota reached with 937 prompts still to fetch. 1,275 answers are saved; re-run tomorrow and it resumes.
+    Error code: 429 - {'error': {'message': 'Rate limit reached for model `openai/gpt-oss-120b` in organization `org_01kz033re7ehtvsba3brc6cvcv` service tier `on_de
+--- exit 2 ---
+

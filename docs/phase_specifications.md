@@ -2802,6 +2802,47 @@ The rule-based subgroup is still run, as a third arm, so the three decision mech
 - Confirm the Agent's decisions are logged with enough metadata (prompt version, model version) to be reproducible — this metadata requirement is what makes Phase 10+ comparisons possible later
 - Compute and report the cost/speed ratio: `synthetic_cost_usd / (n_agent_decisions × human_baseline.cost_per_respondent_usd)` and the equivalent latency ratio, using the `human_baseline.csv` reference
 
+### A third provider, run locally — declared before use
+
+Phase 9d needs an LLM and has nothing to run on. Groq's daily cap is consumed
+by Phase 10's agent arm for several more days, and Gemini's free tier cannot
+finish a run of this size — measured, not assumed: it returned 9 answers on one
+day and 0 on the next, and the probes that established which of its models this
+account can even reach were themselves enough to exhaust a day.
+
+So the arm is **`gpt-oss:20b`, run locally through ollama**, frozen at
+`temperature = 0`, `think = "low"`, `max_tokens = 512`.
+
+**The model is chosen to be a sibling, not a stranger.** Phase 10's hosted arm
+is `openai/gpt-oss-120b`; this is the same family six times smaller. A
+difference between them is then a difference of scale within one lineage rather
+than a confound of scale with training. It is still not a controlled contrast —
+Phase 12's job — and no claim here rests on treating it as one.
+
+**Cost and latency are different in kind, and the KPI must say so.** Phase 9d's
+acceptance criteria include a cost and speed ratio against `human_baseline.csv`.
+A hosted call has a per-token price and sub-second latency; a local call has no
+marginal price at all and takes about 11 seconds on one laptop. Reporting
+"$0.00 per decision" beside a hosted figure would compare a marginal cost
+against an amortized one and flatter the local arm for a reason that has
+nothing to do with agents. The ratio is therefore reported **twice** — once at
+the local arm's true marginal cost of zero, and once at the hosted arm's
+published rate for the same token counts — with the second labelled as what it
+is, an estimate of what this run would have cost hosted.
+
+**A setting that lies is worse than one that fails.** Ollama accepts
+`reasoning_effort` and `think: false` and **silently ignores both**: on one
+fixed prompt each left the chain of thought at about 820 characters, identical
+to the default, while `think: "low"` cut it to 79. The first implementation of
+this client passed `reasoning_effort`, which would have recorded a thinking
+budget in this run's provenance that was never applied — and nothing would have
+contradicted it, because the run would have completed normally.
+
+As on the hosted models, the budget **changes the answer**: the same prompt
+returns **35** at the default and **65** at `"low"`. It is frozen and recorded,
+and a test asserts on the outgoing request body that the working name is the
+one sent.
+
 ### Web Visualization Extension — Agent Inspector (generative-AI showcase)
 
 Extends the Phase 6/8 page. This is the centerpiece feature for the portfolio angle, because it is the first point where the visualization can show *reasoning*, not just outcomes.

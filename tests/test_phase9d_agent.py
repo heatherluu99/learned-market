@@ -120,3 +120,57 @@ def test_the_human_baseline_is_a_template_and_not_invented_numbers():
     assert {r["metric"] for r in rows} == {
         "cost_per_respondent_usd", "days_to_field", "minimum_panel_size"}
     assert all(r["value"] is None and r["source"] is None for r in rows)
+
+
+def test_the_local_client_sends_the_thinking_knob_that_actually_works():
+    """Ollama ignores `reasoning_effort` and `think: false`; only `think: "low"` bites.
+
+    A setting that is recorded in a run's provenance but never applied is
+    worse than one that fails, because nothing anywhere says so. Measured on
+    one fixed prompt, `reasoning_effort` and `think: false` both left the
+    chain of thought at ~820 characters - identical to the default - while
+    `think: "low"` cut it to ~79 and changed the answer from 35 to 65.
+
+    This asserts on the request body rather than on a live model, so it runs
+    without ollama installed.
+    """
+    import json
+
+    from market_sim import agent
+
+    sent = {}
+
+    class _Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def read(self):
+            return json.dumps({"message": {"content": "25 25 25 25",
+                                           "thinking": "..."},
+                               "prompt_eval_count": 10,
+                               "eval_count": 4}).encode()
+
+    def fake_urlopen(request, timeout=None):
+        sent.update(json.loads(request.data))
+        return _Response()
+
+    import urllib.request
+
+    original = urllib.request.urlopen
+    urllib.request.urlopen = fake_urlopen
+    try:
+        client = agent.ollama_client("gpt-oss:20b", think="low")
+        text, tin, tout = client("sys", "prompt")
+    finally:
+        urllib.request.urlopen = original
+
+    assert sent.get("think") == "low"
+    assert "reasoning_effort" not in sent, "the inert name must not be sent"
+    # Only the content is the answer; the chain of thought must not be
+    # concatenated into it, or a parser expecting four numbers gets prose.
+    assert text == "25 25 25 25"
+    assert (tin, tout) == (10, 4)
+    assert client.settings["think"] == "low"

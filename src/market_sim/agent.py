@@ -401,6 +401,83 @@ def gemini_client(model: str, input_price: float = 0.0, output_price: float = 0.
     return call
 
 
+def ollama_client(model: str, input_price: float = 0.0, output_price: float = 0.0,
+                  max_tokens: int = 512, temperature: float = 0.0,
+                  think: str | None = "low",
+                  host: str = "http://localhost:11434", retries: int = 3,
+                  timeout: float = 300.0):
+    """A locally hosted model, same callable shape as the others.
+
+    Written against the HTTP API directly rather than through a client
+    library: it is one endpoint returning one JSON object, and a dependency
+    would buy nothing.
+
+    The reason this exists is quota rather than quality. Groq's daily cap is
+    consumed by Phase 10's agent arm for days at a time and Gemini's free tier
+    cannot finish a run of this size, so a phase that needs an LLM has nothing
+    left to run on. A local model has no cap and competes with nothing.
+
+    **Its cost and latency are different in kind, not just in amount, and any
+    KPI built on them has to say so.** A hosted call has a per-token price and
+    sub-second latency; a local call has no marginal price and latency
+    measured in seconds on one laptop's GPU. Reporting "$0.00 per decision"
+    beside a hosted figure would be comparing a marginal cost against an
+    amortized one and would flatter the local arm for the wrong reason.
+    """
+    import json as _json
+    import urllib.error
+    import urllib.request
+
+    def call(system: str, prompt: str) -> tuple[str, int, int]:
+        body = {
+            "model": model,
+            "messages": [{"role": "system", "content": system},
+                         {"role": "user", "content": prompt}],
+            "stream": False,
+            "options": {"temperature": temperature, "num_predict": max_tokens},
+        }
+        # `think`, not `reasoning_effort`. Ollama silently ignores the latter,
+        # and ignores `think: false` as well: measured on one fixed prompt,
+        # both left the chain of thought at ~820 characters, exactly as the
+        # default. Only `think: "low"` shortens it, to ~79. Passing the
+        # inert name would have recorded a thinking budget in this run's
+        # provenance that was never applied - a setting that lies rather than
+        # one that fails.
+        #
+        # And it changes the answer, as it does on the hosted models: the same
+        # prompt returns 35 at the default budget and 65 at "low".
+        if think is not None:
+            body["think"] = think
+        data = _json.dumps(body).encode()
+        for attempt in range(retries):
+            try:
+                request = urllib.request.Request(
+                    f"{host}/api/chat", data=data,
+                    headers={"Content-Type": "application/json"})
+                with urllib.request.urlopen(request, timeout=timeout) as response:
+                    payload = _json.loads(response.read())
+                break
+            except (urllib.error.URLError, TimeoutError) as error:
+                if attempt == retries - 1:
+                    raise RuntimeError(
+                        f"ollama at {host} did not answer: {error}. Is "
+                        f"`ollama serve` running and `{model}` pulled?") from error
+                time.sleep(2 ** attempt)
+        message = payload.get("message", {})
+        # gpt-oss returns its chain of thought in a separate field. Only the
+        # content is the answer; concatenating them would feed reasoning text
+        # into a parser expecting four numbers.
+        return (message.get("content") or ""),\
+            int(payload.get("prompt_eval_count") or 0),\
+            int(payload.get("eval_count") or 0)
+
+    call.settings = {"model": model, "temperature": temperature,
+                     "think": think, "max_tokens": max_tokens, "host": host}
+    call.pricing = (input_price, output_price)
+    call.local = True
+    return call
+
+
 # --------------------------------------------------------------------------
 # Phase 10 — choosing among alternatives, rather than buying or not
 # --------------------------------------------------------------------------
