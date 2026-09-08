@@ -2964,7 +2964,7 @@ Extends the Phase 6/8 page. This is the centerpiece feature for the portfolio an
 
 **Literature basis:** Park et al. (2023), "Generative Agents: Interactive Simulacra of Human Behavior" (Stanford, *UIST*) — foundational LLM-agent architecture; see also Park et al. (2024), "Generative Agent Simulations of 1,000 People" (arXiv:2411.10109), a closer analogue to this project's population-scale ambitions. Horton (2023), "Large Language Models as Simulated Economic Agents" (NBER WP 31122) — the "Homo Silicus" framing for using LLMs as economic agents.
 
-**Exit condition:** `git tag phase9b-validated`.
+**Exit condition:** `git tag phase9d-agents`. *(The registered text said `phase9b-validated`, which is 9b's tag and already taken — 9b exited as `phase9b-entropy`. Corrected here rather than silently, since an exit condition that names another phase's tag cannot be met.)*
 
 ---
 
