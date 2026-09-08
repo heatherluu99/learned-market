@@ -45,7 +45,7 @@ AGENT_SETTINGS = {"temperature": 0.0, "think": "low", "max_tokens": 512}
 PROMPT_VERSION = "9d-2"
 SEEDS = (0, 1, 2)
 
-OBS = ("buyer_class", "price", "is_premium", "streak_here",
+OBS = ("buyer_class_index", "price", "is_premium", "streak_here",
        "purchases_this_week", "spent_this_week", "season_fraction",
        "history_rate")
 
@@ -108,6 +108,45 @@ def main() -> int:
     print(f"  signed bias                 {bias:+.4f}")
     print(f"  correlation across states   {corr:+.4f}")
 
+    # ---- D_shadow: the same distance on the Agent's own state distribution --
+    # The engine evaluates the rule at every encounter even when a policy is
+    # acting, which is what makes the shadow comparison possible at all: the
+    # rule stays evaluable on states it would never itself have produced.
+    print("\n  Re-running closed-loop with encounters recorded, for D_shadow...",
+          flush=True)
+    shadow_client = agent.ollama_client(MODEL, **AGENT_SETTINGS)
+    llm = agent.AgentPolicy(shadow_client)
+    n_buyers = sum(b.count for b in PHASE6_MAIN.buyer_classes)
+    rng = np.random.default_rng(0)
+    start, agent_ids = 0, []
+    for klass in PHASE6_MAIN.buyer_classes:
+        ids = np.arange(start, start + klass.count)
+        agent_ids += list(rng.choice(ids, size=round(0.30 * klass.count),
+                                     replace=False))
+        start += klass.count
+    per_buyer = [llm if i in set(agent_ids) else None for i in range(n_buyers)]
+    i_buyer = ENCOUNTER_FIELDS.index("buyer_id")
+    i_acting = ENCOUNTER_FIELDS.index("p_acting")
+    shadow = []
+    for seed in SEEDS:
+        cfg = dataclasses.replace(PHASE6_MAIN, record_encounters=True,
+                                  buyer_policy=per_buyer, seeds=(seed,))
+        e = np.asarray(run_season(cfg, seed).encounters)
+        shadow.append(e[np.isin(e[:, i_buyer], agent_ids)])
+    shadow = np.vstack(shadow)
+    d_shadow = float(np.abs(shadow[:, p_teacher] - shadow[:, i_acting]).mean())
+    amplification = d_shadow / d_offline
+    print(f"  D_shadow (Agent's own states) {d_shadow:.4f}")
+    print(f"  amplification D_shadow/D_offline {amplification:.2f}x")
+    print(f"    for comparison, the distilled network in 9a was 1.07x and the "
+          f"sharpest 9b regime 1.78x")
+    pd.DataFrame([{"d_offline": d_offline, "d_shadow": d_shadow,
+                   "amplification": amplification, "signed_bias": bias,
+                   "correlation": corr,
+                   "rule_mean": float((w * frame.p_rule).sum()),
+                   "agent_mean": float((w * frame.p_agent).sum())}]
+                 ).to_csv(RESULTS_ROOT / "fidelity_decomposition.csv", index=False)
+
     experiment_log.append_row(LOG_PATH, {
         "experiment_id": "phase9d_offline_fidelity",
         "git_commit": commit,
@@ -131,7 +170,9 @@ def main() -> int:
             f"On {len(frame)} distinct rule-visited states: rule mean "
             f"{float((w * frame.p_rule).sum()):.4f}, Agent mean "
             f"{float((w * frame.p_agent).sum()):.4f}, D_offline {d_offline:.4f}, "
-            f"signed bias {bias:+.4f}, across-state correlation {corr:+.4f}"),
+            f"signed bias {bias:+.4f}, across-state correlation {corr:+.4f}. "
+            f"D_shadow {d_shadow:.4f}, amplification {amplification:.2f}x "
+            f"against 1.07x for 9a's distilled network"),
         "decision_implication": (
             "Whether Phase 9d's closed-loop collapse is attributable to the "
             "feedback loop or to the model's own calibration"),
