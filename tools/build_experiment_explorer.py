@@ -56,6 +56,8 @@ TITLES = {
     "phase9a_distillation": "Distilling the hand-written buyer (9a)",
     "phase9b_entropy_sweep": "Teacher entropy sweep (9b)",
     "phase9c_stabilizers": "Stabilizer ablation (9c)",
+    "phase9d_three_mechanisms": "Agent, trained policy and rule (9d)",
+    "phase9d_cost_speed_kpi": "Cost and speed against sourced baselines (9d)",
     "phase10_human_vs_agent_PILOT_200":
         "PILOT ONLY - 200 occasions, not a result (10)",
     "phase10_s_arm_simulator_on_human_choice_sets":
@@ -84,6 +86,8 @@ OVERWRITTEN = {
 #: sorts after these, alphabetically, so a new run appears rather than
 #: disappearing.
 SEQUENCE = {
+    "phase9d_three_mechanisms": 0,
+    "phase9d_cost_speed_kpi": 1,
     "phase10_human_vs_agent_PILOT_200": 0,
     "phase10_human_vs_agent_groq": 1,
     "phase10_s_arm_simulator_on_human_choice_sets": 2,
@@ -109,6 +113,8 @@ STATUS = {
     "phase9a_distillation": "headroom",
     "phase9b_entropy_sweep": "headroom",
     "phase9c_stabilizers": "headroom",
+    "phase9d_three_mechanisms": "reversed",
+    "phase9d_cost_speed_kpi": "sourced",
     # The pilot is not a result and the page must not let it read as one.
     "phase10_human_vs_agent_PILOT_200": "pilot",
     "phase10_s_arm_simulator_on_human_choice_sets": "null",
