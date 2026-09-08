@@ -1,0 +1,9 @@
+research_method,cost_per_respondent_usd_low,cost_per_respondent_usd_high,typical_turnaround_days_low,typical_turnaround_days_high,source_type,source,note
+"Google Surveys, general population, 1 question",0.1,0.1,,,published_rate_card,https://support.google.com/surveys/answer/2447244,Published price list. No screening.
+"Google Surveys, general population, 2-10 questions",1.0,1.0,,,published_rate_card,https://support.google.com/surveys/answer/2447244,Published price list.
+"Google Surveys, age/gender/location targeted, 2-10 questions",1.5,1.5,,,published_rate_card,https://support.google.com/surveys/answer/2447244,Published price list.
+"Google Surveys, postal-code targeted, 2-10 questions",6.0,6.0,,,published_rate_card,https://support.google.com/surveys/answer/2447244,Published price list.
+"Google Surveys, user-list targeted, 2-10 questions",10.0,10.0,,,published_rate_card,https://support.google.com/surveys/answer/2447244,Published price list.
+"Google Surveys, with screening questions",3.0,,,,published_rate_card,https://support.google.com/surveys/answer/2447244,"Stated minimum per completed response; above it the price is custom and varies with length, audience and incidence rate (minimum 5%)."
+In-depth interviews (qualitative),333.0,1500.0,,,vendor_estimate,https://www.driveresearch.com/market-research-company-blog/how-much-does-market-research-cost/,"Derived here by dividing the vendor's stated $5,000-$15,000 for 10-15 interviews. The vendor calls these ballpark ranges, not a rate card, and states no methodology. Division is this project's arithmetic."
+Survey of real customers (order of magnitude only),,,14,180,peer_reviewed_paper,"Brand, Israeli & Ngwe (2023), Using LLMs for Market Research, HBS WP 23-062 / MSI 23-131",Verbatim: 'a survey of real customers may cost many thousands of dollars and take weeks or months to implement'. Weeks-to-months encoded as 14-180 days. The paper gives no per-respondent figure.

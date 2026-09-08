@@ -1,0 +1,34 @@
+=== 2026-09-08 01:23:31 PDT ===
+
+=== Phase 10 — human panel, Agent, and two baselines ===
+  Given the same choice sets and the same household history, does an LLM Agent recover sequential structure in real purchase behaviour that a conditional choice model does not already capture?
+
+  3,289 occasions, conditioned on participation.
+  Agent: openai/gpt-oss-120b, settings frozen at {'temperature': 0.0, 'reasoning_effort': 'low', 'max_tokens': 512}
+
+  Querying the Agent (cached on model and bucketed prompt)...
+    1,275 answers already on disk; 937 to fetch
+    3,289 occasions -> 937 distinct prompts (32.7% deduplicated)
+    request-paced at 30/min: expect about 37 minutes
+
+    Daily quota reached with 811 prompts still to fetch. 1,401 answers are saved; re-run tomorrow and it resumes.
+    Error code: 429 - {'error': {'message': 'Rate limit reached for model `openai/gpt-oss-120b` in organization `org_01kz033re7ehtvsba3brc6cvcv` service tier `on_de
+--- exit 2 ---
+
+=== 2026-09-08 05:33:39 PDT ===
+
+=== Phase 10 — human panel, Agent, and two baselines ===
+  Given the same choice sets and the same household history, does an LLM Agent recover sequential structure in real purchase behaviour that a conditional choice model does not already capture?
+
+  3,289 occasions, conditioned on participation.
+  Agent: openai/gpt-oss-120b, settings frozen at {'temperature': 0.0, 'reasoning_effort': 'low', 'max_tokens': 512}
+
+  Querying the Agent (cached on model and bucketed prompt)...
+    1,401 answers already on disk; 811 to fetch
+    3,289 occasions -> 811 distinct prompts (32.7% deduplicated)
+    request-paced at 30/min: expect about 32 minutes
+
+    Daily quota reached with 689 prompts still to fetch. 1,523 answers are saved; re-run tomorrow and it resumes.
+    Error code: 429 - {'error': {'message': 'Rate limit reached for model `openai/gpt-oss-120b` in organization `org_01kz033re7ehtvsba3brc6cvcv` service tier `on_de
+--- exit 2 ---
+
