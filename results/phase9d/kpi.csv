@@ -1,0 +1,12 @@
+metric,value
+decisions,18375.0
+distinct_prompts,223.0
+cache_hit_rate,0.9878639455782312
+wall_seconds,322.242
+local_marginal_cost_usd,0.0
+hosted_equivalent_usd_low,0.0096066
+hosted_equivalent_usd_high,0.057402999999999996
+human_cost_per_respondent_low,0.1
+human_cost_per_respondent_high,1500.0
+speed_ratio_low,3753.7006349265457
+speed_ratio_high,48261.865306198444

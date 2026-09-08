@@ -2910,15 +2910,49 @@ questions ("does a promotion help?") are the ones it can answer, and level
 questions ("how many will buy?") are the ones it cannot, and those are usually
 what a client is paying for.
 
-### The cost and speed KPI is not reported
+### The cost and speed KPI — sourced, and the cost ratio deliberately not quoted
 
-Phase 9d's third acceptance criterion needs `human_baseline.csv` — real
-cost-per-respondent and turnaround figures with citations. The spec's own
-instruction is **"do not invent a number without a source"**, and no sourced
-figure is in hand, so the ratio is left uncomputed rather than filled with a
-plausible-looking one. The run's own side is measured and recorded: 223 distinct
-model calls, 322 seconds, 1.4 seconds per distinct decision, at a local marginal
-cost of zero that is **not** comparable to a hosted per-token price.
+`data/human_baseline.csv` is populated, and **every figure in it was verified at
+its own source** rather than taken from a search summary. That mattered: the
+summary had attached a per-complete price to a vendor whose page in fact
+publishes only project totals and calls them ballpark ranges with no
+methodology. What survived is a published rate card, one vendor's own stated
+range with the arithmetic marked as this project's, and a verbatim claim from
+the paper this project already cites as its closest precedent.
+
+| source | figure | type |
+|---|---|---|
+| Google Surveys price list | **$0.10–$10.00** per response by targeting and length; **$3.00** minimum when screened | published rate card |
+| Drive Research | $5,000–$15,000 for 10–15 in-depth interviews → **$333–$1,500** each *(division is ours)* | vendor estimate, no methodology |
+| Brand, Israeli & Ngwe (2023) | "may cost many thousands of dollars and take **weeks or months**" | peer-reviewed |
+
+**Measured on this run:** 18,375 decisions from **223 distinct prompts** (98.8%
+cache), 322 seconds, **$0.00** local marginal cost. Hosted-equivalent for the
+same tokens, an estimate rather than a measurement: **$0.0096–$0.0574** for the
+whole run.
+
+**No single cost ratio is quoted, and that is the finding.** Verified
+per-respondent figures span **$0.10 to $1,500 — 15,000×**, so the denominator
+of the registered formula is not a number. Any ratio quoted from it would be a
+choice of source disguised as a measurement.
+
+**`n_agent_decisions` is also the wrong numerator basis.** 98.8% of the
+decisions were cache lookups: the model answered 223 distinct questions and the
+other 18,152 were repeats. A human panel cannot cache — each respondent is a
+fresh person — so dividing by 18,375 would credit the Agent with 18,152
+interviews it never conducted.
+
+**And the caching is free only because the Agent has no individual variation.**
+At `temperature = 0`, two buyers in the same bucketed state return the same
+answer by construction. That is the same property Phase 10's S arm identified
+as the expensive one: a model knowing no individual matched the aggregate almost
+as well as one that did, while being twice as wrong per household. **The cost
+advantage and the individual-fidelity failure are one fact seen twice** — what
+makes the Agent cheap is exactly what makes it wrong about people.
+
+**Speed is the claim that survives cleanly.** 322 seconds against 14–180 days,
+study against study: **3,754× to 48,262× faster**. That comparison needs no
+contested denominator.
 
 ### Web Visualization Extension — Agent Inspector (generative-AI showcase)
 
