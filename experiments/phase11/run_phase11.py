@@ -88,6 +88,48 @@ def occasions(panel: pd.DataFrame) -> list[dict]:
     return out
 
 
+def price_step(records) -> float:
+    """A rounding step giving every panel comparable price resolution.
+
+    `agent.describe_choice` rounds to the nearest 5 and calls the result
+    "cents", which is right for Cracker - 38 to 169, and 92% of its distinct
+    shelves survive. The other two panels are in different units. Catsup runs
+    0.1 to 12.0, so rounding to the nearest 5 collapsed **867 distinct shelves
+    to 48**, and the Agent was shown "5 cents" for all four brands on most
+    occasions. It had nothing to discriminate on, and its flatness there was
+    this function's doing rather than the model's.
+
+    The step is chosen from a 1/2/5 series to give roughly 26 buckets across
+    the panel's own range, which is what Cracker already had.
+    """
+    prices = np.array([[a["price"] for a in r["alternatives"]] for r in records])
+    target = (prices.max() - prices.min()) / 26
+    power = 10.0 ** np.floor(np.log10(target))
+    for multiple in (1, 2, 5, 10):
+        if multiple * power >= target:
+            return float(multiple * power)
+    return float(10 * power)
+
+
+def describe_shelf(alternatives, step: float) -> str:
+    """Phase 11's own prompt: the shelf, at a resolution the panel can carry.
+
+    Deliberately not `agent.describe_choice`. That function is Phase 10's,
+    Phase 10 is frozen and tagged, and its fixed 5-unit rounding is what broke
+    two of these three panels. It also says "cents", which is false for two of
+    them; this says "price" and lets the number speak.
+    """
+    decimals = max(0, -int(np.floor(np.log10(step))))
+    lines = []
+    for a in alternatives:
+        promos = [k for k in ("display", "feature") if a[k]]
+        tag = f", on {' and '.join(promos)}" if promos else ""
+        rounded = step * round(a["price"] / step)
+        lines.append(f"- {a['brand']}: price {rounded:.{decimals}f}{tag}")
+    return ("Shelf today:\n" + "\n".join(lines)
+            + "\nPick one. This household has no recorded history.")
+
+
 def load_cache() -> dict:
     import json
     return json.loads(CACHE.read_text()) if CACHE.exists() else {}
@@ -102,6 +144,7 @@ def save_cache(cache: dict) -> None:
 def agent_probabilities(records, client, key: str) -> np.ndarray:
     """One distribution per occasion, one model call per distinct prompt."""
     cache = load_cache()
+    step = price_step(records)
     # **The Agent is given the shelf and no household history.** That is a
     # weaker task than Phase 10 set it, and it is deliberate: this map
     # attributes the gap to *marketing context*, and a history term would
@@ -109,12 +152,10 @@ def agent_probabilities(records, client, key: str) -> np.ndarray:
     # side of every cell is an aggregate share, which is history-free in the
     # same way. It also collapses Cracker from 2,212 distinct prompts to 909,
     # which is a consequence and not the reason.
-    prompts = [agent.describe_choice(r["alternatives"], {"last": None, "top": None,
-                                                         "top_share": 0.0})
-               for r in records]
+    prompts = [describe_shelf(r["alternatives"], step) for r in records]
     distinct = [p for p in dict.fromkeys(prompts) if f"{key}|{p}" not in cache]
-    print(f"    {len(prompts):,} occasions, {len(set(prompts)):,} distinct, "
-          f"{len(distinct):,} to fetch", flush=True)
+    print(f"    {len(prompts):,} occasions, {len(set(prompts)):,} distinct "
+          f"(price step {step:g}), {len(distinct):,} to fetch", flush=True)
     started = time.perf_counter()
     for i, prompt in enumerate(distinct, 1):
         text, _, _ = client(agent.CHOICE_SYSTEM, prompt)
@@ -186,6 +227,31 @@ def apply_correction(predicted, contexts, offsets, default=0.0):
     return shifted / shifted.sum(axis=1, keepdims=True)
 
 
+def sharpen(predicted, gamma: float):
+    """`p ** gamma`, renormalised. The natural correction for compression.
+
+    An additive constant moves a distribution's centre and cannot change its
+    spread, so it is powerless against an Agent whose output is near-uniform
+    whatever the context. Raising to a power and renormalising is the
+    one-parameter correction that does change spread: `gamma > 1` sharpens,
+    `gamma < 1` flattens, `gamma = 1` is the identity. It is the multiplicative
+    half of the adjustment the phase registered.
+    """
+    out = np.clip(predicted, 1e-9, None) ** gamma
+    return out / out.sum(axis=1, keepdims=True)
+
+
+def fit_sharpening(records, predicted, contexts, keep, grid=None):
+    """Choose gamma on the training households, by the metric being corrected."""
+    grid = grid if grid is not None else np.arange(1.0, 8.01, 0.25)
+    best, best_gamma = None, 1.0
+    for gamma in grid:
+        s = score(records, sharpen(predicted, gamma), contexts, keep)["cell_gap"]
+        if best is None or s < best:
+            best, best_gamma = s, float(gamma)
+    return best_gamma
+
+
 def score(records, predicted, contexts, keep):
     """Held-out error: weighted absolute cell gap, and log-loss."""
     observed = np.zeros_like(predicted)
@@ -244,15 +310,30 @@ def main() -> int:
     per_cell = {r.context: -r.gap for r in train.itertuples()}
     print(f"\n  global offset fitted on training households: {global_offset:+.4f}")
 
+    # The sharpening exponent is fitted on the *training* households of every
+    # panel pooled, so it is one number for the whole map, like the offset.
+    gammas = []
+    for name, (records, predicted, contexts, households, _) in panels.items():
+        train_keep = np.isin([r["household"] for r in records], households["train"])
+        gammas.append(fit_sharpening(records, predicted, contexts, train_keep))
+    gamma = float(np.mean(gammas))
+    print(f"  sharpening exponent fitted on training households: {gamma:.2f} "
+          f"(per panel {[round(g, 2) for g in gammas]})")
+
     rows = []
     for label, offsets, default in (("none", {}, 0.0),
                                     ("global", {}, global_offset),
-                                    ("per-cell", per_cell, global_offset)):
+                                    ("per-cell", per_cell, global_offset),
+                                    ("sharpen", None, None)):
         agg = {"cell_gap": [], "log_loss": [], "n": []}
         for name, (records, predicted, contexts, households, _) in panels.items():
             keep = np.isin([r["household"] for r in records], households["test"])
-            corrected = (predicted if label == "none"
-                         else apply_correction(predicted, contexts, offsets, default))
+            if label == "none":
+                corrected = predicted
+            elif label == "sharpen":
+                corrected = sharpen(predicted, gamma)
+            else:
+                corrected = apply_correction(predicted, contexts, offsets, default)
             s = score(records, corrected, contexts, keep)
             agg["cell_gap"].append(s["cell_gap"]); agg["log_loss"].append(s["log_loss"])
             agg["n"].append(int(keep.sum()))
@@ -268,11 +349,13 @@ def main() -> int:
     for r in result.itertuples():
         print(f"  {r.correction:12s} {r.cell_gap:10.4f} {r.log_loss:10.4f}")
 
-    none, glob, cell = result.cell_gap
+    none, glob, cell, sharp = result.cell_gap
     print(f"\n  global vs none : {none - glob:+.4f}  "
           f"({'helps' if glob < none else 'does not help'})")
     print(f"  per-cell vs global: {glob - cell:+.4f}  "
           f"({'a map is warranted' if cell < glob * 0.9 else 'the constant is enough'})")
+    print(f"  sharpen vs none   : {none - sharp:+.4f}  "
+          f"({'helps' if sharp < none else 'does not help'})")
 
     # Stability: does a cell's gap survive the split?
     wide = bias.pivot_table(index=["category", "context"], columns="split",
@@ -306,7 +389,7 @@ def main() -> int:
         "participation_rate": "N/A - conditional on participation",
         "result_summary": (
             f"{len(bias)} cells over 3 categories. Held-out weighted cell gap: "
-            f"none {none:.4f}, global {glob:.4f}, per-cell {cell:.4f}; "
+            f"none {none:.4f}, global {glob:.4f}, per-cell {cell:.4f}, sharpen {sharp:.4f} (gamma {gamma:.2f}); "
             f"global offset {global_offset:+.4f}. "
             f"{len(stable)}/{len(wide)} cells stable within 0.05 across the split."),
         "decision_implication": (
@@ -330,7 +413,7 @@ def plot(bias, result, wide) -> None:
     ax.legend(fontsize=7)
 
     ax = axes[1]
-    ax.bar(result.correction, result.cell_gap, color=["0.6", "tab:blue", "tab:green"])
+    ax.bar(result.correction, result.cell_gap, color=["0.6", "tab:blue", "tab:green", "tab:orange"][:len(result)])
     for i, v in enumerate(result.cell_gap):
         ax.text(i, v, f"{v:.4f}", ha="center", va="bottom", fontsize=9)
     ax.set_ylabel("held-out weighted cell gap")
