@@ -1,0 +1,2 @@
+calls,cached,cache_hit_rate,input_tokens,output_tokens,synthetic_cost_usd,synthetic_latency_seconds,seconds_per_call,model,temperature,reasoning_effort,max_tokens
+0,1077,1.0,0,0,0.0,0.0,0.0,openai/gpt-oss-120b,0.0,low,512

@@ -4355,6 +4355,53 @@ effect, and it does. Adjusted against adjusted asks what `delta` should be, and
 it cannot tell.
 
 
+### Phase 10 result — the Agent is worse than knowing nothing but the shares
+
+The full run, after four days of accumulated free-tier quota: **3,289
+occasions, all 2,212 distinct prompts answered**, nothing subsampled.
+
+| arm | weighted JS | log-loss | mechanism directions |
+|---|---|---|---|
+| B0 marginal shares | 0.1256 | 1.0696 | **4/4** |
+| B1 conditional model | **0.0404** | **0.7739** | **4/4** |
+| A agent, `openai/gpt-oss-120b` | **0.2448** | **1.8966** | **4/4** |
+
+Human contrasts: price −0.1375, display +0.1702, feature +0.2258, repeat
++0.6877.
+
+**Every arm gets all four directions right, including the floor.** Sign
+agreement on the pre-registered contrasts separates none of these models, which
+is exactly why the gate required distributional distance alongside it. A test
+that the marginal-share baseline passes is not a test.
+
+**The Agent is roughly twice as far from the panel as the floor** — 0.2448
+against 0.1256 on weighted JS, and 1.90 against 1.07 nats. It is six times
+worse than B1. Asked whether an LLM recovers sequential structure a conditional
+choice model does not already capture, the answer is that it does not recover
+the structure the *marginal shares* capture.
+
+**The conclusion is conservative in B1's disfavour.** This scoring hands B1
+the marginal shares on training occasions rather than its own fit, to avoid
+in-sample inflation, so B1 is handicapped here and still wins by a factor of
+six. Scored on held-out occasions only — the basis the S arm uses — B1 reaches
+0.0015 JS and 0.4722 nats, further still.
+
+**The pilots were right and were correctly withheld.** Two pilots at 150 and
+200 occasions gave weighted JS 0.29–0.30 and log-loss 1.59–1.76. The full run
+gives 0.2448 and 1.8966: the same conclusion at 16× the data. They were logged
+as `PILOT` and never as a result, and that was the right call for a reason that
+has nothing to do with whether they happened to agree.
+
+**Same signature as Phase 9d, in a different market with a different model.**
+9d's local `gpt-oss:20b` also got every mechanism direction right while its
+purchase level sat at a quarter of the truth. Two markets, two models, one
+pattern — **comparative statics right, calibration wrong**.
+
+And 9d says what that calibration failure *is*: a slope of 0.954 with an
+intercept of −0.219, most of which one number fixes. Whether Phase 10's Agent
+has the same structure is testable by the same method and **is not tested
+here** — Phase 10 is frozen, and this would be a new arm.
+
 ### Phase 10 S arm — the simulator on the households' own choice sets
 
 Registered in the Phase 10 gate and, until now, **never built**. The arms
