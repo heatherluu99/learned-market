@@ -1969,6 +1969,194 @@ def phase9c_slide() -> PhaseSlide:
     )
 
 
+
+def phase9d_slide() -> PhaseSlide:
+    """Phase 9d, assembled from the run outputs rather than hand-typed."""
+    import pandas as pd
+
+    arms = pd.read_csv(REPO_ROOT / "results/phase9d/arms.csv").set_index("arm")
+    fid = pd.read_csv(REPO_ROOT / "results/phase9d/fidelity_decomposition.csv").iloc[0]
+    cal = pd.read_csv(REPO_ROOT / "results/phase9d/calibrated.csv")
+    kpi = pd.read_csv(REPO_ROOT / "results/phase9d/kpi.csv").set_index("metric")["value"]
+
+    return PhaseSlide(
+        phase_number=9,
+        phase_name="Synthetic Agent Users — 9d",
+        subtitle=(
+            "What does an LLM buyer change, against a policy trained on the "
+            "same rule?  ·  git tag: phase9d-agents  ·  8 seeds, 3 mechanisms "
+            "in one market"
+        ),
+        badge="ORDINALLY RIGHT, CARDINALLY WRONG",
+        badge_color=GOLD,
+        agents=[
+            ("Buyers: ", "100 — 30 Agent, 35 Phase 9a policy, 35 hand-written "
+                         "rule, stratified within class"),
+            ("Sellers: ", "5 — Phase 6's market, unchanged"),
+        ],
+        environment=[
+            "-  gpt-oss:20b run locally, temperature 0, think=low, frozen.",
+            "-  Arms stratified inside each class: ids 0-69 are Poor, so",
+            "   'the first 30' would have been an all-Poor Agent arm.",
+            "-  The control is the smallest capacity that passes 9a's own",
+            "   offline gate, not one chosen here.",
+        ],
+        method=[
+            "Two comparisons. Between-arm, as registered; and within-buyer,",
+            "re-running the market with everyone on the rule on the same seeds",
+            "down to the draw. D_offline / D_shadow then splits the Agent's own",
+            "error from what the closed loop does to it.",
+        ],
+        literature=[
+            (
+                "Park et al. (2023), ",
+                "\u201cGenerative Agents: Interactive Simulacra of Human "
+                "Behavior\u201d (UIST) \u2014 the LLM-agent architecture this "
+                "phase instantiates at population scale.",
+            ),
+        ],
+        metrics=[
+            MetricRow("Agent purchase rate",
+                      f"{arms.loc['agent', 'purchase_rate']:.4f}",
+                      f"rule {arms.loc['rule', 'purchase_rate']:.4f}"),
+            MetricRow("  paired against the same buyers",
+                      f"{arms.loc['agent', 'purchase_rate_paired']:+.4f}",
+                      f"[{arms.loc['agent', 'purchase_rate_lo']:+.4f}, "
+                      f"{arms.loc['agent', 'purchase_rate_hi']:+.4f}]"),
+            MetricRow("Mechanism directions", "all correct", "\u2014"),
+            MetricRow("D_offline \u2192 D_shadow",
+                      f"{fid['d_offline']:.4f} \u2192 {fid['d_shadow']:.4f}",
+                      f"{fid['amplification']:.2f}x"),
+            MetricRow("Offline fit against the rule",
+                      "slope 0.954, intercept \u22120.219",
+                      f"r {fid['correlation']:+.2f}"),
+            MetricRow("Intercept correction recovers",
+                      f"{cal['purchase_rate'].iloc[1]:.4f} of "
+                      f"{arms.loc['rule', 'purchase_rate']:.4f}", "71.6%"),
+            MetricRow("Speed, study against study",
+                      f"{kpi['speed_ratio_low']:,.0f}x\u2013"
+                      f"{kpi['speed_ratio_high']:,.0f}x", "cost ratio: not quoted"),
+        ],
+        research_question=(
+            "What does replacing the buyer decision function with an "
+            "LLM-driven Agent change, holding the rest of the simulation fixed?"
+        ),
+        finding=(
+            f"Every mechanism direction right and the level a quarter of the "
+            f"truth. The Agent buys "
+            f"{arms.loc['agent', 'purchase_rate']:.4f} against the rule's "
+            f"{arms.loc['rule', 'purchase_rate']:.4f}. Fitting it on the rule's "
+            f"own states gives slope 0.954 with intercept \u22120.219 \u2014 not "
+            f"compression, a line of the right gradient sitting low \u2014 and "
+            f"adding that one number back recovers 71.6% of the collapse. The "
+            f"loop supplies the rest, amplifying "
+            f"{fid['amplification']:.2f}x against 1.07x for a distilled network."
+        ),
+        caveat=(
+            "The apparent stickiness was selection: pair stability fell from "
+            "0.585 to 0.376 under correction, without the memory mechanism "
+            "being touched. What survives correction is a class-differential "
+            "bias \u2014 +0.121 for high-income buyers against \u22120.063 for "
+            "low-budget ones \u2014 which recalibration does not fix and which "
+            "is Phase 11's subject arriving early. The cost ratio is not "
+            "quoted: verified per-respondent figures span 15,000x, so its "
+            "denominator is a choice of source rather than a measurement."
+        ),
+    )
+
+
+def phase10_slide() -> PhaseSlide:
+    """Phase 10, assembled from the completed run."""
+    import pandas as pd
+
+    arms = pd.read_csv(REPO_ROOT / "results/phase10/groq/arms.csv")
+    s_arm = pd.read_csv(REPO_ROOT / "results/phase10/s_arm.csv")
+    free = pd.read_csv(REPO_ROOT / "results/phase10/s_freerunning.csv")
+    b0, b1, ag = arms.iloc[0], arms.iloc[1], arms.iloc[2]
+    informed = s_arm[s_arm["arm"].str.startswith("S-informed")].iloc[0]
+
+    return PhaseSlide(
+        phase_number=10,
+        phase_name="Human vs Agent",
+        subtitle=(
+            "Same choice sets, same household history  \u00b7  git tag: "
+            "phase10-human-comparison  \u00b7  3,289 occasions, Ecdat::Cracker"
+        ),
+        badge="WORSE THAN THE FLOOR",
+        badge_color=RED,
+        agents=[
+            ("Households: ", "136 real households, 3,289 purchase occasions"),
+            ("Arms: ", "marginal shares, conditional model, this project's "
+                       "simulator, and an LLM Agent"),
+        ],
+        environment=[
+            "-  Ecdat::Cracker scanner panel: four brands, real prices,",
+            "   display and feature, conditioned on participation.",
+            "-  The identical choice set is given to every non-human arm.",
+            "-  openai/gpt-oss-120b, temperature 0, reasoning_effort low,",
+            "   frozen before any comparison. 2,212 distinct prompts.",
+        ],
+        method=[
+            "Jensen-Shannon between distributions within a scenario, never per",
+            "occasion, plus four pre-registered sign contrasts that must agree",
+            "before any magnitude is discussed. The S arm is scored on held-out",
+            "occasions only, since its utility is B1's fit plus a memory term.",
+        ],
+        literature=[
+            (
+                "Guadagni & Little (1983), ",
+                "\u201cA Logit Model of Brand Choice Calibrated on Scanner "
+                "Data\u201d (Marketing Science) \u2014 the loyalty stock this "
+                "project rebuilt independently and now measures against.",
+            ),
+        ],
+        metrics=[
+            MetricRow("Marginal shares (floor)",
+                      f"JS {b0['weighted_js']:.4f}",
+                      f"{b0['log_loss']:.4f} nats"),
+            MetricRow("Conditional model",
+                      f"JS {b1['weighted_js']:.4f}",
+                      f"{b1['log_loss']:.4f} nats"),
+            MetricRow("LLM Agent",
+                      f"JS {ag['weighted_js']:.4f}",
+                      f"{ag['log_loss']:.4f} nats"),
+            MetricRow("Mechanism directions", "4/4 for every arm",
+                      "including the floor"),
+            MetricRow("Simulator memory over B1",
+                      f"{informed['vs_b1_log_loss']:+.4f} nats",
+                      f"[{informed['vs_b1_ci_lo']:+.4f}, "
+                      f"{informed['vs_b1_ci_hi']:+.4f}]"),
+            MetricRow("Free-running closed loop",
+                      f"{free['weighted_js'].iloc[1] / free['weighted_js'].iloc[0]:.2f}x",
+                      "no trend by depth"),
+        ],
+        research_question=(
+            "Given the same choice sets and the same household history, does "
+            "an LLM Agent recover sequential structure that a conditional "
+            "choice model does not already capture?"
+        ),
+        finding=(
+            f"No \u2014 it does not recover what the marginal shares capture. "
+            f"The Agent sits at JS {ag['weighted_js']:.4f} against the floor's "
+            f"{b0['weighted_js']:.4f} and the conditional model's "
+            f"{b1['weighted_js']:.4f}, roughly twice as far from the panel as "
+            f"knowing nothing but brand shares. Every arm gets all four "
+            f"pre-registered directions right, the floor included, so sign "
+            f"agreement separates none of them."
+        ),
+        caveat=(
+            f"The simulator's own memory adds nothing distinguishable to a "
+            f"model that already knows the household: "
+            f"{informed['vs_b1_log_loss']:+.4f} nats, CI spanning zero. And a "
+            f"model knowing no individual matches the aggregate almost as well "
+            f"as one that does while being twice as wrong per household \u2014 "
+            f"so aggregate fidelity and sign agreement are jointly "
+            f"insufficient. A 3.4x loyalty claim made earlier was withdrawn: "
+            f"it compared an upper bound against a causal quantity."
+        ),
+    )
+
+
 BUILDERS = {
     "1": phase1_slide,
     "2": phase2_slide,
@@ -1987,6 +2175,8 @@ BUILDERS = {
     "9a": phase9a_slide,
     "9b": phase9b_slide,
     "9c": phase9c_slide,
+    "9d": phase9d_slide,
+    "10": phase10_slide,
 }
 
 
