@@ -252,8 +252,57 @@ def fit_sharpening(records, predicted, contexts, keep, grid=None):
     return best_gamma
 
 
+FLOOR = 1e-6
+
+
+def evaluate(panels, offsets_by_panel, default):
+    """Weighted held-out cell gap and log-loss for one set of per-panel offsets."""
+    gaps, lls, ns = [], [], []
+    for name, (records, predicted, contexts, households, _) in panels.items():
+        keep = np.isin([r["household"] for r in records], households["test"])
+        corrected = apply_correction(predicted, contexts,
+                                     offsets_by_panel.get(name, {}), default)
+        s = score(records, corrected, contexts, keep)
+        gaps.append(s["cell_gap"]); lls.append(s["log_loss"]); ns.append(int(keep.sum()))
+    w = np.array(ns, dtype=float)
+    return ((np.array(gaps) * w).sum() / w.sum(),
+            (np.array(lls) * w).sum() / w.sum())
+
+
+def permutation_test(panels, per_cell, default, draws=200, seed=7):
+    """Shuffle the offsets across cells, within panel, and re-score.
+
+    The phase pre-registered "per-cell beats global" as the outcome that would
+    justify the phase and would therefore be the tempting one to find. If a map
+    of the same offsets in the wrong cells corrects just as well, the map holds
+    no information about *which* cell and the win is an artifact of shifting
+    probability around. This is the check that separates those.
+    """
+    rng = np.random.default_rng(seed)
+    out = []
+    for _ in range(draws):
+        shuffled = {}
+        for panel, table in per_cell.items():
+            keys, values = list(table), list(table.values())
+            rng.shuffle(values)
+            shuffled[panel] = dict(zip(keys, values))
+        out.append(evaluate(panels, shuffled, default))
+    return np.array(out)
+
+
 def score(records, predicted, contexts, keep):
-    """Held-out error: weighted absolute cell gap, and log-loss."""
+    """Held-out error: weighted absolute cell gap, and log-loss.
+
+    Every arm is floored at the same `FLOOR` before scoring, including the
+    uncorrected one. This is not cosmetic. `apply_correction` clips at 1e-6 on
+    its way out, so an unfloored `none` arm was the only one paying
+    -log(1e-12) = 27.6 nats wherever the Agent gave the chosen brand exactly
+    zero -- 1.56% of held-out occasions. That alone made a -0.0017 offset look
+    like a 0.21-nat improvement. The floor is an evaluation convention; it has
+    to be the same convention for everyone being compared.
+    """
+    predicted = np.clip(predicted, FLOOR, None)
+    predicted = predicted / predicted.sum(axis=1, keepdims=True)
     observed = np.zeros_like(predicted)
     observed[np.arange(len(records)), [r["chosen_index"] for r in records]] = 1
     gaps, weights = [], []
@@ -265,7 +314,10 @@ def score(records, predicted, contexts, keep):
         weights.append(m.sum())
     gaps, weights = np.array(gaps), np.array(weights, dtype=float)
     ll = float(-np.log(np.clip((predicted * observed)[keep].sum(1), 1e-12, 1)).mean())
-    return {"cell_gap": float((gaps * weights).sum() / weights.sum()), "log_loss": ll}
+    # No cell cleared the 30-observation floor: say so, rather than dividing by
+    # zero and letting a nan travel silently into the results table.
+    gap = float((gaps * weights).sum() / weights.sum()) if weights.size else float("nan")
+    return {"cell_gap": gap, "log_loss": ll}
 
 
 def main() -> int:
@@ -307,7 +359,13 @@ def main() -> int:
     # ---- the three corrections, fit on train and scored on test -----------
     train = bias[bias.split == "train"]
     global_offset = float(-(train.gap * train.n).sum() / train.n.sum())
-    per_cell = {r.context: -r.gap for r in train.itertuples()}
+    # Keyed on (panel, context), because the map is. A dict keyed on context
+    # alone lets each panel overwrite the previous one's offsets -- three
+    # panels share the same nine context labels -- and silently scores
+    # crackers with yogurt's corrections.
+    per_cell = {}
+    for r in train.itertuples():
+        per_cell.setdefault(r.panel, {})[r.context] = -r.gap
     print(f"\n  global offset fitted on training households: {global_offset:+.4f}")
 
     # The sharpening exponent is fitted on the *training* households of every
@@ -321,13 +379,14 @@ def main() -> int:
           f"(per panel {[round(g, 2) for g in gammas]})")
 
     rows = []
-    for label, offsets, default in (("none", {}, 0.0),
-                                    ("global", {}, global_offset),
-                                    ("per-cell", per_cell, global_offset),
-                                    ("sharpen", None, None)):
+    for label, default in (("none", 0.0),
+                           ("global", global_offset),
+                           ("per-cell", global_offset),
+                           ("sharpen", None)):
         agg = {"cell_gap": [], "log_loss": [], "n": []}
         for name, (records, predicted, contexts, households, _) in panels.items():
             keep = np.isin([r["household"] for r in records], households["test"])
+            offsets = per_cell.get(name, {}) if label == "per-cell" else {}
             if label == "none":
                 corrected = predicted
             elif label == "sharpen":
@@ -348,6 +407,23 @@ def main() -> int:
     print(f"  {'correction':12s} {'cell gap':>10s} {'log-loss':>10s}")
     for r in result.itertuples():
         print(f"  {r.correction:12s} {r.cell_gap:10.4f} {r.log_loss:10.4f}")
+
+    real = evaluate(panels, per_cell, global_offset)
+    placebo = permutation_test(panels, per_cell, global_offset)
+    p_gap = float((placebo[:, 0] <= real[0]).mean())
+    p_ll = float((placebo[:, 1] <= real[1]).mean())
+    pd.DataFrame({"metric": ["cell_gap", "log_loss"],
+                  "per_cell": [real[0], real[1]],
+                  "placebo_mean": [placebo[:, 0].mean(), placebo[:, 1].mean()],
+                  "placebo_sd": [placebo[:, 0].std(), placebo[:, 1].std()],
+                  "p_value": [p_gap, p_ll]}).to_csv(
+        RESULTS_ROOT / "permutation.csv", index=False)
+    print(f"\n  Offsets shuffled across cells within panel, {len(placebo)} draws:")
+    print(f"  {'':12s} {'per-cell':>10s} {'shuffled':>10s} {'':>8s} {'p':>7s}")
+    print(f"  {'cell gap':12s} {real[0]:10.4f} {placebo[:, 0].mean():10.4f} "
+          f"+-{placebo[:, 0].std():6.4f} {p_gap:7.3f}")
+    print(f"  {'log-loss':12s} {real[1]:10.4f} {placebo[:, 1].mean():10.4f} "
+          f"+-{placebo[:, 1].std():6.4f} {p_ll:7.3f}")
 
     none, glob, cell, sharp = result.cell_gap
     print(f"\n  global vs none : {none - glob:+.4f}  "

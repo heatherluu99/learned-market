@@ -16,6 +16,7 @@ import importlib.util
 import pathlib
 
 import numpy as np
+import pandas as pd
 import pytest
 
 from market_sim import human
@@ -95,3 +96,70 @@ def test_a_correction_is_scored_on_households_it_was_not_fitted_to():
     assert sharpened[0].max() > predicted[0].max()
     assert np.allclose(sharpened[1], predicted[1])
     assert np.allclose(p11.sharpen(predicted, 1.0), predicted)
+
+
+def test_every_arm_is_scored_against_the_same_probability_floor():
+    """An uncorrected arm must not be the only one paying for a hard zero.
+
+    `apply_correction` clips on its way out, so before this was fixed the
+    `none` arm was the only one scored with -log(1e-12) wherever the Agent
+    gave the chosen brand exactly zero. That is a property of the scorer, not
+    of the correction, and it made a -0.0017 offset look like a 0.21-nat win.
+    """
+    p11 = _phase11()
+    # Two occasions; the chosen brand has probability exactly zero on the
+    # first, which is what the Agent actually does on 1.6% of held-out rows.
+    records = [{"chosen_index": 0, "household": "h1"},
+               {"chosen_index": 1, "household": "h1"}]
+    raw = np.array([[0.0, 0.5, 0.3, 0.2], [0.1, 0.6, 0.2, 0.1]])
+    contexts = np.array([["a"] * 4] * 2)
+    keep = np.array([True, True])
+
+    zero_free = p11.apply_correction(raw, contexts, {}, default=-0.0017)
+    a = p11.score(records, raw, contexts, keep)["log_loss"]
+    b = p11.score(records, zero_free, contexts, keep)["log_loss"]
+
+    # A near-zero offset may not move log-loss by more than a hair. If it
+    # does, the floor is doing the work and the comparison is meaningless.
+    assert abs(a - b) < 0.05, (
+        f"an offset of -0.0017 moved log-loss by {abs(a - b):.3f} nats, which "
+        f"is the clipping floor and not a correction")
+    assert a < 20, "a single hard zero should not dominate the whole score"
+
+
+def test_per_cell_offsets_are_keyed_on_panel_as_well_as_context():
+    """Three panels share nine context labels; a context-only key loses two.
+
+    The map is (category, context). A correction keyed on context alone lets
+    each panel overwrite the previous one's offsets, so crackers get scored
+    with yogurt's corrections -- which made the per-cell arm look *worse* than
+    no correction at all.
+    """
+    p11 = _phase11()
+    train = pd.DataFrame([
+        {"panel": "cracker", "context": "cheap|none", "gap": -0.10},
+        {"panel": "catsup", "context": "cheap|none", "gap": +0.20},
+        {"panel": "yogurt", "context": "cheap|none", "gap": +0.05},
+    ])
+    per_cell = {}
+    for r in train.itertuples():
+        per_cell.setdefault(r.panel, {})[r.context] = -r.gap
+
+    assert set(per_cell) == {"cracker", "catsup", "yogurt"}, (
+        "one offset per panel, not one shared offset")
+    assert per_cell["cracker"]["cheap|none"] == pytest.approx(0.10)
+    assert per_cell["catsup"]["cheap|none"] == pytest.approx(-0.20)
+    # The collapsed version keeps only the last panel seen.
+    collapsed = {r.context: -r.gap for r in train.itertuples()}
+    assert len(collapsed) == 1 and collapsed["cheap|none"] == pytest.approx(-0.05)
+
+
+def test_shuffled_offsets_are_a_real_placebo():
+    """The permutation keeps the offsets and moves only which cell gets which."""
+    per_cell = {"cracker": {"a": 0.1, "b": -0.2, "c": 0.3}}
+    rng = np.random.default_rng(0)
+    keys, values = list(per_cell["cracker"]), list(per_cell["cracker"].values())
+    rng.shuffle(values)
+    shuffled = dict(zip(keys, values))
+    assert sorted(shuffled.values()) == sorted(per_cell["cracker"].values())
+    assert set(shuffled) == set(per_cell["cracker"])
