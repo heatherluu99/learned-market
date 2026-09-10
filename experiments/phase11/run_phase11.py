@@ -102,6 +102,13 @@ def save_cache(cache: dict) -> None:
 def agent_probabilities(records, client, key: str) -> np.ndarray:
     """One distribution per occasion, one model call per distinct prompt."""
     cache = load_cache()
+    # **The Agent is given the shelf and no household history.** That is a
+    # weaker task than Phase 10 set it, and it is deliberate: this map
+    # attributes the gap to *marketing context*, and a history term would
+    # confound context with each household's idiosyncratic past. The human
+    # side of every cell is an aggregate share, which is history-free in the
+    # same way. It also collapses Cracker from 2,212 distinct prompts to 909,
+    # which is a consequence and not the reason.
     prompts = [agent.describe_choice(r["alternatives"], {"last": None, "top": None,
                                                          "top_share": 0.0})
                for r in records]

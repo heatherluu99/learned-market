@@ -4640,6 +4640,13 @@ of the alternative — **on display, on feature, price tercile** — because tho
 are the levers a client would ask about, and because they are the only
 contextual variables all three panels record.
 
+**The Agent is given the shelf and no household history.** A weaker task than
+Phase 10 set it, and deliberate: this map attributes the gap to *marketing
+context*, and a history term would confound context with each household's
+idiosyncratic past. The human side of every cell is an aggregate share, which
+is history-free in the same way. Any comparison against Phase 10's Agent
+numbers therefore compares two different tasks and is not made.
+
 ### Deliverable 2, and the question that decides whether it is worth building
 
 A correction layer, fit on a **training subset of households** and evaluated on
