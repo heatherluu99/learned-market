@@ -1,0 +1,50 @@
+=== 2026-09-10 02:10:33 PDT ===
+
+=== Phase 10 — human panel, Agent, and two baselines ===
+  Given the same choice sets and the same household history, does an LLM Agent recover sequential structure in real purchase behaviour that a conditional choice model does not already capture?
+
+  3,289 occasions, conditioned on participation.
+  Agent: openai/gpt-oss-120b, settings frozen at {'temperature': 0.0, 'reasoning_effort': 'low', 'max_tokens': 512}
+
+  Querying the Agent (cached on model and bucketed prompt)...
+    2,212 answers already on disk; 0 to fetch
+    3,289 occasions -> 0 distinct prompts (32.7% deduplicated)
+    request-paced at 30/min: expect about 0 minutes
+  {'calls': 0, 'cached': 1077, 'cache_hit_rate': 1.0, 'input_tokens': 0, 'output_tokens': 0, 'synthetic_cost_usd': 0.0, 'synthetic_latency_seconds': 0.0, 'seconds_per_call': 0.0001}
+
+  arm                               weighted JS   log-loss  direction signs
+  B0 marginal shares                     0.1256     1.0696  price+ display+ feature+ repeat+
+  B1 conditional model                   0.0404     0.7739  price+ display+ feature+ repeat+
+  A agent (openai/gpt-oss-120b)          0.2448     1.8966  price+ display+ feature+ repeat+
+
+  human contrasts: price -0.1375  display +0.1702  feature +0.2258  repeat +0.6877
+
+  Wrote /Users/luxier/learned_market/results/phase10/groq
+
+--- exit 0 ---
+
+=== 2026-09-10 09:40:24 PDT ===
+
+=== Phase 10 — human panel, Agent, and two baselines ===
+  Given the same choice sets and the same household history, does an LLM Agent recover sequential structure in real purchase behaviour that a conditional choice model does not already capture?
+
+  3,289 occasions, conditioned on participation.
+  Agent: openai/gpt-oss-120b, settings frozen at {'temperature': 0.0, 'reasoning_effort': 'low', 'max_tokens': 512}
+
+  Querying the Agent (cached on model and bucketed prompt)...
+    2,212 answers already on disk; 0 to fetch
+    3,289 occasions -> 0 distinct prompts (32.7% deduplicated)
+    request-paced at 30/min: expect about 0 minutes
+  {'calls': 0, 'cached': 1077, 'cache_hit_rate': 1.0, 'input_tokens': 0, 'output_tokens': 0, 'synthetic_cost_usd': 0.0, 'synthetic_latency_seconds': 0.0, 'seconds_per_call': 0.0}
+
+  arm                               weighted JS   log-loss  direction signs
+  B0 marginal shares                     0.1256     1.0696  price+ display+ feature+ repeat+
+  B1 conditional model                   0.0404     0.7739  price+ display+ feature+ repeat+
+  A agent (openai/gpt-oss-120b)          0.2448     1.8966  price+ display+ feature+ repeat+
+
+  human contrasts: price -0.1375  display +0.1702  feature +0.2258  repeat +0.6877
+
+  Wrote /Users/luxier/learned_market/results/phase10/groq
+
+--- exit 0 ---
+
