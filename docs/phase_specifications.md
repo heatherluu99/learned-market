@@ -4597,6 +4597,85 @@ built and run.
 
 **Exit condition:** `git tag phase11-validated`.
 
+### Phase 11 design gate
+
+**Three categories, one source.** Cracker, Catsup and Yogurt, all from
+Rdatasets' copy of `Ecdat` and all citing Jain, Vilcassim & Chintagunta (1994).
+Same research programme, same panel structure, three products: crackers,
+condiments, dairy. That is what makes this a map rather than a point.
+
+| panel | occasions | households | display recorded |
+|---|---|---|---|
+| cracker | 3,289 | 136 | yes |
+| catsup | 2,798 | 300 | yes |
+| yogurt | 2,412 | 100 | **no** |
+
+**The `demographic/class` dimension cannot be filled and is dropped.** None of
+the three panels carries income, age, or any household attribute — only an
+anonymous household id. The registered Bias Map spans
+`(category, demographic, context, model, gap)`; this one spans
+`(category, context, model, gap)` and says so. Phase 9d's class-differential
+finding — **+0.121** for high-income buyers against **−0.063** for low-budget
+ones — stands where it was measured, in the simulator, where classes exist by
+construction. It is **not** evidence about human demographic groups and is not
+carried into this map.
+
+**Model: `gpt-oss:20b`, run locally.** Groq's free tier took four days to
+answer one panel; three panels would take a fortnight. The local model has no
+quota. Cracker additionally has a hosted `gpt-oss-120b` result already, which
+gives **one** cross-model point — enough to say whether the two agree on that
+category, not enough to decompose model effects. That is Phase 12's job and is
+not attempted here.
+
+### What is measured
+
+For each `(category, context)` cell, the **gap**:
+
+```
+gap = mean agent probability  −  observed human share
+```
+
+over the alternatives falling in that cell. Context is the marketing condition
+of the alternative — **on display, on feature, price tercile** — because those
+are the levers a client would ask about, and because they are the only
+contextual variables all three panels record.
+
+### Deliverable 2, and the question that decides whether it is worth building
+
+A correction layer, fit on a **training subset of households** and evaluated on
+**held-out households** — never occasions, since households are the unit of
+dependence.
+
+Three corrections are compared, and the ordering is the finding:
+
+| | |
+|---|---|
+| **none** | the raw agent output |
+| **global** | one additive constant, the whole map's mean gap |
+| **per-cell** | one constant per `(category, context)` |
+
+**Pre-registered:** Phase 9d found the Agent's error against a known rule was
+essentially *one number* — slope 0.954, intercept −0.219 — and that adding it
+back recovered 71.6% of a closed-loop collapse. If that carries here, **global
+will beat none and per-cell will not beat global by much**, and the honest
+deliverable is a single constant rather than a map. If per-cell wins clearly,
+the bias is structured and a map is warranted.
+
+**Both outcomes are written down now** because the second is the one that
+justifies the phase and would therefore be the tempting one to find.
+
+### Acceptance criteria
+
+1. Held-out corrected error is **measurably smaller** than uncorrected. A
+   correction that does not survive the split is not a correction.
+2. Every cell is reported with the **stability** of its gap across the split —
+   large and stable is correctable, large and unstable is not, and the gate
+   requires both to be labelled rather than only the first.
+3. If **global** is not beaten by **per-cell** on held-out error, the phase
+   reports a constant and says the map was not needed. That is a result.
+
+**Exit condition:** `git tag phase11-bias`.
+
 ---
 
 ## Phase 12 — Cross-Model Comparison (Asset C begins)
