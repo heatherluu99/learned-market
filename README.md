@@ -1,601 +1,141 @@
 # Millbrook Market
 
-**A synthetic consumer market built to find out when a simulated buyer or seller
-can be trusted — and, more often, when it cannot.**
+**A synthetic consumer market built to find out when a simulated buyer can be
+trusted — and, more often, when it cannot.**
 
-Agent-based simulations of consumer behaviour are easy to build and hard to
-believe. Add a mechanism, watch a number move, declare an insight. The number
-moves because you added the mechanism. This project is an attempt to do the
-opposite: every phase states a question **before** it is run, states what result
-would count as a failure, and reports the answer even when the answer is *no*.
-
-**Nine of the fifteen headline results below are negative**, and several of the
-rest are "yes, but smaller than it looks". Those are the ones worth reading.
-
-## What this is not
-
-Most synthetic-consumer work evaluates one answer at a time:
-
-```
-Persona + Prompt  ->  Response
-```
-
-A persona is described, a question is asked, an answer is scored against a
-human distribution. That pipeline can measure whether a model *answers* like a
-population. It cannot measure whether a model *behaves* like one, because it
-has no place to put the things that make behaviour behaviour — a budget that
-depletes, a stall you went to last week, a seller who repriced because of what
-you did, a market that is different in week 40 because of week 3.
-
-This project is built on the other shape:
-
-```
-Persona + Persistent State + Environment + Interaction + Memory + Policy
-                          ->  Behavioural Trajectory
-```
-
-**The difference is not realism, it is what becomes measurable.** Three results
-here exist only because the trajectory is the unit:
-
-- **One-step fidelity and trajectory fidelity are different quantities, and the
-  gap is measurable.** A distilled buyer that matches the rule on the rule's own
-  states is measurably worse on the states *it* brings about — `D_shadow`
-  exceeds `D_offline` by +0.0057, CI [+0.0055, +0.0060] (Phase 9a). A
-  prompt-response benchmark cannot represent that comparison at all: it has no
-  second state distribution to evaluate on.
-- **Whether that gap matters is governed by quantities a response benchmark
-  cannot see.** It scales exactly with the policy's entropy — Spearman −1.00
-  across eight regimes (9b) — and vanishes entirely when the environment stops
-  carrying state, 1.67× to 1.00× (9c). Both are properties of the *loop*, not
-  of any answer.
-- **Market structure appears that no agent was told to produce.** A premium
-  tier is competed out of existence by entry and exit rules that never read a
-  class label (Phase 8). There is no prompt whose response is "the premium tier
-  dies in week 60".
-
-The honest counterpart: this project contains **no human data before Phase 10**,
-so nothing in Phases 1–9 claims a synthetic agent resembles a person. What it
-claims is that the trajectory is the level at which the question can be asked,
-and it spends nine phases showing what that buys and what it costs.
+Every phase writes down its question and its failure condition *before* it runs,
+and reports the answer either way. **Most of the headline results are negative.**
+Those are the ones worth reading.
 
 ---
 
-## Headline results
+## The difference this project is about
 
-| Phase | Question | Answer |
-|---|---|---|
-| 2 | Does buyer heterogeneity produce stratification? | **Yes**, gap +0.088 CI [+0.053, +0.124] — but **73% of it is budget, not price sensitivity** |
-| 3 | Does the environment re-sort buyers across tiers? | **No.** Position moves sales *within* a tier; class→tier shares don't move |
-| 5 | Does a nonlinear budget cliff change conclusions? | **No** — 1.6 pp, equivalent. The model rolls back to linear |
-| 6 | Does memory change behaviour? | **Yes**, pair stability 0.425 vs 0.316. But the control is 0.316, not 0 |
-| 7b | Does a bandit beat a hand-written rule? | **Yes**, +10.3% profit — **and moves no class share at all** |
-| 7c | Does market state predict the best price? | **No.** Skipped on the evidence rather than run |
-| 7d | Does a multi-week horizon add anything? | **No**, −1.3% CI [−2.8%, +0.1%], equivalent |
-| 7e-2 | Can *any* schedule beat the best standing price? | **Yes**, +2.6% — and the δ=0 control **loses money** |
-| 7e-3a | Does conditioning on loyalty state pay? | **No**, −2.3%. An oracle says there is nothing to condition on |
-| 7e-3b | Can a learner find a trade-off known to exist? | **Partly** — right shape, right depth, half the duration, **31% of the gain** |
-| 8 | Does macro structure emerge from micro interaction? | **Yes** — premium tier eliminated, no rule ever reads a class label |
-| 9a | Does one-step imitation fidelity survive closed-loop deployment? | **The loop is real and does not compound** — +0.0057 CI excludes zero, at 1.07× |
-| 9b | Does teacher entropy govern whether it compounds? | **Yes for amplification** — Spearman −1.00, 1.02×→1.67×. **Not yet for behaviour** |
-| 9c | Which environment characteristic suppresses divergence? | **Neither — persistence *carries* it.** Removing season-long taste kills amplification outright |
-| 9b+ | Does it ever become material, down to a deterministic teacher? | **No.** Amplification saturates at ~1.7×; **48 of 48 shares equivalent** |
-| 9d | Does an LLM buyer differ from a policy trained on the same rule? | **Yes, and in a specific way.** Every mechanism direction right; buys **a quarter** as often. Paired −0.6214 [−0.6370, −0.6058] |
-| 9d | Is that the model, or the feedback loop? | **Both, and now separated.** On the rule's own states it returns **half** the rule's probability; the loop then makes that **1.42×** worse. Correlation across states **+0.64** |
-| 9d | Is that amplification unusual for an LLM? | **No.** 9a's distilled network was 1.07×, 9b's sharpest regime 1.78×. **What the loop is given to amplify** is what differs, not the loop |
-| 9d | Is the Agent cheaper than human research? | **Unquotable.** Verified per-respondent figures span **15,000×**, so the ratio's denominator is a choice of source. **Speed** is clean: 3,754×–48,262× |
-| 10 | Does an LLM Agent recover sequential structure a choice model misses? | **No — it is worse than knowing nothing but the brand shares.** JS 0.2448 against the floor's 0.1256 and B1's 0.0404. **All four directions right**, including the floor's |
-| 10 | Is human loyalty stronger than the simulator's? | **Unanswerable as first asked.** A memoryless model with household preference predicts **97%** of the observed repeat rate. A "3.4×" claim was **withdrawn** — it compared an upper bound against a causal quantity |
-| 10 · S | On the households' own choice sets, does the simulator's memory add anything? | **No.** −0.0049 nats over a model that already knows the household, CI **[−0.0101, +0.0006]** |
-| 10 · S | Can a model that knows *no individual* match the aggregate? | **Yes** — JS 0.0035 against 0.0015 for one that does, while being **twice as wrong** per household. Aggregate fidelity is cheap; individual fidelity is not |
-| 10 · free-run | Does one-step fidelity survive the model driving its own history? | **Yes.** 1.09×, and **no trend with depth** (0.99, 1.06, 1.03, 0.96). Repeat rate 0.7695 against 0.7729 |
-| v2 · A2 | How long is human choice memory? | **Short** — and the first answer was a **measurement artifact**. An alternating train/test split made odd lags average +0.016 and even lags +0.032, eight for eight. Parity-free, it decays: ratio **0.255**, not 1.337 |
-| v2 · B | Does an uncapped, slower-decaying memory produce path dependence? | **No.** Zero in every primary cell — the Phase 6 null survives a mechanism built to break it |
-| v2 · B3 | Does buyer memory amplify trajectory divergence? | **The opposite.** Stronger memory *stabilizes*: ∂A/∂γ = −0.093. **1 of 3 pre-registered signs held** |
-| v2 · B3 | Is teacher entropy a sufficient statistic for amplification? | **No.** Two cells at 0.817 and 0.807 bits differ by **28%** — how the entropy was lowered matters |
-| H_promo | Do promotion-bought customers come back less? | **Not once you control for who they are.** The raw −0.0436 is **entirely selection**; adjusted it is +0.0085, CI spanning zero |
-
-Full detail: [`docs/phase_specifications.md`](docs/phase_specifications.md).
-Every run: [`experiment_log.csv`](experiment_log.csv), or the self-contained
-[Experiment Explorer](viz/experiment_explorer.html).
-
----
-
-## The problem
-
-Synthetic consumers are being sold as a replacement for survey panels. The
-pitch is cheap, fast, scalable. The unanswered question is **when the synthetic
-answer is wrong in a way that flips a decision**, and nobody can answer it by
-looking at a simulation that was only ever compared to itself.
-
-Three failure modes this project is built to catch:
-
-1. **Encoded results.** A model that produces stratification because
-   stratification was written into its rules. Distinguishing that from
-   stratification that *emerges* requires the rules to be auditable, and the
-   audit to be a test rather than a claim.
-2. **Mechanisms that pay for themselves in the metric that motivated them.**
-   Add loyalty, measure loyalty, find loyalty. The control arm is the whole
-   discipline.
-3. **Complexity that is added because it is available.** LLM agents, deep RL,
-   contextual bandits — each is worth having only if a simpler thing has been
-   shown to fail first.
-
-## The solution: a ladder with gates
-
-Sixteen phases, each changing **exactly one** dimension — behavioural,
-environmental, or population — against the phase before it. Nothing advances
-until the current phase's pre-registered criteria are met.
-
-Four rules do most of the work:
-
-**Pre-registration.** The question, the mechanism, and the acceptance criteria
-are committed to `docs/phase_specifications.md` *before* the implementation, as
-their own commit. When a criterion later turns out to be broken, the correction
-is committed with its reason rather than edited silently — the repository
-contains a gate whose threshold was arithmetically unreachable, and the commit
-that says so.
-
-**Equivalence testing, three verdicts.** A confidence interval wholly inside a
-materiality margin is `equivalent`; wholly outside is `material`; straddling it
-is `inconclusive` — a failure to measure, not a finding. Margins are ±5
-percentage points for shares and ±5% relative for profit. **What is graded is
-that a verdict is reached, not which verdict it is.** An `inconclusive` result
-is answered with more seeds, never a softer threshold.
-
-**Common random numbers.** All randomness is drawn up front, in a fixed order,
-at fixed width. New draws are appended *last*, so every earlier phase stays
-bit-identical — Phase 1's participation rate has been 0.8216666666666667 to
-twelve decimals across sixty commits and eight mechanism additions. Phase 8
-allocates 40 fixed seller *slots* and draws at slot width regardless of
-occupancy, so two arms whose entry histories diverge still consume the same
-stream and remain paired.
-
-**Held-out evaluation.** Anything fitted is evaluated on seeds it never saw.
-Anything *selected* — a schedule chosen from 36, a hyperparameter chosen from
-4 — is selected on a discovery block and tested on a disjoint one, because a
-maximum over ~150 comparisons is significant by construction.
-
----
-
-## World state and observability
-
-The engine holds a complete world state; **no agent sees it.** What each agent
-observes is a deliberate, tested restriction.
-
-### The world
-
-| | persists across weeks | resets weekly |
-|---|---|---|
-| buyer | `last_seller`, loyalty streak / stock, fixed preference | budget |
-| seller | posted price, capital, firm identity, active/inactive | inventory |
-| market | the seller set (Phase 8), week index | promotion lottery |
-
-`preference[b, s] ~ U(0,1)` is drawn once per season: taste is a property of a
-buyer, not a per-week coin flip. Budgets are drawn per seed with within-class
-lognormal dispersion, `μ = ln(mean) − σ²/2`, `σ = 0.12` — before this, every
-"heterogeneous" buyer inside a class was identical and the population was three
-points rather than a distribution.
-
-### Buyer observability
-
-A buyer evaluating a stall sees **only**: the posted price, its own remaining
-budget, its own preference for that stall, and its own loyalty toward it. It
-does not see other buyers, other stalls' sales, seller costs, or the future.
-Whether it sees a stall at all is gated by
-
-```
-visibility_prob = 0.5 + 0.5 · position_score
-```
-
-An unnoticed stall is recorded as `not_noticed`, never as a declined purchase —
-a buyer who never saw a stall has expressed no preference about it.
-
-### Seller persona and its observability
-
-A seller's policy sees a strictly self-referential state:
-
-```python
-{ "loyal_fraction",    # share of buyers currently attached to *this* seller
-  "loyalty_stock",     # mean loyalty bonus its own buyers hold toward it
-  "last_arm",          # its own previous price
-  "last_profit",       # its own previous profit
-  "season_fraction" }  # how far into the season
-```
-
-**No rival's price, no rival's sales, no market aggregate.** This is pinned by
-a test that fails if any other key appears. Phase 7c established there is no
-external market state worth conditioning on; giving a policy one anyway would
-add parameters without adding information.
-
-### The audit that makes "emergent" mean something
-
-Phase 8's entry and exit rules never read a class label. That is not asserted —
-it is tested by **swapping the tier names while holding every numeric parameter
-fixed and requiring a bit-identical run**: same entries, same exits, same
-profits, to the last slot. What that establishes is exactly *label-invariance*.
-It does **not** establish that the outcome is independent of the
-parameterization, and the spec keeps the two separate:
-
-| | is this result that? |
+| most synthetic-consumer work | here |
 |---|---|
-| label-encoded outcome (a rule reads a class and acts on it) | **no** |
-| parameter-induced endogenous selection | **yes** |
+| `Persona + Prompt → Response` | `Persona + State + Environment + Memory + Policy → Trajectory` |
+| one answer, no history | 22–110 weeks, choices that change later choices |
+| judged by whether it sounds right | judged against a pre-registered threshold |
+
+A response can be graded by reading it. A **trajectory** can only be graded
+against something — a control, a baseline, a real panel. That is the whole
+design.
 
 ---
 
-## Actions, learning, and transitions
+## What it found
 
-### The action space
+### An LLM buyer is further from real humans than knowing only the brand shares
 
-A seller's action is a **price arm** — a multiplier on its own list price,
-`{0.8, 0.9, 1.0, 1.1, 1.2}`. Schedules, bandits and the Q-network all act
-through **one interface**, the engine's policy hook `(seller_id, state) → arm`,
-so a hand-written schedule and a trained network enter the market through the
-same door and neither can see anything the other cannot.
+![Phase 10](results/phase10/groq/human_vs_agent.png)
 
-A buyer's action is binary per stall visited: buy or don't.
+3,289 real purchase occasions, Ecdat::Cracker scanner panel. Same choice sets
+for every arm.
 
-### Utility and purchase
+| arm | distance to humans | log-loss |
+|---|---|---|
+| marginal brand shares | 0.1256 | 1.0696 |
+| conditional choice model | **0.0404** | **0.7739** |
+| **LLM Agent** | **0.2448** | **1.8966** |
 
-```
-U(b, s) = intercept
-        − α_c · (price / price_reference)          price, normalized market-wide
-        + 1.5 · preference[b, s]                    taste
-        + 0.05 · (budget_remaining − price)         liquidity
-        − 1[budget_remaining − price < gap] · pen   Phase 5 cliff
-        + loyalty_bonus                             Phase 6 / 7e
+**Every arm got all four mechanism directions right — including the floor.** So
+sign agreement separates none of them. A test the marginal-share baseline passes
+is not a test.
 
-P(buy) = σ( U − offset )
-```
+### The LLM's error is one number
 
-`price_reference` is **the highest posted price in the phase's configuration**,
-computed once and frozen — not the buyer's budget (which double-counts the
-liquidity term) and emphatically not the stall's own price (which collapses the
-ratio to 1.0 and deletes the price term entirely). It stays frozen through
-Phase 7's learned pricing and Phase 8's entry and exit, because a normalizer
-that drifts with the mechanism under test makes the utility scale a function of
-the result.
+![Phase 9d](results/phase9d/offline_fidelity.png)
 
-### Loyalty: a counter, then a stock
-
-Phases 6–7d use a bounded streak counter. Phase 7e replaces it with a per-pair
-**stock** — the change that the whole of Phase 7e exists to test:
+Fitting the Agent against the rule that generates the world, over 447 states:
 
 ```
-purchased:  L[b,s] ← ρ·L[b,s] + β·max(0, 1 + δ·(1 − p_paid/p_list)/A)
-otherwise:  L[b,s] ← ρ·L[b,s]
-bonus:      L_max · tanh( L[b,s] / L* )
+agent = −0.219 + 0.954 × rule
 ```
 
-`δ` is the **investment channel**: it makes a discount buy something that
-outlives the week. With `δ = 0` a purchase is a purchase whatever it cost, and
-the only reason to cut price is this week's demand — which is precisely the
-myopic problem a bandit already solves.
+Slope ≈ 1. Its **comparative statics are right and its intercept is broken.**
+Adding that one number back recovers **71.6%** of the collapse in a closed loop.
 
-**Loyalty v2 is a third mechanism, and a return to the textbook one.** It is
-Guadagni & Little (1983) as written:
+What *survives* the correction is a class bias: **+0.121** for high-income
+buyers, **−0.063** for low-budget ones. Recalibration does not fix that, and
+that is the part a client would be harmed by.
 
+### Aggregate fidelity is cheap; individual fidelity is not
+
+A model that knows **nothing about any individual household** matches the
+aggregate choice distribution almost as well as one that knows every household
+— 0.0035 against 0.0015 — while being **twice as wrong** per household.
+
+A synthetic-consumer product graded on distributional match and sign agreement
+can look excellent and carry no individual-level validity.
+
+### Six more, briefly
+
+| | question | answer |
+|---|---|---|
+| **2** | Does buyer heterogeneity cause stratification? | **Yes** — but 73% of it is budget, not price sensitivity |
+| **6** | Does memory create stable relationships? | **Yes**, 0.425 vs 0.316 — but the *control* is 0.316, not 0 |
+| **7c** | Does market state predict the best price? | **No.** Skipped on the evidence rather than run |
+| **7e** | Can a learner find a gain known to exist? | Right shape, **31% of the gain**. Complexity became valuable without becoming learnable |
+| **9** | Does imitation error compound? | **Real but bounded** — saturates at ~1.7×, never material |
+| **10** | Does the simulator's memory beat a model that knows the household? | **No** — −0.005 nats, CI spans zero |
+
+Full detail: [`docs/phase_specifications.md`](docs/phase_specifications.md) ·
+every run: [`experiment_log.csv`](experiment_log.csv)
+
+---
+
+## Three corrections worth more than the results
+
+**A claim withdrawn.** Phase 10 first reported human loyalty as "3.4× stronger
+than the simulator's". That compared an *upper bound* against a *causal
+quantity*. Withdrawn, and the honest version recorded: a memoryless model with
+household preferences predicts **97%** of the observed repeat rate.
+
+**A measurement artifact caught.** Human memory looked flat across eight weeks —
+which no decaying mechanism can produce. The cause was the train/test split:
+odd lags averaged +0.016 and even lags +0.032, eight for eight. Parity-free, it
+decays normally.
+
+**A win that was in-sample.** The simulator arm first beat its baseline by 0.35
+nats. It was reading answers it had been fitted to on half the data. Scored
+properly: **0.005 nats, CI spanning zero.**
+
+---
+
+## See it
+
+```bash
+open viz/millbrook.html
 ```
-L[b,s] ← ρ·L[b,s] + (1 − ρ)·1{bought}          L ∈ [0, 1]
-bonus:   γ · L[b,s]
-```
 
-Three changes, and two of them are one fix. `β` was already a function of `ρ`,
-so folding it in costs no freedom and makes `L` bounded by construction. The
-`tanh` is dropped, and with it the **per-cell calibration of `L_max`** — under a
-saturating transform the bonus a buyer actually received depended on where its
-own stock sat on the curve, so the mechanism's realized strength was
-cell-dependent and had to be re-solved per cell. That invited the obvious
-objection: if two mechanisms are each re-tuned per cell and come out similar,
-whose similarity is it? With `L` in [0, 1] and a linear bonus, the maximum
-effect is `γ` exactly, in every cell, calibrated nowhere.
+Four tabs, one file, no server:
 
-And `δ = 0` throughout — not because it is small, but because with `ρ` moving
-persistence and `γ` moving strength, a third parameter acting through price
-exposure makes a change in state dependence unattributable among the three. It
-became `H_promo`, a separate hypothesis with a **sign predicted before it ran**.
-The prediction was wrong.
-
-The three mechanisms are kept side by side rather than replaced: `M0` none,
-`M1` the capped streak counter, `M2` the relationship stock. Two of five
-conclusions turn on which one is used.
-
-### Seller learning, in four rungs
-
-| rung | rule |
+| tab | |
 |---|---|
-| 7a heuristic | keep moving the price the way it moved while profit improves; reverse when it stops. Acts only on a change larger than its own recent noise |
-| 7b bandit | UCB1, `argmax( v̄_a + c·√(2 ln t / n_a) )`, and ε-greedy. Every arm swept once first |
-| 7e-3a contextual | LinUCB, one ridge model per arm over `[1, loyalty_stock, season_fraction]` |
-| 7d / 7e-3b RL | Q-network on a 10-week discounted return, `target = r + γ·max_a' Q(s', a')`, `γ = 0.9` |
-
-Profit, the reward, had to be **defined** before any of this — Phases 1–6 have
-no cost model and "exit if profit is below threshold" was unimplementable:
-
-```
-profit = revenue − unit_cost · units_sold − fixed_weekly_cost
-```
-
-### Transitions and entry/exit
-
-Phase 8 makes the seller set itself endogenous:
-
-```
-exit  (capital): capital ← capital + profit;  exit when capital ≤ 0
-exit  (streak) : exit after 3 consecutive losing weeks
-entry          : after 2 consecutive weeks of mean profit > 0, one entrant
-                 copies a randomly chosen incumbent's price, position and
-                 inventory — reading profit, never a class label
-```
-
-Both exit rules are run, because a modelling choice with a fourfold effect on
-turnover turned out to have only a modest effect on structure — and that is
-only visible because both were run.
+| **Market** | a season replayed — buyers, stalls, who went where |
+| **Entry & Exit** | firms entering and leaving; week 11 shows the premium tier competed out |
+| **Agent Inspector** | 1,591 LLM decisions with the model's own reasoning, beside what the rule said |
+| **Experiments** | all 41 runs, their figures, and the commits behind them |
 
 ---
 
-## Phase-by-phase
+## How it works, in short
 
-### Phases 1–6 (complete) — mechanics, heterogeneity, environment, context, nonlinearity, memory
-
-**Phase 1** pins the engine: participation 0.822, inventory never binds, budget
-binds 3,961 times. A deliberate inventory-pressure arm drops participation to
-0.733 on identical seeds, proving inventory *can* bind when scarce.
-
-**Phase 2** finds stratification — Rich−Middle gap to the premium tier **+0.088,
-CI [+0.053, +0.124]**. The diagnostic arm is the finding: equalizing price
-sensitivity shrinks it to +0.065, so **≈73% of stratification is budget alone**.
-"Heterogeneity produces stratification" holds; the narrower "price sensitivity
-produces stratification" mostly does not. Poor's premium share is 0.000 by an
-**affordability wall** — budget 3 against price 6 — not by preference.
-
-**Phase 3** adds visibility. Position moves sales strongly *within* a tier and
-class→tier sorting does not move (Middle +0.0000, CI [−0.0201, +0.0202]). The
-largest effect is a participation drop of −0.065.
-
-**Phase 4** adds promotions. The effect is an **interaction, not a level
-shift**: lift concentrates in the lowest-budget class that can afford the
-discounted price. Poor's lift at a discounted premium stall is ~0 by
-arithmetic — 6 × 0.7 = 4.2 still exceeds a budget of 3.
-
-**Phase 5** adds a budget cliff, in both readings of an ambiguous spec. Largest
-share shift **1.6 pp / 2.1 pp, both equivalent → the model rolls back to
-linear.** This phase's materiality test is reused at 7b–7e.
-
-**Phase 6** makes weeks real. Pair stability **0.425 with memory against 0.316
-without** — and the control's level is the result: unequal popularity and
-season-long fixed preference produce stability with no memory at all. Path
-dependence is a pre-registered **null**.
-
-### Phase 7 (complete) — seller learning, and two nulls that trace to one line
-
-7a's heuristic lifts profit 48.4 → 60.9. 7b's bandit reaches 66.0 (+10.3% over
-7a) **while moving no class-to-tier share at all** — more profit, identical
-market structure.
-
-**7c was skipped on evidence.** The profit-maximizing arm is 2.60 under every
-observable weekly condition tested, and the profit curve shifts in level
-without changing shape. A contextual bandit conditions the *estimate* of reward
-and cannot change a decision that context does not move. The diagnostic is
-committed; the skip is a result.
-
-**7d returned its pre-registered null**: −1.3%, CI [−2.8%, +0.1%], equivalent.
-And the pre-registered *signature* was itself defective — the myopic bandit
-scored **higher** on week–price correlation (0.420 vs 0.304) than the RL agent,
-because any learner climbing toward a better arm produces a rising price path.
-Kept, with its defect recorded, rather than quietly replaced.
-
-Both nulls trace to `loyalty_streak_cap = 3`: a bounded counter is not a stock,
-so there is neither cross-sectional state to condition on nor an intertemporal
-asset to invest in.
-
-### Phase 7e (complete) — a second environment, built to make complexity necessary
-
-Three existence gates, each licensing one level of policy complexity.
-
-**Gate 1 — is there a state?** With lock-in strength *calibrated to equal* the
-counter's (so a better result cannot come from stronger habit), the stock's
-memory reaches **2.83× as far at a lag of 8 weeks**, and the counter's advantage
-collapses at exactly its 3-week cap. Getting there cost two corrections, both
-in the record: a gate whose threshold (5 pp below a 4.0% baseline) was
-arithmetically unreachable, and a pinned ceiling that made the new mechanism
-bind **a third as hard** as the one it was meant to enrich.
-
-**Gate 2 — is there a trade-off?** Yes: *invest 16 weeks at 0.90×, then return
-to the standing price* earns **+2.6%, CI [+2.0%, +3.2%]** on held-out seeds.
-The δ ladder on the identical price path is the causal argument —
-**−1.24% / +0.09% / +1.25% / +3.05%** — so with the investment channel off, the
-same schedule *loses money*. What pays is **acquisition, not extraction**: every
-schedule that ever charges above the standing price loses, the worst by 56%.
-
-**Gate 3 — does complexity pay?**
-
-- **Context: no.** −2.3%, CI [−3.0%, −1.5%], equivalent. An oracle diagnostic
-  says why rather than leaving it ambiguous: across 460 seller-weeks split at
-  the median loyalty state, the best arm is **1.00× on both sides**. A seller
-  with a deeply loyal base and one without want the same price.
-- **Horizon: partly.** The Q-network prices at **2.379** over weeks 0–7 against
-  the hand-found schedule's **2.385** — it located the investment at almost
-  exactly the right depth — then returns to the standing price at week 8 where
-  the schedule holds to 16. It spends 75% of the discount and collects **31% of
-  the gain**. This is 7d's missing sacrifice-then-recover trajectory, appearing
-  for the first time, and still not enough to pass.
-
-**Phase 7e's answer: policy complexity became *valuable* without becoming
-*learnable*.** The market structure that makes a sophisticated policy worth
-having is not the structure that makes it findable.
-
-### Phase 8 (complete) — endogenous market structure
-
-Both halves of the originally registered mechanism were **inoperative**, found
-by diagnostics run before any implementation code: exit would have fired on
-week-0 arithmetic in 100% of seeds, and the unmet-demand entry trigger was
-identically zero across 1,980 seller-weeks (no stall ever sold out).
-
-Rebuilt, the market grows from 5 sellers to a fixed-cost-determined level —
-**24.9 / 18.8 / 15.1 / 12.4** sellers at fixed costs of 6 / 8 / 10 / 12 — and
-the premium tier is eliminated in all eight cells, from a 40% starting share to
-essentially zero.
-
-What settles is a **stochastic stationary structure, not an equilibrium.** In
-the final season entry and exit both run at 0.10–0.47 firms a week, and under
-the three-week rule only **48–62% of firms survive a season while the count does
-not move**. `N ≈ 15` does not mean the same fifteen stalls.
-
-**"Emergent" is meant narrowly.** The mechanism did not encode the outcome, but
-*why* the premium tier loses was fixed at Phase 2 — 70% of buyers hold a budget
-of 3.0 against a price of 6.0, and both tiers pay the same rent. The market
-discovered what the population already made true.
-
-### Phase 9a (complete) — learned buyer policy
-
-The next rung, and the concept trap is pinned before any code. Training
-trajectories come from **this project's own hand-coded buyer**, so a fitted
-policy is *policy distillation of a simulator* — not learning of human
-behaviour, which begins at Phase 10.
-
-**The teacher is stochastic**, which decides whether any of its metrics mean
-anything. Measured over 4,268 affordable decisions: mean `p = 0.578`, **83% of
-decisions between 0.2 and 0.8**, mean binary entropy **0.938 of 1.0 bits**.
-Consequently:
-
-- the accuracy ceiling of *any* deterministic policy is **0.619** — a "62%
-  accurate" classifier is perfect;
-- a policy that recovers `p` exactly and samples scores **0.541**, *below* the
-  argmax policy, while being the only one that reproduces the teacher;
-- the argmax policy buys on 23.8% of decisions against the teacher's 40.9% — a
-  **17.1 pp** aggregate error in the "more accurate" model.
-
-So the metrics are distributional. And the project's shared `purchase_draw`
-turns out to make the right metric the natural one: teacher and student differ
-exactly when the shared uniform falls between their probabilities, so
+**Buyers** carry a budget, a price sensitivity, a fixed taste, and a memory of
+where they shopped. **Sellers** post a price and learn — by hill-climbing, by
+bandit, or by a Q-network on multi-week return. Purchase is a logit:
 
 ```
-1 − CRN-coupled agreement = E_s[ TV( π_T(·|s), π_θ(·|s) ) ] = E_s|p_T − p_θ|
+U = intercept − α·(price/reference) + 1.5·preference + budget terms + γ·loyalty
+P(buy) = sigmoid((U − 2) / τ)
 ```
 
-— an expected conditional policy distance, not an accuracy.
+**Loyalty** is Guadagni & Little (1983): `L ← ρL + (1−ρ)·1{bought}`, bonus `γL`.
+Three variants are kept side by side — none, a capped streak counter, and this
+decaying stock — because **two of five conclusions turn on which one is used.**
 
-The phase runs as **offline conditional fidelity → held-out calibration →
-[gate] → closed-loop trajectory fidelity → state-distribution drift**, and its
-hypothesis is:
-
-> **High one-step conditional-policy fidelity does not guarantee closed-loop
-> trajectory fidelity, because policy errors can endogenously shift the state
-> distribution on which future decisions are made.**
-
-Measurable here because the teacher is a *function* and stays evaluable on
-states the student reached and the teacher never would have:
-
-```
-D_offline = E_{s∼d_T}     |p_T(s) − p_θ(s)|     can I imitate where the teacher goes?
-D_shadow  = E_{s∼d_θ}     |p_T(s) − p_θ(s)|     do I still imitate where I go?
-D(d_T, d_θ)                                     how far did I move the world?
-```
-
-**Result.** The gate passes — policy distance 0.0834 against a measured floor
-of 0.0832, worst stratum calibration 0.0157. Deployed, `D_shadow` exceeds
-`D_offline` by **+0.0057, CI [+0.0055, +0.0060]**: the same student really is
-worse at imitating the teacher on the states *it* brings about. And the
-amplification is 1.07×, the largest state drift a Wasserstein-1 of 0.0100, and
-all six class-to-tier shares equivalent. **Under this stochastic teacher and
-these stabilizing dynamics, imitation error produces measurable endogenous
-distribution shift but not economically meaningful trajectory divergence.**
-
-### Phase 9b (complete) — teacher entropy sweep
-
-9a's conclusion names its conditions, so the next phase varies them. Sweeping
-the teacher's logit temperature with the **market's purchase level held fixed**
-— the offset re-solved at every temperature, or a sharper regime would be a
-different market rather than a sharper one:
-
-| `H(π_T)` bits | 0.98 | 0.93 | 0.76 | 0.46 | 0.19 |
-|---|---|---|---|---|---|
-| error / noise `R` | 9% | 18% | 31% | 47% | **85%** |
-| amplification | 1.02× | 1.06× | 1.18× | 1.40× | **1.67×** |
-| behavioural (pp) | 0.33 | 0.40 | 1.67 | 0.76 | 2.49 |
-
-**Amplification and state drift are monotone in entropy at Spearman −1.00**,
-with the excess growing 160-fold and every interval excluding zero. Every
-regime's student clears Gate 9a against its own floor, so no point on the curve
-is just an undertrained model.
-
-**The fourth link is not reached**: behavioural divergence peaks at 2.49 pp
-against a ±5 pp margin and all six shares stay equivalent everywhere.
-
-**Extended to the deterministic limit** — `τ` down to 0.01, a near step
-function — **the curve flattens rather than breaking.** Between `τ` = 0.1 and
-0.01 the error-to-noise ratio rises **85% → 319%** while amplification moves
-only **1.68× → 1.78×**. Whatever bounds it is not the systematic error. Across
-all eight regimes, **48 of 48 class-to-tier comparisons return `equivalent`** —
-zero material, zero inconclusive after escalating to 120 deployment seeds — and
-the worst divergence anywhere is 3.71 pp.
-
-> **In this market, one-step imitation error never becomes materially visible
-> at the trajectory level — at any teacher entropy from a coin flip to a near
-> step function.**
-
-The two sharpest regimes fail Gate 9a, as registered: which side of a step a
-buyer falls on is decided by the hidden taste draw, so the observation set
-cannot predict a near-deterministic teacher at all. That is the observation set
-failing rather than the student, and those rows are reported and not relied on.
-
-### Phase 9c (complete) — stabilizer ablation
-
-9b left the environment as the missing link, so 9c removes its two candidate
-stabilizers one at a time at the sharpest entropy, with the purchase level held
-fixed. **The result reverses 9a's own framing.**
-
-| | amplification | state drift | behavioural |
-|---|---|---|---|
-| low entropy, both stabilizers on | **1.67×** | 0.0883 | 2.49 pp |
-| budget wall removed | 1.59× | 0.0250 | 1.75 pp |
-| **season-long taste removed** | **1.00×** | 0.0053 | 0.38 pp |
-
-9a called fixed preference a stabilizer that "pulls a wandering buyer back" and
-predicted removing it would let divergence grow. Removing it **eliminates the
-amplification entirely.** Compounding needs a **carrier**: an early error has to
-move the buyer into a state that *persists* long enough to be inhabited. Redraw
-taste weekly and there is no such state, so this week's deviation never reaches
-next week.
-
-Persistence stabilizes the trajectory *and* carries the error — one mechanism,
-seen twice. And `R` alone does not govern amplification: the weekly-taste cells
-have the **largest** systematic error in the study (116% against 85%) and
-amplify by exactly 1.00×. So `amplification ~ R × state persistence`.
-
-**Nothing across 9a–9c reached materiality.** The worst behavioural divergence
-anywhere is 2.49 pp against a ±5 pp margin, and every class-to-tier share in
-every cell returns `equivalent`. The mechanism has been isolated, its governing
-quantity identified and its carrier found — and it has still never moved this
-market by enough to change a decision.
-
-### Phase 9d — synthetic agent users (harness built, not run)
-
-The first phase needing LLM calls. This environment has no API key and no SDK,
-so **9d has not been run** — its harness is built and tested against a
-deterministic mock, and three decisions in it are load-bearing:
-
-- **The Agent is asked for a probability, not a decision.** 9b and 9c
-  established that policy *entropy* governs whether error compounds, so an
-  Agent answering buy/don't-buy would import the `τ → 0` regime into a
-  comparison meant to be about the model.
-- **It sees a bucketed view of exactly the distilled policy's observation
-  set** — what a natural-language interface does anyway, and what lets a cache
-  work. It is *coarser*, so an Agent that loses has two explanations and this
-  is one of them.
-- **An unparseable reply raises**, rather than defaulting to 0.5 and turning a
-  broken parse into a plausible-looking answer.
-
-`human_baseline.csv` is left as a template with sources unfilled. An unsourced
-figure there would make the cost/speed claim look measured when it is not.
-
-### Phases 10–16 (not started)
-
-human comparison (10), bias quantification (11), cross-model
-robustness (12–13), decision reliability (14), reference-scale demonstration
-(15), data flywheel (16). No human data enters before Phase 10, and nothing in
-Phases 1–9 claims anything about human behaviour.
+**Nothing reads a class label.** Entry copies a profitable rival; exit follows
+capital. That is what lets "the premium tier was competed out" mean something.
 
 ---
 
@@ -603,24 +143,19 @@ Phases 1–9 claims anything about human behaviour.
 
 ```bash
 python -m venv .venv && .venv/bin/pip install -r requirements.txt
-.venv/bin/python -m pytest -q                        # 340 tests
-.venv/bin/python experiments/phase8/run_phase8.py    # any phase
-.venv/bin/python tools/build_experiment_explorer.py  # rebuild the explorer
+.venv/bin/python -m pytest -q                          # 342 tests
+.venv/bin/python experiments/phase8/run_phase8.py      # any phase
+.venv/bin/python tools/build_combined_viz.py           # rebuild the page
 ```
 
 | path | |
 |---|---|
 | `docs/phase_specifications.md` | the pre-registered spec — every gate, correction and result |
-| `src/market_sim/` | engine, config, acceptance criteria, bandits, RL |
-| `experiments/phase*/`, `experiments/loyalty_v2/` | one runnable script per phase, and per gate of the loyalty branch |
-| `results/`, `experiment_log.csv` | generated outputs, each bound to a commit hash |
-| `viz/experiment_explorer.html` | every run, its figure, and the commits behind it |
-| `project_tracking.pptx` | one tracking slide per completed phase |
+| `src/market_sim/` | engine, config, acceptance criteria, bandits, RL, LLM clients |
+| `experiments/` | one runnable script per phase and per gate |
+| `results/`, `experiment_log.csv` | outputs, each bound to a commit hash |
+| `viz/millbrook.html` | the four tabs above |
 
-Every logged run records the commit it ran at. The hash is suffixed `-dirty`
-when any source path was uncommitted, and the log now says so out loud while
-it happens — the natural workflow is to run an experiment and commit it
-afterwards, which is exactly the order that leaves a hash pointing at a tree
-without the experiment in it. Eight rows were written that way before anything
-warned; all eight were re-run from a clean tree and reproduced their published
-numbers exactly.
+Every logged run records the commit it ran at, and says `-dirty` out loud when
+the tree was not clean. Eight rows were written that way before anything warned;
+all eight were re-run clean and reproduced exactly.
