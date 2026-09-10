@@ -25,6 +25,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+#: Panel paths are given relative to the repo, so `load()` works from
+#: any working directory - the experiments are run from several.
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
 import numpy as np
 import pandas as pd
 
@@ -39,6 +43,44 @@ CITATION = (
 #: The dataset spells this brand "kleebler"; the company is Keebler. Kept as
 #: the file has it so a reader can match the column names.
 BRANDS = ("sunshine", "kleebler", "nabisco", "private")
+
+#: The scanner panels this project uses, all from Rdatasets' copy of the R
+#: `Ecdat` package and all four-brand choice data. Catsup and Yogurt come from
+#: the *same paper* as Cracker - Jain, Vilcassim & Chintagunta (1994) - so
+#: three product categories are available under one well-cited source rather
+#: than three sources of differing provenance.
+#:
+#: Yogurt has no display columns. That is a property of the data, not an
+#: omission, and it is recorded here so a caller cannot silently read zeros as
+#: "no brand was ever on display".
+PANELS = {
+    "cracker": {
+        "path": "data/cracker/Cracker.csv",
+        "brands": ("sunshine", "kleebler", "nabisco", "private"),
+        "display": True, "category": "crackers",
+    },
+    "catsup": {
+        "path": "data/catsup/Catsup.csv",
+        "brands": ("heinz41", "heinz32", "heinz28", "hunts32"),
+        "display": True, "category": "condiments",
+    },
+    "yogurt": {
+        "path": "data/yogurt/Yogurt.csv",
+        "brands": ("yoplait", "dannon", "hiland", "weight"),
+        "display": False, "category": "dairy",
+    },
+}
+
+
+def brands_of(long: pd.DataFrame) -> tuple[str, ...]:
+    """The brands of whichever panel this frame came from.
+
+    Read from the frame rather than the module constant so a function handed a
+    Catsup frame does not quietly go looking for Nabisco. Falls back to
+    `BRANDS` for frames built before panels existed, which is every frame in
+    the tests that construct one by hand.
+    """
+    return tuple(long.attrs.get("brands", BRANDS))
 
 #: Quantities this project measures that the panel *cannot* speak to, recorded
 #: here so a comparison is never quietly extended to them.
@@ -59,21 +101,31 @@ NOT_COMPARABLE = {
 DROP_ZERO_PRICE = True
 
 
-def load(path: Path | str = "data/cracker/Cracker.csv",
+def load(panel: str = "cracker", path: Path | str | None = None,
          drop_zero_price: bool = DROP_ZERO_PRICE) -> pd.DataFrame:
-    """Long format: one row per (occasion, brand), as the engine sees encounters."""
-    wide = pd.read_csv(path)
+    """Long format: one row per (occasion, brand), as the engine sees encounters.
+
+    `panel` names one of `PANELS`. The default is Cracker, so every call
+    written before there was more than one panel keeps its meaning.
+    """
+    spec = PANELS[panel]
+    brands = spec["brands"]
+    wide = pd.read_csv(path if path is not None else REPO_ROOT / spec["path"])
     wide = wide.rename(columns={"rownames": "occasion"})
     wide["order"] = wide.groupby("id").cumcount()
     rows = []
-    for brand in BRANDS:
+    for brand in brands:
         rows.append(pd.DataFrame({
             "occasion": wide["occasion"], "household": wide["id"],
             "order": wide["order"], "brand": brand,
             # Prices are recorded in cents; kept as given and normalized below
             # rather than rescaled here, so the file and the frame agree.
             "price": wide[f"price.{brand}"],
-            "display": wide[f"disp.{brand}"].astype(int),
+            # Yogurt carries no display columns at all. Zero here means "this
+            # panel does not record display", which `PANELS[...]["display"]`
+            # states, rather than "nothing was ever on display".
+            "display": (wide[f"disp.{brand}"].astype(int) if spec["display"]
+                        else 0),
             "feature": wide[f"feat.{brand}"].astype(int),
             "chosen": (wide["choice"] == brand).astype(int),
         }))
@@ -86,7 +138,12 @@ def load(path: Path | str = "data/cracker/Cracker.csv",
     # the highest price in the data, fixed once, never per-occasion.
     long["price_reference"] = float(long["price"].max())
     long["relative_price"] = long["price"] / long["price_reference"]
-    return long.reset_index(drop=True)
+    long = long.reset_index(drop=True)
+    long.attrs["brands"] = brands
+    long.attrs["panel"] = panel
+    long.attrs["category"] = spec["category"]
+    long.attrs["has_display"] = spec["display"]
+    return long
 
 
 def brand_shares(long: pd.DataFrame) -> pd.Series:
@@ -104,7 +161,7 @@ def promotion_lift(long: pd.DataFrame) -> pd.DataFrame:
     """
     rows = []
     for kind in ("display", "feature"):
-        for brand in BRANDS:
+        for brand in brands_of(long):
             sub = long[long["brand"] == brand]
             on = sub[sub[kind] == 1]["chosen"].mean()
             off = sub[sub[kind] == 0]["chosen"].mean()
@@ -274,8 +331,9 @@ import torch  # noqa: E402
 def _design(long: pd.DataFrame):
     """(occasions, 4) tensors of features, brand ids, household ids, choices."""
     wide = long.sort_values(["occasion", "brand"])
-    n_alt = len(BRANDS)
-    brand_code = {b: i for i, b in enumerate(sorted(BRANDS))}
+    brands = brands_of(long)
+    n_alt = len(brands)
+    brand_code = {b: i for i, b in enumerate(sorted(brands))}
     occasions = wide["occasion"].to_numpy().reshape(-1, n_alt)
     features = torch.tensor(
         wide[["relative_price", "display", "feature"]].to_numpy(dtype=np.float64)
@@ -325,7 +383,7 @@ def fit_memoryless_choice(
         raise ValueError(f"unknown split {split!r}")
     torch.manual_seed(seed)
     _, features, brands, households, chosen = _design(long)
-    wide_once = long.sort_values(["occasion", "brand"]).iloc[::len(BRANDS)]
+    wide_once = long.sort_values(["occasion", "brand"]).iloc[::len(brands_of(long))]
     order = torch.tensor(wide_once["order"].to_numpy(), dtype=torch.long)
     if split == "alternating":
         train = order % 2 == 0
@@ -336,9 +394,9 @@ def fit_memoryless_choice(
             (wide_once["order"].to_numpy() <= halfway.to_numpy()), dtype=torch.bool)
     n_households = int(households.max()) + 1
 
-    alpha = torch.zeros(len(BRANDS), requires_grad=True)
+    alpha = torch.zeros(len(brands_of(long)), requires_grad=True)
     beta = torch.zeros(3, requires_grad=True)
-    u = torch.zeros(n_households, len(BRANDS), requires_grad=True)
+    u = torch.zeros(n_households, len(brands_of(long)), requires_grad=True)
     params = [alpha, beta] + ([u] if household_effects else [])
     optimizer = torch.optim.Adam(params, lr=lr)
 
@@ -433,7 +491,7 @@ def conditional_repeat_baseline(
 def _repeat_at_lag(long: pd.DataFrame, fit: dict, lag: int) -> dict[str, float]:
     """Observed and memoryless-predicted repeat at one lag, given a fit."""
     wide = long.sort_values(["occasion", "brand"])
-    n_alt = len(BRANDS)
+    n_alt = len(brands_of(long))
     per_occasion = wide.iloc[::n_alt]
     chosen_code = (wide["chosen"].to_numpy().reshape(-1, n_alt).argmax(axis=1))
     households = per_occasion["household"].to_numpy()

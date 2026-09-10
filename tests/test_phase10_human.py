@@ -418,3 +418,45 @@ def test_a_quota_failure_does_not_discard_answers_already_paid_for(tmp_path,
     kept = run.load_cache("groq", "m", {})
     assert kept, "answers bought before the quota ran out were discarded"
     assert len(kept) == len(served) - 1
+
+
+@pytest.mark.parametrize("panel", ["cracker", "catsup", "yogurt"])
+def test_every_panel_loads_with_its_own_brands(panel):
+    """Each panel carries its own brand names, not Cracker's.
+
+    The loader read a module constant before there was more than one panel, so
+    a Catsup frame would have gone looking for Nabisco and produced four
+    columns of zeros rather than failing.
+    """
+    long = human.load(panel)
+    brands = human.brands_of(long)
+    assert set(brands) == set(human.PANELS[panel]["brands"])
+    assert len(long) == long["occasion"].nunique() * len(brands)
+    # Exactly one brand chosen per occasion.
+    per_occasion = long.groupby("occasion")["chosen"].sum()
+    assert (per_occasion == 1).all()
+    shares = human.brand_shares(long)
+    assert abs(shares.sum() - 1.0) < 1e-9
+
+
+def test_yogurt_declares_that_it_has_no_display_data():
+    """Zero display must not be readable as 'nothing was ever on display'.
+
+    Yogurt carries no display columns at all. The panel spec says so, and any
+    promotion analysis has to consult it rather than infer from the zeros.
+    """
+    yogurt = human.load("yogurt")
+    assert yogurt.attrs["has_display"] is False
+    assert (yogurt["display"] == 0).all()
+    for other in ("cracker", "catsup"):
+        panel = human.load(other)
+        assert panel.attrs["has_display"] is True
+        assert panel["display"].sum() > 0, other
+
+
+def test_cracker_is_unchanged_by_the_panel_refactor():
+    """The default is still Cracker, at the size every recorded result used."""
+    long = human.load()
+    assert long.attrs["panel"] == "cracker"
+    assert long["occasion"].nunique() == 3289
+    assert long["household"].nunique() == 136
