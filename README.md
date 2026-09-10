@@ -119,6 +119,30 @@ aggregate choice distribution almost as well as one that knows every household
 A synthetic-consumer product graded on distributional match and sign agreement
 can look excellent and carry no individual-level validity.
 
+### The bias is correctable — but only as a map, not a constant
+
+![Phase 11](results/phase11/bias_map.png)
+
+Three scanner panels, 8,499 real occasions. The Agent's gap against humans per
+`(category, marketing context)`, fitted on half the households and scored on
+the other half:
+
+| correction | held-out error |
+|---|---|
+| none | 0.0888 |
+| one constant | 0.0888 |
+| **the map** | **0.0460** |
+| one sharpening exponent | 0.0966 |
+
+**The constant is worth nothing because the gap changes sign.** It runs from
+**−0.44** where a condiment is cheap and on display to **+0.20** where a dairy
+brand is cheap and unpromoted, and 7 of 25 cells flip sign across the split.
+Averaged, it is **−0.0017**.
+
+Shuffle the fitted offsets into the wrong cells and re-score: **0 of 200 draws**
+match the real map. It knows *which* cell — the Agent under-reacts to promotion
+and over-reacts to nothing.
+
 ### Six more, briefly
 
 | | question | answer |
@@ -129,13 +153,14 @@ can look excellent and carry no individual-level validity.
 | **7e** | Can a learner find a gain known to exist? | Right shape, **31% of the gain**. Complexity became valuable without becoming learnable |
 | **9** | Does imitation error compound? | **Real but bounded** — saturates at ~1.7×, never material |
 | **10** | Does the simulator's memory beat a model that knows the household? | **No** — −0.005 nats, CI spans zero |
+| **11** | Is the human–Agent gap correctable? | **Yes, as a map** — halves held-out error; one constant does nothing |
 
 Full detail: [`docs/phase_specifications.md`](docs/phase_specifications.md) ·
 every run: [`experiment_log.csv`](experiment_log.csv)
 
 ---
 
-## Three corrections worth more than the results
+## Four corrections worth more than the results
 
 **A claim withdrawn.** Phase 10 first reported human loyalty as "3.4× stronger
 than the simulator's". That compared an *upper bound* against a *causal
@@ -150,6 +175,12 @@ decays normally.
 **A win that was in-sample.** The simulator arm first beat its baseline by 0.35
 nats. It was reading answers it had been fitted to on half the data. Scored
 properly: **0.005 nats, CI spanning zero.**
+
+**Two bugs that cancelled.** Phase 11 first reported that no correction worked.
+One clipped only the *corrected* arms before scoring, inventing a 0.21-nat win
+for a −0.0017 offset; the other keyed the map on context alone, so crackers
+were scored with yogurt's corrections. They pointed opposite ways and the run
+reported the sum. Fixed, the map halves held-out error.
 
 ---
 
@@ -222,7 +253,7 @@ capital. That is what lets "the premium tier was competed out" mean something.
 
 ```bash
 python -m venv .venv && .venv/bin/pip install -r requirements.txt
-.venv/bin/python -m pytest -q                          # 342 tests
+.venv/bin/python -m pytest -q                          # 358 tests
 .venv/bin/python experiments/phase8/run_phase8.py      # any phase
 .venv/bin/python tools/build_combined_viz.py           # rebuild the page
 ```

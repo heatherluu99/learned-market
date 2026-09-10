@@ -59,8 +59,11 @@ TITLES = {
     "phase9d_three_mechanisms": "Agent, trained policy and rule (9d)",
     "phase9d_cost_speed_kpi": "Cost and speed against sourced baselines (9d)",
     "phase9d_offline_fidelity": "Is the Agent wrong, or the loop? (9d)",
+    "phase9d_intercept_correction": "Adding the intercept back (9d)",
     "phase10_human_vs_agent_PILOT_200":
         "PILOT ONLY - 200 occasions, not a result (10)",
+    "phase10_human_vs_agent_groq":
+        "The full human comparison, 3,289 occasions (10)",
     "phase10_s_arm_simulator_on_human_choice_sets":
         "The simulator on the households' own choice sets (10)",
     "phase10_s_arm_free_running": "Free-running closed loop (10)",
@@ -70,6 +73,7 @@ TITLES = {
     "loyaltyv2_gate_b3_amplification": "Gate B3 - amplification A(R, rho, gamma)",
     "loyaltyv2_gate_c_mechanism_robustness": "Gate C - M0 / M1 / M2",
     "hpromo_promotion_reinforcement": "H_promo - promotion reinforcement",
+    "phase11_bias_map": "Bias map across three categories (11)",
 }
 
 #: Runs whose figure was later overwritten in place by a successor writing to
@@ -128,6 +132,11 @@ STATUS = {
     "loyaltyv2_gate_b3_amplification": "reversed",
     "loyaltyv2_gate_c_mechanism_robustness": "open",
     "hpromo_promotion_reinforcement": "retired",
+    # Both halves of the registered prediction came out backwards: the constant
+    # does nothing and the map, which was predicted to add little, halves the
+    # error. The tag is phase11-bias, so this would otherwise read "in
+    # progress".
+    "phase11_bias_map": "reversed",
 }
 
 #: Ordered, and the order matters: "Implement Phase 7e-2: ... headroom gate"

@@ -442,7 +442,7 @@ def main() -> int:
     print(f"\n  {len(stable)} of {len(wide)} cells hold their gap within 0.05 "
           f"across the split")
 
-    plot(bias, result, wide)
+    plot(bias, result, wide, placebo, real)
     experiment_log.append_row(LOG_PATH, {
         "experiment_id": "phase11_bias_map",
         "git_commit": commit,
@@ -477,32 +477,66 @@ def main() -> int:
     return 0
 
 
-def plot(bias, result, wide) -> None:
-    fig, axes = plt.subplots(1, 3, figsize=(15, 4.6))
+def plot(bias, result, wide, placebo, real) -> None:
+    fig, axes = plt.subplots(1, 4, figsize=(19, 4.8))
+
+    # Dodged, not overlaid. Three categories share the same nine context
+    # labels, so drawing them on the same rows with alpha made the bars sit on
+    # top of one another and the figure unreadable.
     ax = axes[0]
     test = bias[bias.split == "test"]
-    for cat, sub in test.groupby("category"):
-        ax.barh([f"{c[:16]}" for c in sub.context], sub.gap, label=cat, alpha=0.75)
+    contexts = sorted(test.context.unique())
+    cats = sorted(test.category.unique())
+    colours = {"condiments": "tab:blue", "crackers": "tab:orange", "dairy": "tab:green"}
+    height = 0.8 / len(cats)
+    for k, cat in enumerate(cats):
+        sub = test[test.category == cat].set_index("context")
+        ys = [contexts.index(c) + (k - (len(cats) - 1) / 2) * height
+              for c in sub.index]
+        ax.barh(ys, sub.gap, height=height * 0.92, label=cat,
+                color=colours.get(cat))
+    ax.set_yticks(range(len(contexts)))
+    ax.set_yticklabels([c.replace("display+feature", "disp+feat") for c in contexts],
+                       fontsize=8)
     ax.axvline(0, c="0.3", lw=1)
     ax.set_xlabel("Agent probability minus human share")
     ax.set_title("The gap, by context and category", fontsize=10)
-    ax.legend(fontsize=7)
+    ax.legend(fontsize=7, loc="lower right")
 
     ax = axes[1]
-    ax.bar(result.correction, result.cell_gap, color=["0.6", "tab:blue", "tab:green", "tab:orange"][:len(result)])
+    colour = ["0.6", "tab:blue", "tab:green", "tab:orange"][:len(result)]
+    ax.bar(result.correction, result.cell_gap, color=colour)
     for i, v in enumerate(result.cell_gap):
         ax.text(i, v, f"{v:.4f}", ha="center", va="bottom", fontsize=9)
     ax.set_ylabel("held-out weighted cell gap")
     ax.set_title("Does a map beat a constant?", fontsize=10)
 
+    # The phase registered "per-cell wins" as the tempting outcome, so the
+    # figure has to carry the check as well as the claim.
     ax = axes[2]
-    ax.scatter(wide["train"], wide["test"], s=34, alpha=0.75)
+    ax.hist(placebo[:, 0], bins=22, color="0.75", edgecolor="0.55",
+            label=f"offsets shuffled\nacross cells ({len(placebo)} draws)")
+    ax.axvline(real[0], c="tab:green", lw=2.2,
+               label=f"the fitted map ({real[0]:.4f})")
+    ax.set_xlabel("held-out weighted cell gap")
+    ax.set_ylabel("draws")
+    ax.set_title("Does the map know which cell?", fontsize=10)
+    ax.legend(fontsize=7.5, loc="upper right")
+
+    ax = axes[3]
+    swing = (wide["test"] - wide["train"]).abs()
+    stable = swing < 0.05
+    ax.scatter(wide["train"][stable], wide["test"][stable], s=38,
+               c="tab:green", label=f"holds within 0.05  ({stable.sum()})")
+    ax.scatter(wide["train"][~stable], wide["test"][~stable], s=38,
+               c="0.65", marker="x", label=f"does not  ({(~stable).sum()})")
     lim = [min(wide.min().min(), -0.1), max(wide.max().max(), 0.1)]
     ax.plot(lim, lim, ls="--", c="0.4", lw=1)
     ax.axhline(0, c="0.85", lw=0.8); ax.axvline(0, c="0.85", lw=0.8)
     ax.set_xlabel("gap on training households")
     ax.set_ylabel("gap on held-out households")
     ax.set_title("A gap that does not survive the split is not one", fontsize=10)
+    ax.legend(fontsize=7.5, loc="upper left")
 
     fig.suptitle("Phase 11 — is the gap systematic, and does correcting it need "
                  "a map?", fontsize=12)
