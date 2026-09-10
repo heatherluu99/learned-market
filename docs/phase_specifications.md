@@ -3354,6 +3354,18 @@ are therefore declared here, before either full run, and **both are reported
 whichever way the comparison falls** — including the case where they disagree,
 which is itself the informative outcome.
 
+**Disposition of the two arms, recorded rather than left implicit.** `A-groq`
+ran to completion: 2,212 of 2,212 distinct prompts across four days of
+free-tier quota. **`A-gemini` was never run**, and this is the promise above
+going unmet rather than a result being withheld. Its free tier returned **9
+answers on one day and 0 the next**, and the probes that established which
+models the account could reach were themselves enough to exhaust a day; 2,212
+prompts at that rate is not a run. No partial Gemini numbers exist and none are
+reported. The arm stays declared, the client and the cache namespace stay
+built, and finishing it needs a paid tier — a cost, not a code change. Anything
+this document says about "the Agent" therefore means `gpt-oss-120b` and is a
+single-model claim.
+
 The disk cache is keyed on **(model, prompt)**. Keyed on the prompt alone —
 which is how it was first written — pointing the run at the second provider
 would have served the first model's answers under the second model's name: an
