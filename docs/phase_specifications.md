@@ -4681,6 +4681,125 @@ justifies the phase and would therefore be the tempting one to find.
 3. If **global** is not beaten by **per-cell** on held-out error, the phase
    reports a constant and says the map was not needed. That is a result.
 
+### Phase 11 result — the map is warranted, and a constant is worth nothing
+
+8,499 occasions across three panels, 1,399 distinct shelves answered by
+`gpt-oss:20b` locally. **26** `(category, context)` cells clear the
+30-observation floor on held-out households; **25** clear it on both halves and
+so carry a stability figure. The one that does not — condiments, cheap and on
+both display and feature — has no fitted offset and falls back to the global
+one, which is the correct behaviour for a cell the training half never saw
+enough of.
+
+| correction | held-out cell gap | held-out log-loss |
+|---|---|---|
+| none | 0.0888 | 1.5757 |
+| global — one constant | 0.0888 | 1.5761 |
+| **per-cell — the map** | **0.0460** | **1.4216** |
+| sharpen — one exponent | 0.0966 | 2.0852 |
+
+**The registered prediction was wrong, and in the direction that flatters the
+phase.** Phase 9d found the Agent's error against a known rule was essentially
+one number, and this phase pre-registered that if that carried, *global would
+beat none and per-cell would not beat global by much*. Neither half holds. The
+global offset is **−0.0017** — the map's positive and negative cells cancel
+almost exactly — and it changes held-out error by less than 1e-5. **Per-cell
+nearly halves the cell gap** and takes 0.15 nats off log-loss.
+
+**Why the constant fails is the finding.** The gap is not a level shift. On
+held-out households it runs from **−0.437** (condiments, cheap and on display:
+humans 0.737, Agent 0.300) to **+0.202** (dairy, cheap, no promotion: humans
+0.115, Agent 0.317), and **7 of 25 cells change sign across the split**. A single number
+cannot correct a bias whose sign depends on where you are in the map. What the
+Agent does uniformly is *compress*: it answers near-uniform whatever the shelf
+says, so it under-predicts wherever humans concentrate and over-predicts
+wherever they abstain.
+
+**But compression alone is not the story either**, or sharpening would fix it.
+Fitting one exponent per panel — 2.75, 8.0, 1.0 — and pooling to 3.92 makes
+held-out error **worse** on both metrics. The Agent is not a correctly-ordered
+distribution that needs sharpening; the ordering itself is wrong in specific
+cells.
+
+#### The permutation test, because this is the tempting outcome
+
+The gate named "per-cell wins clearly" as the outcome that would justify the
+phase and would therefore be the one to want. So the result ships with the
+check that separates a real map from probability being shuffled around: keep
+the fitted offsets, permute **which cell each one applies to**, within panel,
+and re-score.
+
+| | per-cell | offsets shuffled (200 draws) | p |
+|---|---|---|---|
+| cell gap | **0.0460** | 0.1100 ± 0.0221 | **0.000** |
+| log-loss | **1.4216** | 1.7385 ± 0.2858 | **0.040** |
+
+**No shuffled draw of 200 beat the real offsets on cell gap.** The map carries
+information about *which* cell, not merely that a correction was applied.
+
+#### Which cells are correctable — acceptance criterion 2
+
+12 of the 25 two-sided cells hold their gap within 0.05 across the split; 13 do not. The
+split is close to a sample-size split — **stable cells have a median of 1,534
+observations, unstable ones 189** — which is the ordinary reading, and it means
+most of the map's apparent structure in thin cells is noise.
+
+Four cells are both **large and stable**, and those are the correctable ones:
+
+| category | context | n (both splits) | mean gap | swing |
+|---|---|---|---|---|
+| condiments | cheap, on feature | 168 | **−0.380** | 0.020 |
+| dairy | cheap, no promotion | 2,867 | **+0.200** | 0.004 |
+| crackers | mid-price, on display | 645 | **−0.192** | 0.024 |
+| condiments | dear, no promotion | 3,611 | **+0.123** | 0.002 |
+
+The pattern in the stable half: **the Agent under-reacts to promotion and
+over-reacts to nothing.** Where a brand is cheap and promoted, humans pile in
+and the Agent does not follow. Where a brand is expensive and unpromoted,
+humans walk away and the Agent keeps assigning it a quarter of the shelf.
+
+#### The correction earns most where the Agent is worst
+
+| panel | cell gap, none → per-cell | log-loss, none → per-cell |
+|---|---|---|
+| cracker | 0.0546 → 0.0512 | 1.5427 → 1.5341 |
+| catsup | 0.1053 → **0.0343** | 1.3280 → **1.2215** |
+| yogurt | 0.1189 → **0.0527** | 1.9314 → **1.5031** |
+
+Cracker barely moves. It is also the panel with the most price variation and
+the one the Agent already handles best. The correction layer is not a general
+improvement — **it is a repair for the categories the Agent reads badly**, and
+it has nothing to add where the Agent is already close.
+
+#### What this does and does not license
+
+Deliverable 2 works, on held-out households, against a placebo. It is still a
+**contextual correction and not an individual one**: every quantity here is a
+cell mean, the Agent was given no household history, and Phase 9d's finding
+that recalibration leaves a class differential intact is not contradicted by
+anything measured here. A client could use this map to de-bias an aggregate
+share forecast in these three categories. Nothing in it says the corrected
+Agent models a person.
+
+#### Two scoring bugs, both mine, found before publication
+
+**The floor.** `apply_correction` clips at 1e-6 on its way out; the
+uncorrected arm did not. The Agent gives the chosen brand exactly zero on
+1.56% of held-out occasions, and only `none` paid −log(1e-12) = 27.6 nats for
+them. That made a −0.0017 offset look like a 0.21-nat improvement — a
+"correction" that was entirely the clipping convention. Every arm is now
+floored identically.
+
+**The key.** Per-cell offsets were keyed on `context` alone while the map is
+`(panel, context)`, and the three panels share all nine context labels. Each
+panel overwrote the previous one's offsets, so crackers were scored with
+yogurt's corrections. That is the whole reason per-cell first came out *worse*
+than doing nothing, and it inverted the phase's conclusion.
+
+The two errors pointed in opposite directions and the first run reported the
+sum of them. Three regression tests now guard this, each verified to fail on
+the code as it was.
+
 **Exit condition:** `git tag phase11-bias`.
 
 ---
