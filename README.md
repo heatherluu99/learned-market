@@ -9,17 +9,68 @@ Those are the ones worth reading.
 
 ---
 
+## What it is
+
+A market that **runs**, not a dataset that is scored. 100 buyers and up to 40
+sellers, 22–110 weeks, and **everything each side does changes what the other
+side faces next week.**
+
+```mermaid
+flowchart LR
+  B["BUYER<br/>budget, taste<br/>memory of where it shopped"]
+  S["SELLER<br/>posted price, capital"]
+  L["SELLER LEARNS<br/>hill-climb, bandit, Q-network<br/>on multi-week return"]
+  E["ENTRY / EXIT<br/>copy a profitable rival<br/>leave when capital runs out"]
+
+  B -- "buys, or does not" --> S
+  S -- "profit" --> L
+  L -- "new price" --> B
+  S -- "who survives" --> E
+  E -- "who is on the shelf" --> B
+  B -- "loyalty updates" --> B
+```
+
+Three things make it a trajectory rather than a response:
+
+| | |
+|---|---|
+| **State persists** | loyalty, capital, posted price and the seller set carry across weeks; only budget and inventory reset |
+| **Agents learn** | sellers optimise price by ε-greedy, UCB1, LinUCB and a Q-network on discounted return; buyers can be a distilled network or an LLM |
+| **Choices feed back** | a buyer's purchase changes its own future utility, the seller's profit, and whether that seller is still there |
+
+**On the reinforcement learning, up front:** it is genuinely in here — four
+rungs of it — and its headline result is a **null**. A Q-network on multi-week
+return came in at **−1.3%** against a per-week bandit (CI [−2.8%, +0.1%],
+equivalent), and in the environment built specifically to reward long horizons
+it found **31%** of a gain that was known to exist. That is the finding, not a
+disappointment: **policy complexity became valuable without becoming
+learnable.**
+
+---
+
 ## The difference this project is about
 
 | most synthetic-consumer work | here |
 |---|---|
 | `Persona + Prompt → Response` | `Persona + State + Environment + Memory + Policy → Trajectory` |
-| one answer, no history | 22–110 weeks, choices that change later choices |
+| **static** — the world does not answer back | **interactive** — sellers reprice, firms enter and exit, memory accumulates |
+| one answer, no history | 22–110 weeks of choices that change later choices |
 | judged by whether it sounds right | judged against a pre-registered threshold |
 
 A response can be graded by reading it. A **trajectory** can only be graded
 against something — a control, a baseline, a real panel. That is the whole
 design.
+
+It is also what makes the hard question askable at all. A model can match
+human behaviour **one step at a time** and still drift once its own choices
+start driving its next observation. Measuring that gap needs a world that
+reacts, and it is the gap this project keeps finding:
+
+| | one step | closed loop |
+|---|---|---|
+| distilled network (9a) | matches the rule | **1.07×** — barely compounds |
+| LLM agent (9d) | half the rule's probability | **1.42×** — the loop widens it |
+| simulator vs the human panel (10) | fits well | **1.09×**, no drift with depth |
 
 ---
 
