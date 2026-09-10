@@ -173,13 +173,41 @@ Four tabs, one file, no server:
 ## How it works, in short
 
 **Buyers** carry a budget, a price sensitivity, a fixed taste, and a memory of
-where they shopped. **Sellers** post a price and learn — by hill-climbing, by
-bandit, or by a Q-network on multi-week return. Purchase is a logit:
+where they shopped. Purchase is a logit:
 
 ```
 U = intercept − α·(price/reference) + 1.5·preference + budget terms + γ·loyalty
 P(buy) = sigmoid((U − 2) / τ)
 ```
+
+**Sellers** are the reinforcement learner. One week is one step:
+
+```mermaid
+flowchart LR
+  ST["STATE s_t<br/>loyal_fraction<br/>last_arm, last_profit<br/>season_fraction"]
+  AC["ACTION a_t<br/>price arm<br/>0.8x 0.9x 1.0x 1.1x 1.2x"]
+  EN["THE WEEK RUNS<br/>100 buyers shop<br/>budgets, tastes, memory"]
+  RW["REWARD r_t<br/>this week's profit"]
+  NX["STATE s_t+1<br/>loyalty accrues and decays<br/>capital moves, arm remembered"]
+
+  ST -- "epsilon-greedy over Q" --> AC
+  AC --> EN
+  EN --> RW
+  EN --> NX
+  NX --> ST
+  RW -- "fit Q toward r + 0.9 max Q(s_t+1)" --> ST
+```
+
+The `0.9` discount is about a **ten-week horizon** — long enough that a price
+cut made now to build loyalty could pay for itself, which is precisely the
+trade-off being tested for. Exploration decays 0.5 → 0.05.
+
+**The buyer is not a reinforcement learner, and that distinction is
+load-bearing.** It has state and a policy but **no reward** — it is a
+hand-written rule, a network distilled from that rule, or an LLM. That is why
+Phase 9 is *imitation* rather than RL, and why its question is whether a copied
+policy drifts once its own choices drive its next observation, not whether it
+earns more.
 
 **Loyalty** is Guadagni & Little (1983): `L ← ρL + (1−ρ)·1{bought}`, bonus `γL`.
 Three variants are kept side by side — none, a capped streak counter, and this
