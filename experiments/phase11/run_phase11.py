@@ -44,7 +44,13 @@ CACHE = RESULTS_ROOT / "agent_cache.json"
 
 MODEL = "gpt-oss:20b"
 SETTINGS = {"temperature": 0.0, "think": "low", "max_tokens": 512}
-PROMPT_VERSION = "9d-2"
+#: Not "9d-2", which this runner carried until it was caught: that is Phase
+#: 9d's per-stall Bernoulli prompt (`agent.SYSTEM` + `describe`). This phase
+#: sends `agent.CHOICE_SYSTEM` + `describe_shelf` - a four-way brand choice on
+#: the shelf alone, no history - and a label shared with 9d made two different
+#: decision problems read as one prompt in the log. The cache is keyed on
+#: panel and prompt text, not on this label, so correcting it moves no answer.
+PROMPT_VERSION = "11-shelf-1"
 SEED = 0
 
 RESEARCH_QUESTION = (
