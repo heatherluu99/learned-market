@@ -448,16 +448,30 @@ def ollama_client(model: str, input_price: float = 0.0, output_price: float = 0.
             "stream": False,
             "options": {"temperature": temperature, "num_predict": max_tokens},
         }
-        # `think`, not `reasoning_effort`. Ollama silently ignores the latter,
-        # and ignores `think: false` as well: measured on one fixed prompt,
-        # both left the chain of thought at ~820 characters, exactly as the
-        # default. Only `think: "low"` shortens it, to ~79. Passing the
-        # inert name would have recorded a thinking budget in this run's
-        # provenance that was never applied - a setting that lies rather than
-        # one that fails.
+        # `think`, not `reasoning_effort`: ollama silently ignores the latter.
         #
-        # And it changes the answer, as it does on the hosted models: the same
-        # prompt returns 35 at the default budget and 65 at "low".
+        # What `think` does is **per model**, and an earlier version of this
+        # comment got that wrong by generalising from one. Measured on the
+        # brand-choice prompt:
+        #
+        #   gpt-oss:20b   think="low" shortens the chain of thought from ~820
+        #                 characters to ~79. `think: false` is ignored. And it
+        #                 changes the answer - the same prompt returns 35 at
+        #                 the default budget and 65 at "low".
+        #   qwen3:14b     think="low" is NOT honoured. The model thinks until
+        #                 it hits num_predict and returns **empty content**:
+        #                 done_reason "length", 512 of 512 tokens, nothing to
+        #                 parse. Raising the budget to 2048 does not finish it
+        #                 either (143s, still empty). `think: false` is what
+        #                 works, and answers in 12 tokens.
+        #   gemma3:12b    no thinking mode; pass think=None.
+        #
+        # The failure mode this guards is specific and quiet: an empty reply
+        # parses to nothing, the caller substitutes a uniform distribution,
+        # and a misconfigured model scores as the *least biased* one in a
+        # comparison. A thinking setting that silently starves the answer is
+        # worse than one that errors, so callers comparing models must set
+        # this per model and record which value each arm used.
         if think is not None:
             body["think"] = think
         data = _json.dumps(body).encode()
