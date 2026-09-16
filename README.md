@@ -1,271 +1,142 @@
-# Millbrook Market
+# Millbrook Market: A Closed-Loop Multi-Agent Environment for Behavioral Fidelity
 
-**A synthetic consumer market built to find out when a simulated buyer can be
-trusted — and, more often, when it cannot.**
+[![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)](https://www.python.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Tests](https://img.shields.io/badge/Tests-358%20Passed-success.svg)]()
 
-Every phase writes down its question and its failure condition *before* it runs,
-and reports the answer either way. **Most of the headline results are negative.**
-Those are the ones worth reading.
+**A synthetic consumer market built to find out when a simulated buyer can be trusted — and, more often, when it cannot.**
 
----
+Every phase writes down its question and its failure condition *before* it runs, and reports the answer either way. **Most of the headline results are negative.** Those are the ones worth reading.
 
-## What it is
-
-A market that **runs**, not a dataset that is scored. 100 buyers and up to 40
-sellers, 22–110 weeks, and **everything each side does changes what the other
-side faces next week.**
-
-```mermaid
-flowchart LR
-  B["BUYER<br/>budget, taste<br/>memory of where it shopped"]
-  S["SELLER<br/>posted price, capital"]
-  L["SELLER LEARNS<br/>hill-climb, bandit, Q-network<br/>on multi-week return"]
-  E["ENTRY / EXIT<br/>copy a profitable rival<br/>leave when capital runs out"]
-
-  B -- "buys, or does not" --> S
-  S -- "profit" --> L
-  L -- "new price" --> B
-  S -- "who survives" --> E
-  E -- "who is on the shelf" --> B
-  B -- "loyalty updates" --> B
-```
-
-Three things make it a trajectory rather than a response:
-
-| | |
-|---|---|
-| **State persists** | loyalty, capital, posted price and the seller set carry across weeks; only budget and inventory reset |
-| **Agents learn** | sellers optimise price by ε-greedy, UCB1, LinUCB and a Q-network on discounted return; buyers can be a distilled network or an LLM |
-| **Choices feed back** | a buyer's purchase changes its own future utility, the seller's profit, and whether that seller is still there |
-
-**On the reinforcement learning, up front:** it is genuinely in here — four
-rungs of it — and its headline result is a **null**. A Q-network on multi-week
-return came in at **−1.3%** against a per-week bandit (CI [−2.8%, +0.1%],
-equivalent), and in the environment built specifically to reward long horizons
-it found **31%** of a gain that was known to exist. That is the finding, not a
-disappointment: **policy complexity became valuable without becoming
-learnable.**
+> **TL;DR:** We benchmarked LLMs and RL agents against real human scanner panel data (8,499 occasions). The headline result? **Aggregate fidelity is cheap; individual closed-loop fidelity is not.** LLMs drift significantly when their own choices drive their next observations. Policy complexity became valuable without becoming learnable.
 
 ---
 
-## The difference this project is about
+## See It in Action
 
-| most synthetic-consumer work | here |
-|---|---|
-| `Persona + Prompt → Response` | `Persona + State + Environment + Memory + Policy → Trajectory` |
-| **static** — the world does not answer back | **interactive** — sellers reprice, firms enter and exit, memory accumulates |
-| one answer, no history | 22–110 weeks of choices that change later choices |
-| judged by whether it sounds right | judged against a pre-registered threshold |
-
-A response can be graded by reading it. A **trajectory** can only be graded
-against something — a control, a baseline, a real panel. That is the whole
-design.
-
-It is also what makes the hard question askable at all. A model can match
-human behaviour **one step at a time** and still drift once its own choices
-start driving its next observation. Measuring that gap needs a world that
-reacts, and it is the gap this project keeps finding:
-
-| | one step | closed loop |
-|---|---|---|
-| distilled network (9a) | matches the rule | **1.07×** — barely compounds |
-| LLM agent (9d) | half the rule's probability | **1.42×** — the loop widens it |
-| simulator vs the human panel (10) | fits well | **1.09×**, no drift with depth |
-
----
-
-## What it found
-
-### An LLM buyer is further from real humans than knowing only the brand shares
-
-![Phase 10](results/phase10/groq/human_vs_agent.png)
-
-3,289 real purchase occasions, Ecdat::Cracker scanner panel. Same choice sets
-for every arm.
-
-| arm | distance to humans | log-loss |
-|---|---|---|
-| marginal brand shares | 0.1256 | 1.0696 |
-| conditional choice model | **0.0404** | **0.7739** |
-| **LLM Agent** | **0.2448** | **1.8966** |
-
-**Every arm got all four mechanism directions right — including the floor.** So
-sign agreement separates none of them. A test the marginal-share baseline passes
-is not a test.
-
-### The LLM's error is one number
-
-![Phase 9d](results/phase9d/offline_fidelity.png)
-
-Fitting the Agent against the rule that generates the world, over 447 states:
-
-```
-agent = −0.219 + 0.954 × rule
-```
-
-Slope ≈ 1. Its **comparative statics are right and its intercept is broken.**
-Adding that one number back recovers **71.6%** of the collapse in a closed loop.
-
-What *survives* the correction is a class bias: **+0.121** for high-income
-buyers, **−0.063** for low-budget ones. Recalibration does not fix that, and
-that is the part a client would be harmed by.
-
-### Aggregate fidelity is cheap; individual fidelity is not
-
-A model that knows **nothing about any individual household** matches the
-aggregate choice distribution almost as well as one that knows every household
-— 0.0035 against 0.0015 — while being **twice as wrong** per household.
-
-A synthetic-consumer product graded on distributional match and sign agreement
-can look excellent and carry no individual-level validity.
-
-### The bias is correctable — but only as a map, not a constant
-
-![Phase 11](results/phase11/bias_map.png)
-
-Three scanner panels, 8,499 real occasions. The Agent's gap against humans per
-`(category, marketing context)`, fitted on half the households and scored on
-the other half:
-
-| correction | held-out error |
-|---|---|
-| none | 0.0888 |
-| one constant | 0.0888 |
-| **the map** | **0.0460** |
-| one sharpening exponent | 0.0966 |
-
-**The constant is worth nothing because the gap changes sign.** It runs from
-**−0.44** where a condiment is cheap and on display to **+0.20** where a dairy
-brand is cheap and unpromoted, and 7 of 25 cells flip sign across the split.
-Averaged, it is **−0.0017**.
-
-Shuffle the fitted offsets into the wrong cells and re-score: **0 of 200 draws**
-match the real map. It knows *which* cell — the Agent under-reacts to promotion
-and over-reacts to nothing.
-
-### Six more, briefly
-
-| | question | answer |
-|---|---|---|
-| **2** | Does buyer heterogeneity cause stratification? | **Yes** — but 73% of it is budget, not price sensitivity |
-| **6** | Does memory create stable relationships? | **Yes**, 0.425 vs 0.316 — but the *control* is 0.316, not 0 |
-| **7c** | Does market state predict the best price? | **No.** Skipped on the evidence rather than run |
-| **7e** | Can a learner find a gain known to exist? | Right shape, **31% of the gain**. Complexity became valuable without becoming learnable |
-| **9** | Does imitation error compound? | **Real but bounded** — saturates at ~1.7×, never material |
-| **10** | Does the simulator's memory beat a model that knows the household? | **No** — −0.005 nats, CI spans zero |
-| **11** | Is the human–Agent gap correctable? | **Yes, as a map** — halves held-out error; one constant does nothing |
-
-Full detail: [`docs/phase_specifications.md`](docs/phase_specifications.md) ·
-every run: [`experiment_log.csv`](experiment_log.csv)
-
----
-
-## Four corrections worth more than the results
-
-**A claim withdrawn.** Phase 10 first reported human loyalty as "3.4× stronger
-than the simulator's". That compared an *upper bound* against a *causal
-quantity*. Withdrawn, and the honest version recorded: a memoryless model with
-household preferences predicts **97%** of the observed repeat rate.
-
-**A measurement artifact caught.** Human memory looked flat across eight weeks —
-which no decaying mechanism can produce. The cause was the train/test split:
-odd lags averaged +0.016 and even lags +0.032, eight for eight. Parity-free, it
-decays normally.
-
-**A win that was in-sample.** The simulator arm first beat its baseline by 0.35
-nats. It was reading answers it had been fitted to on half the data. Scored
-properly: **0.005 nats, CI spanning zero.**
-
-**Two bugs that cancelled.** Phase 11 first reported that no correction worked.
-One clipped only the *corrected* arms before scoring, inventing a 0.21-nat win
-for a −0.0017 offset; the other keyed the map on context alone, so crackers
-were scored with yogurt's corrections. They pointed opposite ways and the run
-reported the sum. Fixed, the map halves held-out error.
-
----
-
-## See it
+No server required. Explore the simulation trajectories, agent reasoning, and market dynamics directly in your browser:
 
 ```bash
 open viz/millbrook.html
 ```
 
-Four tabs, one file, no server:
+*(Note: Insert a 5-second GIF here showing the Market Entry/Exit tab or Agent Inspector running)*
 
-| tab | |
+Four tabs, one file, zero dependencies:
+
+- **Market:** A season replayed — buyers, stalls, who went where.
+- **Entry & Exit:** Firms entering and leaving; week 11 shows the premium tier competed out.
+- **Agent Inspector:** 1,591 LLM decisions with the model's own reasoning, beside what the rule said.
+- **Experiments:** All 41 runs, their figures, and the commits behind them.
+
+## The Core Problem: Static vs. Interactive Evaluation
+
+Most synthetic-consumer work evaluates models statically. Millbrook Market evaluates trajectories.
+
+| Standard LLM Evaluation | Millbrook Market |
 |---|---|
-| **Market** | a season replayed — buyers, stalls, who went where |
-| **Entry & Exit** | firms entering and leaving; week 11 shows the premium tier competed out |
-| **Agent Inspector** | 1,591 LLM decisions with the model's own reasoning, beside what the rule said |
-| **Experiments** | all 41 runs, their figures, and the commits behind them |
+| Persona + Prompt → Response | Persona + State + Environment + Memory + Policy → Trajectory |
+| Static — the world does not answer back | Interactive — sellers reprice, firms enter/exit, memory accumulates |
+| One answer, no history | 22–110 weeks of choices that change later choices |
+| Judged by whether it "sounds right" | Judged against a pre-registered empirical threshold |
 
----
+A response can be graded by reading it. A trajectory can only be graded against a baseline (a real panel). A model can match human behaviour one step at a time and still drift once its own choices start driving its next observation.
 
-## How it works, in short
+| Agent Type | One-Step Fidelity | Closed-Loop Drift |
+|---|---|---|
+| Distilled Network | Matches the rule | 1.07× — barely compounds |
+| LLM Agent | Half the rule's probability | 1.42× — the loop widens it |
+| Simulator vs. Human Panel | Fits well | 1.09× — no drift with depth |
 
-**Buyers** carry a budget, a price sensitivity, a fixed taste, and a memory of
-where they shopped. Purchase is a logit:
+## Key Empirical Insights
 
-```
-U = intercept − α·(price/reference) + 1.5·preference + budget terms + γ·loyalty
-P(buy) = sigmoid((U − 2) / τ)
-```
+### Insight 1: An LLM buyer is further from real humans than a marginal baseline
 
-**Sellers** are the reinforcement learner. One week is one step:
+Tested on 3,289 real purchase occasions (Ecdat::Cracker scanner panel). Every arm got all four mechanism directions right, meaning sign agreement separates none of them.
+
+| Arm | Distance to Humans | Log-Loss |
+|---|---|---|
+| Marginal brand shares | 0.1256 | 1.0696 |
+| Conditional choice model | 0.0404 | 0.7739 |
+| LLM Agent | 0.2448 | 1.8966 |
+
+### Insight 2: The Illusion of Aggregate Fidelity
+
+A model that knows nothing about any individual household matches the aggregate choice distribution almost as well as one that knows every household (0.0035 vs. 0.0015) — while being twice as wrong per household. A synthetic-consumer product graded on distributional match can look excellent while carrying zero individual-level validity.
+
+### Insight 3: Identifying the Latent Class Bias
+
+Fitting the LLM Agent against the ground-truth rule over 447 states yields: `agent = −0.219 + 0.954 × rule`.
+
+Its comparative statics are right, but its intercept is broken. Adding that one number back recovers 71.6% of the collapse in a closed loop. What survives the correction is a class bias: +0.121 for high-income buyers, −0.063 for low-budget ones.
+
+### Insight 4: Bias is correctable — but only as a map, not a constant
+
+The Agent's gap against humans changes sign depending on the context (e.g., −0.44 for cheap/promoted condiments vs. +0.20 for cheap/unpromoted dairy). A single constant correction is worth nothing (averages to −0.0017). Mapping the bias halves the held-out error (0.0888 → 0.0460).
+
+*(For full details on all 11 phases, including RL baseline failures and memory stability, see [`docs/phase_specifications.md`](docs/phase_specifications.md))*
+
+## System Architecture & RL Dynamics
+
+The environment runs 100 buyers and up to 40 sellers. Everything each side does changes what the other side faces next week.
 
 ```mermaid
 flowchart LR
-  ST["STATE s_t<br/>loyal_fraction<br/>last_arm, last_profit<br/>season_fraction"]
-  AC["ACTION a_t<br/>price arm<br/>0.8x 0.9x 1.0x 1.1x 1.2x"]
-  EN["THE WEEK RUNS<br/>100 buyers shop<br/>budgets, tastes, memory"]
-  RW["REWARD r_t<br/>this week's profit"]
-  NX["STATE s_t+1<br/>loyalty accrues and decays<br/>capital moves, arm remembered"]
+  B["BUYER (Agent)<br/>budget, taste, memory"]
+  S["SELLER (Environment)<br/>posted price, capital"]
+  L["SELLER LEARNS<br/>hill-climb, bandit, Q-network"]
+  E["MARKET DYNAMICS<br/>entry / exit based on capital"]
 
-  ST -- "epsilon-greedy over Q" --> AC
-  AC --> EN
-  EN --> RW
-  EN --> NX
-  NX --> ST
-  RW -- "fit Q toward r + 0.9 max Q(s_t+1)" --> ST
+  B -- "Action: Buy/Skip" --> S
+  S -- "Reward: Profit" --> L
+  L -- "State Update: New Price" --> B
+  S -- "Survival" --> E
+  E -- "Observation: Available Shelf" --> B
+  B -- "State Update: Loyalty" --> B
 ```
 
-The `0.9` discount is about a **ten-week horizon** — long enough that a price
-cut made now to build loyalty could pay for itself, which is precisely the
-trade-off being tested for. Exploration decays 0.5 → 0.05.
+### The Asymmetric Learning Loop
 
-**The buyer is not a reinforcement learner, and that distinction is
-load-bearing.** It has state and a policy but **no reward** — it is a
-hand-written rule, a network distilled from that rule, or an LLM. That is why
-Phase 9 is *imitation* rather than RL, and why its question is whether a copied
-policy drifts once its own choices drive its next observation, not whether it
-earns more.
+**Sellers (Reinforcement Learners):** Optimize for long-horizon return. Action space is discrete price multipliers. Policy is updated via Q-learning (γ = 0.9, ~10-week horizon), balancing exploration (ε-greedy, UCB1, LinUCB) with exploitation.
 
-**Loyalty** is Guadagni & Little (1983): `L ← ρL + (1−ρ)·1{bought}`, bonus `γL`.
-Three variants are kept side by side — none, a capped streak counter, and this
-decaying stock — because **two of five conclusions turn on which one is used.**
+**Buyers (Stateful Policies):** Buyers have state and a policy but no reward function. They are hand-written rules, distilled networks, or LLMs. This distinction is load-bearing: we test whether a copied policy drifts under its own generated observations, not whether it maximizes a reward.
 
-**Nothing reads a class label.** Entry copies a profitable rival; exit follows
-capital. That is what lets "the premium tier was competed out" mean something.
+**State Persistence:** Loyalty (Guadagni & Little, 1983), capital, and the seller set carry across weeks. Only budget and inventory reset.
 
----
+## Scientific Integrity & Methodological Corrections
 
-## Reproducing
+In evaluating AI systems, catching methodological artifacts is more important than claiming state-of-the-art. Here are four critical corrections made during development that are worth more than the results themselves:
+
+1. **A claim withdrawn:** Phase 10 first reported human loyalty as "3.4× stronger than the simulator's". That compared an upper bound against a causal quantity. Withdrawn. The honest version: a memoryless model with household preferences predicts 97% of the observed repeat rate.
+
+2. **A measurement artifact caught:** Human memory looked flat across eight weeks. The cause was a parity bug in the train/test split (odd lags averaged +0.016, even +0.032). Parity-free, it decays normally.
+
+3. **A win that was in-sample:** The simulator arm first beat its baseline by 0.35 nats. It was reading answers it had been fitted to. Scored properly on held-out data: 0.005 nats, CI spanning zero.
+
+4. **Two bugs that cancelled:** Phase 11 first reported no correction worked. One bug clipped only the corrected arms before scoring; the other keyed the map on context alone. They pointed opposite ways. Fixed, the map halves held-out error.
+
+## Reproducing the Environment
+
+Every logged run records the commit it ran at. Runs marked `-dirty` were re-run clean and reproduced exactly.
 
 ```bash
-python -m venv .venv && .venv/bin/pip install -r requirements.txt
-.venv/bin/python -m pytest -q                          # 358 tests
-.venv/bin/python experiments/phase8/run_phase8.py      # any phase
-.venv/bin/python tools/build_combined_viz.py           # rebuild the page
+# 1. Setup environment
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+
+# 2. Run test suite (358 tests)
+python -m pytest -q
+
+# 3. Execute a specific phase
+python experiments/phase8/run_phase8.py
+
+# 4. Rebuild the visualization
+python tools/build_combined_viz.py
 ```
 
-| path | |
-|---|---|
-| `docs/phase_specifications.md` | the pre-registered spec — every gate, correction and result |
-| `src/market_sim/` | engine, config, acceptance criteria, bandits, RL, LLM clients |
-| `experiments/` | one runnable script per phase and per gate |
-| `results/`, `experiment_log.csv` | outputs, each bound to a commit hash |
-| `viz/millbrook.html` | the four tabs above |
+## Repository Structure
 
-Every logged run records the commit it ran at, and says `-dirty` out loud when
-the tree was not clean. Eight rows were written that way before anything warned;
-all eight were re-run clean and reproduced exactly.
+- `src/market_sim/`: Core engine, MDP config, bandits, RL implementations, LLM clients.
+- `experiments/`: Runnable scripts per phase and per gate.
+- `docs/phase_specifications.md`: The pre-registered spec — every gate, correction, and result.
+- `experiment_log.csv`: Immutable outputs bound to commit hashes.
