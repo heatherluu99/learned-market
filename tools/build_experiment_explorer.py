@@ -171,21 +171,30 @@ def group_of(identifier: str) -> str:
     return f"{number}{suffix}"
 
 
-def figures() -> dict[str, list[dict]]:
-    """Every results PNG, embedded, keyed by the group its directory names.
+def figures() -> tuple[dict[str, list[dict]], list[str]]:
+    """Every results PNG, embedded once, plus a per-group index into them.
 
     Embedded rather than linked because the page has to open from a filesystem
     with no server, which is the same constraint the Phase 6 page is built to.
+
+    **Indexed rather than inlined per run.** Every experiment in a group is
+    handed that group's whole figure list, so inlining the data URI put the
+    same image in the payload once per run in the group: 33 files became 94
+    copies and a 15.3 MB page. The images are emitted once in `images` and
+    each run references them by position, which is the whole difference
+    between a page that can be published and one that cannot.
     """
     out: dict[str, list[dict]] = {}
+    images: list[str] = []
     for path in sorted((REPO_ROOT / "results").rglob("*.png")):
         group = group_of(path.relative_to(REPO_ROOT / "results").parts[0])
         blob = base64.b64encode(path.read_bytes()).decode()
+        images.append(f"data:image/png;base64,{blob}")
         out.setdefault(group, []).append({
-            "src": f"data:image/png;base64,{blob}",
+            "i": len(images) - 1,
             "caption": str(path.relative_to(REPO_ROOT)),
         })
-    return out
+    return out, images
 
 
 def commits() -> list[dict]:
@@ -233,7 +242,7 @@ def commits_for(group: str, history: list[dict]) -> list[dict]:
 
 def main() -> int:
     log = pd.read_csv(REPO_ROOT / "experiment_log.csv")
-    figs, history = figures(), commits()
+    (figs, images), history = figures(), commits()
     tags = subprocess.run(["git", "tag"], cwd=REPO_ROOT, capture_output=True,
                           text=True, check=True).stdout.split()
 
@@ -294,6 +303,7 @@ def main() -> int:
 
     payload = {
         "meta": {"commits": len(history), "tags": len(tags), "tests": n_tests},
+        "images": images,
         "experiments": experiments,
     }
     template = TEMPLATE.read_text()

@@ -159,7 +159,7 @@ function renderRail(q = "") {
 function renderDetail(e) {
   const [c, bg, label] = st(e.status);
   const figs = e.figures.length
-    ? e.figures.map(f => `<figure><img src="${f.src}" alt="${esc(f.caption)}">
+    ? e.figures.map(f => `<figure><img src="${DATA.images[f.i]}" alt="${esc(f.caption)}">
         <figcaption>${esc(f.caption)}</figcaption></figure>`).join("")
     : `<div class="noimg">This run produced tables rather than a figure.</div>`;
 
