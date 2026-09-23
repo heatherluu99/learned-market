@@ -1,0 +1,9 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "outputDirectory": "viz",
+  "cleanUrls": true,
+  "rewrites": [
+    { "source": "/", "destination": "/millbrook.html" }
+  ]
+}

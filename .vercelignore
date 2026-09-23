@@ -1,0 +1,4 @@
+# Vercel serves `viz/` (see outputDirectory in vercel.json). Everything else
+# in this repo is source, and .venv alone is larger than the site.
+/*
+!/viz
