@@ -5,7 +5,7 @@
 [![Tests](https://img.shields.io/badge/Tests-358%20Passed-success.svg)]()
 [![Live Demo](https://img.shields.io/badge/Live%20Demo-Open%20the%20environment-111111.svg)](https://learned-market-five.vercel.app)
 
-### ▶ [Explore the live environment →](https://learned-market-five.vercel.app)
+### ▶ [Millbrook Market live demo](https://learned-market-five.vercel.app)
 
 Four interactive views in your browser — the market replayed, firms entering and leaving, 1,591 LLM decisions with their reasoning, and all 42 logged runs. No install, no server.
 
