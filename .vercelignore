@@ -1,11 +1,30 @@
-# Vercel serves viz/ (see outputDirectory in vercel.json). This is a plain
-# denylist on purpose: an allowlist written as "/*" plus "!/viz" depends on
-# gitignore re-inclusion semantics that Vercel does not promise, and if viz/
-# ends up excluded the output directory is empty and every route 404s.
+# This repository is a Python project that happens to contain a static site.
+# Vercel detects the runtime from files in the root, so requirements.txt made
+# it build as Python and fail with "No python entrypoint found" -- it never
+# reached the static files at all. Keeping the Python markers out of the
+# upload is what makes it a static deployment; vercel.json blanking
+# buildCommand and installCommand is the second line of defence.
+requirements.txt
+pyproject.toml
+setup.py
+setup.cfg
+Pipfile
+conftest.py
+*.py
+
+# Large or irrelevant to the site. .venv alone is 994 MB and results/ is
+# 127 MB; the figures the site shows are already embedded in the HTML.
 .venv
 .git
 __pycache__
 node_modules
 results
 data
+src
+experiments
+tools
+tests
+docs
 prototypes
+*.csv
+*.pptx
