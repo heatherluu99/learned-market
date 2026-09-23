@@ -4,8 +4,8 @@
     {
       "name": "viz",
       "runtimeExecutable": "python3",
-      "runtimeArgs": ["-m", "http.server", "8731", "--directory", "viz"],
-      "port": 8731
+      "runtimeArgs": ["-m", "http.server", "4173", "--directory", "viz"],
+      "port": 4173
     }
   ]
 }
