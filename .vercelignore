@@ -1,4 +1,11 @@
-# Vercel serves `viz/` (see outputDirectory in vercel.json). Everything else
-# in this repo is source, and .venv alone is larger than the site.
-/*
-!/viz
+# Vercel serves viz/ (see outputDirectory in vercel.json). This is a plain
+# denylist on purpose: an allowlist written as "/*" plus "!/viz" depends on
+# gitignore re-inclusion semantics that Vercel does not promise, and if viz/
+# ends up excluded the output directory is empty and every route 404s.
+.venv
+.git
+__pycache__
+node_modules
+results
+data
+prototypes

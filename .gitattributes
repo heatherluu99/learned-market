@@ -1,0 +1,10 @@
+# Everything in viz/ is produced by tools/build_*.py from results/ and the
+# templates beside it -- no one edits these by hand. Marking them generated
+# keeps them out of the repository's language statistics, where 14 MB of
+# embedded base64 otherwise reports the project as 94% HTML, and collapses
+# them in diffs, where a 7 MB single-line change is unreadable anyway.
+viz/*.html linguist-generated=true
+
+# Source data and logged outputs, not authored code.
+results/** linguist-generated=true
+data/** linguist-vendored=true
