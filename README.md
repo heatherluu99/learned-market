@@ -72,18 +72,6 @@ flowchart LR
 
 **State Persistence:** Loyalty (Guadagni & Little, 1983), capital, and the seller set carry across weeks. Only budget and inventory reset.
 
-## Scientific Integrity & Methodological Corrections
-
-In evaluating AI systems, catching methodological artifacts is more important than claiming state-of-the-art. Here are four critical corrections made during development that are worth more than the results themselves:
-
-1. **A claim withdrawn:** Phase 10 first reported human loyalty as "3.4× stronger than the simulator's". That compared an upper bound against a causal quantity. Withdrawn. The honest version: a memoryless model with household preferences predicts 97% of the observed repeat rate.
-
-2. **A measurement artifact caught:** Human memory looked flat across eight weeks. The cause was a parity bug in the train/test split (odd lags averaged +0.016, even +0.032). Parity-free, it decays normally.
-
-3. **A win that was in-sample:** The simulator arm first beat its baseline by 0.35 nats. It was reading answers it had been fitted to. Scored properly on held-out data: 0.005 nats, CI spanning zero.
-
-4. **Two bugs that cancelled:** Phase 11 first reported no correction worked. One bug clipped only the corrected arms before scoring; the other keyed the map on context alone. They pointed opposite ways. Fixed, the map halves held-out error.
-
 ## Reproducing the Environment
 
 Every logged run records the commit it ran at. Runs marked `-dirty` were re-run clean and reproduced exactly.
