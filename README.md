@@ -17,6 +17,33 @@ Every phase writes down its question and its failure condition *before* it runs,
 
 ---
 
+## System Architecture & RL Dynamics
+
+The environment runs 100 buyers and up to 40 sellers. Everything each side does changes what the other side faces next week.
+
+```mermaid
+flowchart LR
+  B["BUYER (Agent)<br/>budget, taste, memory"]
+  S["SELLER (Environment)<br/>posted price, capital"]
+  L["SELLER LEARNS<br/>hill-climb, bandit, Q-network"]
+  E["MARKET DYNAMICS<br/>entry / exit based on capital"]
+
+  B -- "Action: Buy/Skip" --> S
+  S -- "Reward: Profit" --> L
+  L -- "State Update: New Price" --> B
+  S -- "Survival" --> E
+  E -- "Observation: Available Shelf" --> B
+  B -- "State Update: Loyalty" --> B
+```
+
+### The Asymmetric Learning Loop
+
+**Sellers (Reinforcement Learners):** Optimize for long-horizon return. Action space is discrete price multipliers. Policy is updated via Q-learning (γ = 0.9, ~10-week horizon), balancing exploration (ε-greedy, UCB1, LinUCB) with exploitation.
+
+**Buyers (Stateful Policies):** Buyers have state and a policy but no reward function. They are hand-written rules, distilled networks, or LLMs. This distinction is load-bearing: we test whether a copied policy drifts under its own generated observations, not whether it maximizes a reward.
+
+**State Persistence:** Loyalty (Guadagni & Little, 1983), capital, and the seller set carry across weeks. Only budget and inventory reset.
+
 ## Key Empirical Insights
 
 ### Insight 1: An LLM buyer is further from real humans than a marginal baseline
@@ -44,33 +71,6 @@ Its comparative statics are right, but its intercept is broken. Adding that one 
 The Agent's gap against humans changes sign depending on the context (e.g., −0.44 for cheap/promoted condiments vs. +0.20 for cheap/unpromoted dairy). A single constant correction is worth nothing (averages to −0.0017). Mapping the bias halves the held-out error (0.0888 → 0.0460).
 
 *(For full details on all 11 phases, including RL baseline failures and memory stability, see [`docs/phase_specifications.md`](docs/phase_specifications.md))*
-
-## System Architecture & RL Dynamics
-
-The environment runs 100 buyers and up to 40 sellers. Everything each side does changes what the other side faces next week.
-
-```mermaid
-flowchart LR
-  B["BUYER (Agent)<br/>budget, taste, memory"]
-  S["SELLER (Environment)<br/>posted price, capital"]
-  L["SELLER LEARNS<br/>hill-climb, bandit, Q-network"]
-  E["MARKET DYNAMICS<br/>entry / exit based on capital"]
-
-  B -- "Action: Buy/Skip" --> S
-  S -- "Reward: Profit" --> L
-  L -- "State Update: New Price" --> B
-  S -- "Survival" --> E
-  E -- "Observation: Available Shelf" --> B
-  B -- "State Update: Loyalty" --> B
-```
-
-### The Asymmetric Learning Loop
-
-**Sellers (Reinforcement Learners):** Optimize for long-horizon return. Action space is discrete price multipliers. Policy is updated via Q-learning (γ = 0.9, ~10-week horizon), balancing exploration (ε-greedy, UCB1, LinUCB) with exploitation.
-
-**Buyers (Stateful Policies):** Buyers have state and a policy but no reward function. They are hand-written rules, distilled networks, or LLMs. This distinction is load-bearing: we test whether a copied policy drifts under its own generated observations, not whether it maximizes a reward.
-
-**State Persistence:** Loyalty (Guadagni & Little, 1983), capital, and the seller set carry across weeks. Only budget and inventory reset.
 
 ## Reproducing the Environment
 
