@@ -17,42 +17,6 @@ Every phase writes down its question and its failure condition *before* it runs,
 
 ---
 
-## See It in Action
-
-No server required. Explore the simulation trajectories, agent reasoning, and market dynamics directly in your browser:
-
-```bash
-open viz/millbrook.html
-```
-
-*(Note: Insert a 5-second GIF here showing the Market Entry/Exit tab or Agent Inspector running)*
-
-Four tabs, one file, zero dependencies:
-
-- **Market:** A season replayed — buyers, stalls, who went where.
-- **Entry & Exit:** Firms entering and leaving; week 11 shows the premium tier competed out.
-- **Agent Inspector:** 1,591 LLM decisions with the model's own reasoning, beside what the rule said.
-- **Experiments:** All 41 runs, their figures, and the commits behind them.
-
-## The Core Problem: Static vs. Interactive Evaluation
-
-Most synthetic-consumer work evaluates models statically. Millbrook Market evaluates trajectories.
-
-| Standard LLM Evaluation | Millbrook Market |
-|---|---|
-| Persona + Prompt → Response | Persona + State + Environment + Memory + Policy → Trajectory |
-| Static — the world does not answer back | Interactive — sellers reprice, firms enter/exit, memory accumulates |
-| One answer, no history | 22–110 weeks of choices that change later choices |
-| Judged by whether it "sounds right" | Judged against a pre-registered empirical threshold |
-
-A response can be graded by reading it. A trajectory can only be graded against a baseline (a real panel). A model can match human behaviour one step at a time and still drift once its own choices start driving its next observation.
-
-| Agent Type | One-Step Fidelity | Closed-Loop Drift |
-|---|---|---|
-| Distilled Network | Matches the rule | 1.07× — barely compounds |
-| LLM Agent | Half the rule's probability | 1.42× — the loop widens it |
-| Simulator vs. Human Panel | Fits well | 1.09× — no drift with depth |
-
 ## Key Empirical Insights
 
 ### Insight 1: An LLM buyer is further from real humans than a marginal baseline
